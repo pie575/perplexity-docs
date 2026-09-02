@@ -1,0 +1,209 @@
+---
+title: "Preguntas frecuentes"
+description: "Respuestas a las preguntas más habituales sobre la Perplexity API: modelos, salidas y capacidades, comportamiento de la búsqueda, facturación y límites, errores, privacidad de los datos y soporte."
+---
+
+<div id="models">
+  ## Modelos
+</div>
+
+<AccordionGroup>
+  <Accordion title="¿La API admite actualmente la navegación web?">
+    Sí. La Agent API incluye una [herramienta de búsqueda web](/es/docs/agent-api/tools/web-search) integrada, y los [presets](/es/docs/agent-api/presets) orientados a investigación incorporan búsqueda de forma predeterminada.
+  </Accordion>
+
+  <Accordion title="¿Cuáles son las ventanas de contexto de cada modelo?">
+    El tamaño de la ventana de contexto varía según el modelo. Consulta la [página de modelos de la Agent API](/es/docs/agent-api/models) y la documentación del proveedor a la que se enlaza.
+  </Accordion>
+
+  <Accordion title="¿Admiten el ajuste fino (fine-tuning)?">
+    Por el momento no admitimos el ajuste fino.
+  </Accordion>
+
+  <Accordion title="¿Cómo se versionan y se descontinúan los modelos?">
+    Cuando retiramos un modelo, lo anunciamos en el [registro de cambios](/es/docs/resources/changelog) junto con un reemplazo recomendado. Para evitar interrupciones, especifica un ID de modelo explícito en tus solicitudes en lugar de depender del valor predeterminado, y revisa el registro de cambios para estar al tanto de los avisos de descontinuación. La lista actual de modelos disponibles está en la página de [modelos de la Agent API](/es/docs/agent-api/models).
+  </Accordion>
+</AccordionGroup>
+
+<div id="output-capabilities">
+  ## Salida y capacidades
+</div>
+
+<AccordionGroup>
+  <Accordion title="¿Puedo obtener una salida estructurada (JSON)?">
+    Sí. Usa el campo `text.format` para ajustar una respuesta a un esquema JSON. Consulta [Salidas estructuradas](/es/docs/agent-api/output-control#structured-outputs) para ver ejemplos.
+  </Accordion>
+
+  <Accordion title="¿La API admite respuestas en streaming?">
+    Sí. Pasa `stream: true` para recibir la respuesta de forma incremental a medida que se genera, en lugar de esperar al resultado completo. Consulta [Respuestas en streaming](/es/docs/agent-api/output-control#streaming-responses). Los [SDK oficiales](/es/docs/sdk/overview) exponen el streaming directamente.
+  </Accordion>
+
+  <Accordion title="¿La API admite llamadas a herramientas o funciones?">
+    Sí. La Agent API ofrece herramientas integradas, entre ellas [búsqueda web](/es/docs/agent-api/tools/web-search), [obtención del contenido de una URL](/es/docs/agent-api/tools/fetch-url-content), [búsqueda de personas](/es/docs/agent-api/tools/people-search), [búsqueda financiera](/es/docs/agent-api/tools/finance-search) y un [sandbox de código](/es/docs/agent-api/tools/sandbox). El modelo decide cuándo invocarlas mientras responde a tu solicitud.
+  </Accordion>
+
+  <Accordion title="¿Hasta qué punto es la API compatible con OpenAI?">
+    La Perplexity API está diseñada para ser ampliamente compatible con el endpoint de chat completions de OpenAI. Adopta una estructura similar —con campos como `id`, `model` y `usage`— y admite parámetros análogos como `model`, `messages` y `stream`.
+
+    **Las principales diferencias respecto a la respuesta estándar de OpenAI son:**
+
+    * **Estructura del objeto de respuesta:**
+      * Las respuestas de OpenAI suelen tener un valor de `object` igual a `"chat.completion"` y una marca de tiempo `created`, mientras que nuestra respuesta usa `object: "response"` y un campo `created_at`.
+      * En lugar de un array `choices`, el contenido de nuestra respuesta se entrega en un array `output` que contiene objetos de mensaje detallados.
+
+    * **Detalles del mensaje:**
+      * Cada mensaje de nuestra salida incluye un `type` (normalmente `"message"`), un `id` único y un `status`.
+      * El texto en sí está anidado dentro de un array `content` que contiene objetos con `type`, `text` y un array `annotations` con contexto adicional.
+
+    * **Campos adicionales:**
+      * La respuesta de nuestra API aporta metainformación extra (como `status`, `error`, `instructions` y `max_output_tokens`) que no existe en las respuestas estándar de OpenAI.
+      * El campo `usage` también difiere: ofrece desgloses detallados de los tokens de entrada y salida (con campos como `input_tokens_details` y `output_tokens_details`).
+
+    El objetivo de estas diferencias es aportar más funcionalidad y contexto adicional, manteniendo a la vez una amplia compatibilidad con el diseño de la API de OpenAI.
+  </Accordion>
+
+  <Accordion title="¿Los tokens de razonamiento en Deep Research son los mismos que los CoT de la respuesta?">
+    Los tokens de razonamiento en Deep Research son algo distintos de los CoT de la respuesta: estos tokens se usan para razonar sobre el material de investigación antes de generar la salida final mediante los CoT.
+  </Accordion>
+</AccordionGroup>
+
+<div id="search-results">
+  ## Búsqueda y resultados
+</div>
+
+<AccordionGroup>
+  <Accordion title="¿Por qué los resultados de la API son distintos de los de la interfaz?">
+    1. La API usa el mismo sistema de búsqueda que la interfaz, pero con diferencias de configuración, por lo que sus salidas pueden variar.
+    2. El modelo de IA subyacente puede ser distinto entre la API y la interfaz para una misma consulta.
+  </Accordion>
+
+  <Accordion title="¿El acceso a datos de internet que ofrece la API es idéntico al de la interfaz web de Perplexity?">
+    Sí, la API ofrece exactamente el mismo acceso a datos de internet que la plataforma web de Perplexity.
+  </Accordion>
+
+  <Accordion title="¿La API utiliza filtrado de contenido o SafeSearch?">
+    Sí, en la API el filtrado de contenido mediante SafeSearch está activado de forma predeterminada. Esto ayuda a excluir de los resultados de búsqueda contenido potencialmente ofensivo e inapropiado, incluida la pornografía. SafeSearch es un filtro automatizado que actúa sobre los resultados de búsqueda para ofrecer una experiencia más segura. Puedes obtener más información sobre SafeSearch en la [página oficial de Wikipedia](https://en.wikipedia.org/wiki/SafeSearch).
+  </Accordion>
+</AccordionGroup>
+
+<div id="account-billing-limits">
+  ## Cuenta, facturación y límites
+</div>
+
+<AccordionGroup>
+  <Accordion title="¿Cómo funcionan los precios de la API?">
+    Los precios se basan en el uso y varían según la API. La Router API cobra por token según las tarifas publicadas de cada modelo, sin cargos por solicitud; la Agent API cobra por token según las tarifas directas del proveedor, sin recargo, más una tarifa por invocación de las herramientas; la Search API cobra por solicitud; y Embeddings cobra por token. Consulta el desglose completo en la [página de Precios](/es/docs/getting-started/pricing).
+  </Accordion>
+
+  <Accordion title="¿Cómo agrego créditos o configuro la facturación?">
+    Compra créditos de API en la [página de Facturación](https://console.perplexity.ai/project/billing) de la Consola de API. Activa la **recarga automática** para añadir créditos de forma automática cuando tu saldo sea bajo y evitar interrupciones del servicio. También puedes comprar créditos a través del [AWS Marketplace](/es/docs/resources/aws-marketplace) para consolidar la facturación, o [contactar con nuestro equipo de ventas](https://perplexity.typeform.com/to/m3WnMaG6) para compras empresariales. Tu [nivel de uso](/es/docs/admin/rate-limits-usage-tiers) avanza automáticamente a medida que crecen tus compras acumuladas.
+  </Accordion>
+
+  <Accordion title="¿Cómo puedo pasar al siguiente nivel de uso?">
+    La única forma de que una cuenta ascienda al siguiente nivel de uso es mediante la compra acumulada de créditos.
+
+    Estos son los criterios de gasto asociados a cada nivel:
+
+    | Nivel   | Compra de créditos (histórica) |
+    | ------- | ------------------------------ |
+    | Nivel 0 | -                              |
+    | Nivel 1 | $50                            |
+    | Nivel 2 | $250                           |
+    | Nivel 3 | $500                           |
+    | Nivel 4 | $1000                          |
+    | Nivel 5 | $5000                          |
+  </Accordion>
+
+  <Accordion title="¿Qué limitaciones hay en el número de llamadas a la API?">
+    Puedes consultar nuestros [límites de tasa aquí](/es/docs/admin/rate-limits-usage-tiers).
+  </Accordion>
+
+  <Accordion title="¿Cómo puedo controlar mi gasto/uso por API key?">
+    Ofrecemos una forma de controlar tu facturación por API key. Para ello, dirígete a la siguiente ubicación:
+
+    **Settings &gt; View Dashboard &gt; Invoice history &gt; Invoices**
+
+    Luego haz clic en cualquier factura: cada elemento del total facturado tendrá un código al final (por ejemplo, pro (743S)). Esos 4 caracteres son los últimos 4 de tu API key.
+  </Accordion>
+</AccordionGroup>
+
+<div id="errors-troubleshooting">
+  ## Errores y resolución de problemas
+</div>
+
+<AccordionGroup>
+  <Accordion title="¿Cómo debo responder a los errores 401: Authorization?">
+    Los códigos de error 401 indican que la API key proporcionada no es válida, fue eliminada o pertenece a una cuenta que se quedó sin créditos. Probablemente necesites comprar más créditos en la [página de Facturación](https://console.perplexity.ai/project/billing). Puedes evitar este problema configurando la recarga automática.
+  </Accordion>
+
+  <Accordion title="¿Cómo debo gestionar los errores 429: Too Many Requests?">
+    Un 429 significa que has superado tu límite de tasa. Los límites de tasa aumentan según tu [nivel de uso](/es/docs/admin/rate-limits-usage-tiers) y utilizan un algoritmo de cubo con fugas que permite ráfagas breves hasta alcanzar tu límite. Reintenta con retroceso exponencial y jitter, aprovecha la capacidad de ráfaga para trabajos por lotes y sube de nivel —o [solicita un límite personalizado](https://perplexity.typeform.com/to/yctmfyVT)— si necesitas un rendimiento alto sostenido. Consulta [Gestión de errores](/es/docs/sdk/error-handling) para ver ejemplos de reintentos en ambos SDK.
+  </Accordion>
+
+  <Accordion title="¿Qué debo hacer ante errores 5xx o de conexión y tiempo de espera?">
+    Las respuestas 5xx indican un problema transitorio del lado del servidor, y los errores de conexión o de tiempo de espera suelen apuntar a un problema de red. Reintenta estas solicitudes con retroceso exponencial, establece tiempos de espera razonables en el cliente y registra el encabezado de respuesta `X-Request-ID` para incluirlo cuando contactes con soporte. La [guía de gestión de errores](/es/docs/sdk/error-handling) explica los tipos de excepciones del SDK y los patrones de recuperación.
+  </Accordion>
+
+  <Accordion title="¿Dónde puedo consultar el estado de la API y los incidentes?">
+    La disponibilidad actual de la API y el historial de incidentes están en la [página de Estado del sistema](/es/docs/resources/status). Si detectas errores que no se explican allí, escríbenos a través de los canales de soporte que aparecen a continuación.
+  </Accordion>
+</AccordionGroup>
+
+<div id="data-privacy-security">
+  ## Datos, privacidad y seguridad
+</div>
+
+<AccordionGroup>
+  <Accordion title="¿Se usarán los datos de usuario enviados a través de la API para entrenar modelos u otros fines?">
+    Recopilamos los siguientes tipos de información:
+
+    **Datos de uso de la API:** recopilamos metadatos de uso facturable, como el número de solicitudes y de tokens. Puedes consultar tu propio uso en la [página de Facturación](https://console.perplexity.ai/project/billing) de la Consola de la API.
+
+    **Información de la cuenta de usuario:** cuando creas una cuenta con nosotros, recopilamos tu nombre, dirección de correo electrónico y otros datos de contacto pertinentes.
+
+    No conservamos ningún dato de las consultas enviadas a través de la API ni entrenamos con tus datos.
+  </Accordion>
+
+  <Accordion title="¿Dónde se alojan los modelos de lenguaje de Perplexity?">
+    Nuestra infraestructura de cómputo está alojada en Amazon Web Services en Norteamérica. De forma predeterminada, la API no retiene ningún dato de los prompts de los usuarios, que nunca se utilizan para entrenar IA.
+  </Accordion>
+
+  <Accordion title="¿Qué certificaciones de seguridad y cumplimiento tiene la API?">
+    Perplexity cuenta con un informe **SOC 2 Type II**, una **evaluación de brechas de HIPAA de 2025** y una evaluación de seguridad en la nube **CAIQlite**. Estos informes, junto con la documentación sobre tratamiento de datos y otra documentación de cumplimiento (por ejemplo, para solicitudes de DPA o RGPD), están disponibles en el [Centro de Confianza de Perplexity](https://trust.perplexity.ai/). Consulta [Privacidad y seguridad](/es/docs/resources/privacy-security) para obtener una visión general o [escríbenos](mailto:api@perplexity.ai) si necesitas documentos que no se publiquen allí.
+  </Accordion>
+</AccordionGroup>
+
+<div id="support-reliability">
+  ## Soporte y fiabilidad
+</div>
+
+<AccordionGroup>
+  <Accordion title="¿Cómo presento un informe de error y qué sucede después?">
+    Para presentar un informe de error, dirígete a nuestra [Comunidad de desarrolladores](https://community.perplexity.ai/) y crea una nueva publicación en la categoría «Bug Reports».
+
+    Agradecemos mucho tu paciencia y te responderemos lo antes posible. Debido al volumen actual de informes, es posible que tardemos un poco en contestar, pero puedes estar seguro de que estamos en ello.
+  </Accordion>
+
+  <Accordion title="¿Cómo solicito una nueva funcionalidad?">
+    Una solicitud de funcionalidad es una sugerencia para mejorar o añadir nuevas capacidades a la plataforma de la Perplexity API, como por ejemplo:
+
+    * Solicitar compatibilidad con un nuevo modelo o capacidad (por ejemplo, procesamiento de imágenes, opciones de ajuste fino)
+    * Pedir nuevos parámetros de la API (por ejemplo, filtros adicionales, opciones de búsqueda)
+    * Sugerir mejoras de rendimiento (por ejemplo, tiempos de respuesta más rápidos, mejor gestión de las citas)
+    * Ampliar funcionalidades existentes de la API (por ejemplo, mejorar la fiabilidad del streaming, añadir nuevos formatos de salida)
+
+    Si tu solicitud encaja con lo anterior, envíala aquí: [Solicitudes de funcionalidades en GitHub](https://github.com/ppl-ai/api-discussion/issues)
+  </Accordion>
+
+  <Accordion title="¿Cuál es la mejor forma de mantenerme al día con las actualizaciones de la API?">
+    Enviamos correos electrónicos a los usuarios con las novedades y también publicamos en el [registro de cambios](/es/docs/resources/changelog).
+  </Accordion>
+
+  <Accordion title="¿Perplexity ofrece garantías de calidad del servicio, como disponibilidad, frecuencia de fallos y tiempo objetivo de recuperación en caso de fallo?">
+    Por el momento no lo garantizamos.
+  </Accordion>
+
+  <Accordion title="Tengo otra pregunta o un problema">
+    Escríbenos a [api@perplexity.ai](mailto:api@perplexity.ai) o [support@perplexity.ai](mailto:support@perplexity.ai) para cualquier otra consulta sobre la API. También puedes publicar en nuestro [foro de discusión](https://github.com/ppl-ai/api-discussion/discussions) y te responderemos.
+  </Accordion>
+</AccordionGroup>

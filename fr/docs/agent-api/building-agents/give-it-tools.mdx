@@ -1,0 +1,371 @@
+---
+title: "Donnez-lui des outils"
+description: "Activez les outils intégrés et vos propres outils personnalisés dans le tableau tools, laissez le modèle décider quand les appeler et récupérez les résultats dans la réponse."
+---
+
+Livré à lui-même, un modèle ne répond qu&#39;à partir de ce qu&#39;il sait déjà. Les outils permettent à un agent d&#39;aller plus loin : effectuer une recherche sur le web en temps réel, récupérer une page, exécuter du code ou interroger vos propres systèmes. Pour activer des outils, il suffit de les lister dans le tableau `tools` : le modèle décide ensuite quand appeler chacun d&#39;eux en fonction de votre prompt. Cette page explique comment intégrer des outils et exploiter leur sortie. Pour connaître tous les paramètres d&#39;un outil donné, suivez le lien vers sa page de référence.
+
+<div id="three-kinds-of-tools">
+  ## Trois types d&#39;outils
+</div>
+
+| Type                 | Fonctionnement                                                                                                                                                                                                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Outils intégrés      | Capacités hébergées par Perplexity : recherche web, récupération d&#39;URL, recherche de personnes et de données financières, et un sandbox de code. Activez chacun d&#39;eux via `type` : Perplexity l&#39;exécute et renvoie les résultats directement dans la réponse. |
+| Serveurs MCP         | Votre propre serveur [MCP](/fr/docs/agent-api/tools/mcp) distant. Le modèle découvre et appelle automatiquement les outils du serveur, comme les outils intégrés — Perplexity relaie chaque appel vers votre serveur.                                                         |
+| Outils personnalisés | Les vôtres — des fonctions que vous contrôlez. Vous déclarez le schéma et, lorsque le modèle appelle l&#39;une d&#39;elles, l&#39;exécution se met en pause et vous transmet les arguments à traiter, puis reprend dès que vous renvoyez le résultat.                      |
+
+<div id="enable-built-in-tools">
+  ## Activer les outils intégrés
+</div>
+
+Ajoutez chaque outil au tableau `tools` en indiquant son `type`. La plupart des outils intégrés fonctionnent avec le type seul — certains acceptent des paramètres facultatifs (documentés sur leurs pages de référence).
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="What are the leading approaches to grid-scale energy storage, and how do they compare?",
+      tools=[
+          {"type": "web_search"},
+          {"type": "fetch_url"},
+      ],
+      max_steps=10,
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'What are the leading approaches to grid-scale energy storage, and how do they compare?',
+    tools: [
+      { type: 'web_search' as const },
+      { type: 'fetch_url' as const },
+    ],
+    max_steps: 10,
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "What are the leading approaches to grid-scale energy storage, and how do they compare?",
+      "tools": [
+        { "type": "web_search" },
+        { "type": "fetch_url" }
+      ],
+      "max_steps": 10
+    }' | jq
+  ```
+</CodeGroup>
+
+Les outils intégrés, chacun disposant de sa propre page de référence détaillant l&#39;ensemble des paramètres, la structure de réponse et la tarification :
+
+| Outil                                                        | `type`           | À utiliser pour                                                                                              |
+| ------------------------------------------------------------ | ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| [Sandbox](/fr/docs/agent-api/tools/sandbox)                     | `sandbox`        | Exécuter du code dans un conteneur isolé — voir [Exécuter du code](/fr/docs/agent-api/building-agents/run-code) |
+| [Web Search](/fr/docs/agent-api/tools/web-search)               | `web_search`     | Effectuer des recherches sur le web en temps réel, avec filtres de domaine, de date et de localisation       |
+| [Fetch URL Content](/fr/docs/agent-api/tools/fetch-url-content) | `fetch_url`      | Récupérer et extraire le contenu d&#39;URL précises                                                          |
+| [People Search](/fr/docs/agent-api/tools/people-search)         | `people_search`  | Trouver des professionnels et des personnes                                                                  |
+| [Finance Search](/fr/docs/agent-api/tools/finance-search)       | `finance_search` | Récupérer des données financières et de marché structurées                                                   |
+
+<Tip>
+  Laissez le modèle choisir. Vous activez un outil, et c&#39;est le modèle qui décide s&#39;il l&#39;appelle et à quel moment, en fonction de `input` et `instructions`.
+</Tip>
+
+<div id="connect-an-mcp-server">
+  ## Connecter un serveur MCP
+</div>
+
+Plutôt que d&#39;héberger chaque outil vous-même, connectez un serveur [Model Context Protocol](/fr/docs/agent-api/tools/mcp) (MCP) distant avec `type: mcp`. L&#39;Agent API découvre les outils du serveur au démarrage de la requête, et le modèle les appelle automatiquement comme les outils intégrés — vous n&#39;avez aucun appel à gérer. L&#39;exemple ci-dessous se connecte au serveur MCP public [DeepWiki](https://deepwiki.com), qui ne requiert aucune authentification.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Use DeepWiki to explain what the perplexityai/perplexity-py repository does.",
+      tools=[
+          {
+              "type": "mcp",
+              "server_label": "deepwiki",
+              "server_url": "https://mcp.deepwiki.com/mcp",
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Use DeepWiki to explain what the perplexityai/perplexity-py repository does.',
+    tools: [
+      {
+        type: 'mcp',
+        server_label: 'deepwiki',
+        server_url: 'https://mcp.deepwiki.com/mcp',
+      },
+    ] as any, // Les types actuels du SDK n'incluent pas encore les outils MCP.
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Use DeepWiki to explain what the perplexityai/perplexity-py repository does.",
+      "tools": [
+        {
+          "type": "mcp",
+          "server_label": "deepwiki",
+          "server_url": "https://mcp.deepwiki.com/mcp"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+Pour l&#39;authentification, les éléments de réponse et l&#39;ensemble des paramètres de l&#39;outil, consultez la [référence MCP](/fr/docs/agent-api/tools/mcp).
+
+<div id="add-your-custom-tool">
+  ## Ajouter votre outil personnalisé
+</div>
+
+Un outil personnalisé (`type: function`) permet à l&#39;agent d&#39;appeler du code que vous contrôlez — votre base de données ou une API interne. Vous le déclarez avec un `name`, une `description` et un schéma JSON pour ses `parameters`. Le modèle renseigne les arguments — c&#39;est vous qui exécutez la fonction. C&#39;est ainsi que l&#39;agent accède à des données qu&#39;il ne peut pas connaître par lui-même : ici, le statut actuel d&#39;une commande dans votre système interne.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  tools = [
+      {
+          "type": "function",
+          "name": "get_order_status",
+          "description": "Look up the current status of an internal order by its order ID.",
+          "parameters": {
+              "type": "object",
+              "properties": {"order_id": {"type": "string"}},
+              "required": ["order_id"],
+          },
+          "strict": True,
+      }
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="What's the status of order ORD-10042?",
+      tools=tools,
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const tools = [
+    {
+      type: 'function' as const,
+      name: 'get_order_status',
+      description: 'Look up the current status of an internal order by its order ID.',
+      parameters: {
+        type: 'object',
+        properties: { order_id: { type: 'string' } },
+        required: ['order_id'],
+      },
+      strict: true,
+    },
+  ];
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: "What's the status of order ORD-10042?",
+    tools,
+  });
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "What is the status of order ORD-10042?",
+      "tools": [
+        {
+          "type": "function",
+          "name": "get_order_status",
+          "description": "Look up the current status of an internal order by its order ID.",
+          "parameters": {
+            "type": "object",
+            "properties": { "order_id": { "type": "string" } },
+            "required": ["order_id"]
+          },
+          "strict": true
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+Le modèle n&#39;exécute jamais votre fonction — l&#39;API ne peut pas lancer votre code. L&#39;exécution se met plutôt en pause et vous transmet l&#39;appel : le tableau `output` de la réponse contient un élément `function_call` avec le nom et les arguments renseignés par le modèle.
+
+```json theme={null}
+{
+  "type": "function_call",
+  "id": "fc_abc123",
+  "call_id": "call_xyz789",
+  "name": "get_order_status",
+  "arguments": "{\"order_id\":\"ORD-10042\"}"
+}
+```
+
+Récupérez cet élément dans la réponse, exécutez la fonction de votre côté, puis poursuivez l&#39;exécution en renvoyant le résultat. La requête de suivi rejoue la conversation jusque-là — la question initiale, le `function_call` émis par le modèle et un `function_call_output` qui transporte votre résultat sous le même `call_id` :
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+
+  function_call = next(item for item in response.output if item.type == "function_call")
+
+  def get_order_status(order_id: str) -> dict:
+      orders = {"ORD-10042": {"status": "in_transit", "carrier": "DHL", "eta": "2026-06-23"}}
+      return orders.get(order_id, {"error": "order not found"})
+
+  result = get_order_status(**json.loads(function_call.arguments))
+
+  followup = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input=[
+          {"role": "user", "content": "What's the status of order ORD-10042?"},
+          {
+              "type": "function_call",
+              "call_id": function_call.call_id,
+              "name": function_call.name,
+              "arguments": function_call.arguments,
+          },
+          {
+              "type": "function_call_output",
+              "call_id": function_call.call_id,
+              "output": json.dumps(result),
+          },
+      ],
+      tools=tools,
+  )
+
+  print(followup.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  const functionCall = response.output.find((item) => item.type === 'function_call');
+  if (functionCall?.type !== 'function_call') throw new Error('No function call returned.');
+
+  function getOrderStatus(orderId: string) {
+    const orders: Record<string, unknown> = {
+      'ORD-10042': { status: 'in_transit', carrier: 'DHL', eta: '2026-06-23' },
+    };
+    return orders[orderId] ?? { error: 'order not found' };
+  }
+
+  const args = JSON.parse(functionCall.arguments) as { order_id: string };
+  const result = getOrderStatus(args.order_id);
+
+  const followup = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: [
+      { type: 'message', role: 'user', content: "What's the status of order ORD-10042?" },
+      {
+        type: 'function_call',
+        call_id: functionCall.call_id,
+        name: functionCall.name,
+        arguments: functionCall.arguments,
+      },
+      {
+        type: 'function_call_output',
+        call_id: functionCall.call_id,
+        output: JSON.stringify(result),
+      },
+    ],
+    tools,
+  });
+
+  console.log(followup.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": [
+        { "role": "user", "content": "What is the status of order ORD-10042?" },
+        {
+          "type": "function_call",
+          "call_id": "call_xyz789",
+          "name": "get_order_status",
+          "arguments": "{\"order_id\":\"ORD-10042\"}"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_xyz789",
+          "output": "{\"status\": \"in_transit\", \"carrier\": \"DHL\", \"eta\": \"2026-06-23\"}"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Note>
+  `call_id` est la clé de corrélation : le `function_call` émis par le modèle et le `function_call_output` que vous renvoyez doivent porter la même valeur. Définissez `strict: true` sur l&#39;outil personnalisé pour imposer le schéma des paramètres. Pour poursuivre l&#39;exécution, rejouez les éléments précédents dans le tableau `input` : transmettez ensemble le `function_call` et son `function_call_output`, afin que le modèle voie à la fois sa propre requête et votre résultat.
+</Note>
+
+<div id="read-tool-results">
+  ## Lire les résultats des outils
+</div>
+
+Les outils intégrés ajoutent leur sortie au tableau `output` de la réponse, aux côtés de l&#39;élément `message` — par exemple des éléments `search_results`, `finance_results` ou `sandbox_results`, selon l&#39;outil exécuté. Parcourez ce tableau pour récupérer les citations, les fichiers générés ou les valeurs calculées. La page de référence de chaque outil décrit la structure exacte de ses résultats — voir, par exemple, [Recherche web → Structure de la réponse](/fr/docs/agent-api/tools/web-search#response-shape).
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Exécuter du code" icon="terminal" href="/fr/docs/agent-api/building-agents/run-code">
+    Donnez à l&#39;agent un sandbox pour calculer des réponses exactes et renvoyer des fichiers.
+  </Card>
+
+  <Card title="Structurer la sortie" icon="list-details" href="/fr/docs/agent-api/building-agents/shape-output">
+    Imposez un JSON structuré que votre code pourra analyser.
+  </Card>
+</CardGroup>

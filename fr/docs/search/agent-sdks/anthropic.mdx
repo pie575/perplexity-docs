@@ -1,0 +1,366 @@
+---
+title: "Utiliser la Search API avec le SDK Anthropic"
+sidebarTitle: "Anthropic"
+description: "Enregistrez la Search API de Perplexity comme outil dans l'API Messages d'Anthropic et exécutez la boucle standard d'utilisation d'outils avec Claude."
+---
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Ce guide montre comment exposer la [Search API](/fr/docs/search/quickstart) de Perplexity à Claude sous forme d&#39;outil. L&#39;API Messages d&#39;Anthropic repose sur une boucle manuelle d&#39;utilisation d&#39;outils : le modèle émet un bloc `tool_use`, vous exécutez l&#39;outil (ici, en appelant `client.search.create`), puis vous renvoyez le résultat sous forme de `tool_result`. La boucle se répète jusqu&#39;à ce que le modèle produise une réponse finale.
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install anthropic perplexityai
+  export ANTHROPIC_API_KEY="your_anthropic_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+
+  ```bash Typescript theme={null}
+  npm install @anthropic-ai/sdk @perplexity-ai/perplexity_ai
+  export ANTHROPIC_API_KEY="your_anthropic_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+</CodeGroup>
+
+<div id="tool-definition">
+  ## Définition de l&#39;outil
+</div>
+
+Claude a besoin d&#39;une description d&#39;outil qui lui indique quand et comment appeler `web_search`. La description ci-dessous a été optimisée pour la Search API de Perplexity ; conservez-la telle quelle — c&#39;est la formulation de la description et des indications sur les paramètres qui permet d&#39;obtenir de bonnes requêtes courtes, de type mots-clés.
+
+<CodeGroup>
+  ```python Python theme={null}
+  WEB_SEARCH_TOOL_DESCRIPTION = """\
+  Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline."""
+
+  QUERIES_PARAM_DESCRIPTION = (
+      "An array of keyword-based search queries. Each query should be short, "
+      "as longer queries may reduce performance. Do not provide more than three "
+      "queries to maintain efficiency."
+  )
+
+  WEB_SEARCH_TOOL = {
+      "name": "web_search",
+      "description": WEB_SEARCH_TOOL_DESCRIPTION,
+      "input_schema": {
+          "type": "object",
+          "properties": {
+              "queries": {
+                  "type": "array",
+                  "description": QUERIES_PARAM_DESCRIPTION,
+                  "items": {"type": "string"},
+                  "minItems": 1,
+                  "maxItems": 3,
+              },
+          },
+          "required": ["queries"],
+      },
+  }
+  ```
+
+  ```typescript Typescript theme={null}
+  const WEB_SEARCH_TOOL_DESCRIPTION = `Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline.`;
+
+  const QUERIES_PARAM_DESCRIPTION =
+    "An array of keyword-based search queries. Each query should be short, " +
+    "as longer queries may reduce performance. Do not provide more than three " +
+    "queries to maintain efficiency.";
+
+  const WEB_SEARCH_TOOL = {
+    name: "web_search",
+    description: WEB_SEARCH_TOOL_DESCRIPTION,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        queries: {
+          type: "array" as const,
+          description: QUERIES_PARAM_DESCRIPTION,
+          items: { type: "string" as const },
+          minItems: 1,
+          maxItems: 3,
+        },
+      },
+      required: ["queries"],
+    },
+  };
+  ```
+</CodeGroup>
+
+<div id="tool-handler">
+  ## Gestionnaire d&#39;outil
+</div>
+
+Le gestionnaire est une fine surcouche de `client.search.create`. La Search API accepte nativement un tableau de requêtes (jusqu&#39;à cinq), si bien que le tableau produit par Claude peut être transmis tel quel.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  perplexity = Perplexity()
+
+  def run_web_search(queries: list[str]) -> str:
+      """Appelle Perplexity Search et met en forme les résultats pour le modèle."""
+      response = perplexity.search.create(query=queries, max_results=5)
+
+      lines = []
+      for result in response.results:
+          snippet = (result.snippet or "").strip().replace("\n", " ")
+          if len(snippet) > 400:
+              snippet = snippet[:400] + "…"
+          lines.append(f"- {result.title}\n  {result.url}\n  {snippet}")
+      return "\n\n".join(lines) if lines else "No results."
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const perplexity = new Perplexity();
+
+  async function runWebSearch(queries: string[]): Promise<string> {
+    const response = await perplexity.search.create({
+      query: queries,
+      max_results: 5,
+    });
+
+    const lines = response.results.map((r) => {
+      const snippet = (r.snippet ?? "").trim().replace(/\n/g, " ");
+      const trimmed = snippet.length > 400 ? `${snippet.slice(0, 400)}…` : snippet;
+      return `- ${r.title}\n  ${r.url}\n  ${trimmed}`;
+    });
+    return lines.length ? lines.join("\n\n") : "No results.";
+  }
+  ```
+</CodeGroup>
+
+<div id="tool-use-loop">
+  ## Boucle d&#39;utilisation des outils
+</div>
+
+L&#39;API Messages d&#39;Anthropic vous renvoie un `stop_reason` égal à `"tool_use"` ainsi qu&#39;un ou plusieurs éléments `ToolUseBlock` dans `response.content`. Exécutez chaque appel d&#39;outil, construisez un bloc `tool_result` par appel (associé via `tool_use_id`), puis renvoyez tous les résultats dans un seul message utilisateur. Répétez la boucle jusqu&#39;à ce que `stop_reason` ne vaille plus `"tool_use"`.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from anthropic import Anthropic
+
+  claude = Anthropic()
+
+  def chat_with_search(user_prompt: str, model: str = "claude-sonnet-4-6") -> str:
+      messages = [{"role": "user", "content": user_prompt}]
+
+      while True:
+          response = claude.messages.create(
+              model=model,
+              max_tokens=1024,
+              tools=[WEB_SEARCH_TOOL],
+              messages=messages,
+          )
+
+          if response.stop_reason != "tool_use":
+              # Réponse finale — extraire les blocs de texte du message de l'assistant.
+              return "".join(
+                  block.text for block in response.content if block.type == "text"
+              )
+
+          # Ajouter à l'historique le tour d'appel d'outil de l'assistant.
+          messages.append({"role": "assistant", "content": response.content})
+
+          # Exécuter chaque appel d'outil de ce tour et associer les résultats via tool_use_id.
+          tool_results = []
+          for block in response.content:
+              if block.type != "tool_use":
+                  continue
+              if block.name == "web_search":
+                  output = run_web_search(block.input["queries"])
+              else:
+                  output = json.dumps({"error": f"unknown tool: {block.name}"})
+              tool_results.append({
+                  "type": "tool_result",
+                  "tool_use_id": block.id,
+                  "content": output,
+              })
+
+          messages.append({"role": "user", "content": tool_results})
+
+
+  if __name__ == "__main__":
+      answer = chat_with_search(
+          "What were the major AI infrastructure announcements this week?"
+      )
+      print(answer)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Anthropic from "@anthropic-ai/sdk";
+
+  const claude = new Anthropic();
+
+  async function chatWithSearch(
+    userPrompt: string,
+    model = "claude-sonnet-4-6",
+  ): Promise<string> {
+    const messages: Anthropic.MessageParam[] = [
+      { role: "user", content: userPrompt },
+    ];
+
+    while (true) {
+      const response = await claude.messages.create({
+        model,
+        max_tokens: 1024,
+        tools: [WEB_SEARCH_TOOL],
+        messages,
+      });
+
+      if (response.stop_reason !== "tool_use") {
+        return response.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("");
+      }
+
+      messages.push({ role: "assistant", content: response.content });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const block of response.content) {
+        if (block.type !== "tool_use") continue;
+        let output: string;
+        if (block.name === "web_search") {
+          const input = block.input as { queries: string[] };
+          output = await runWebSearch(input.queries);
+        } else {
+          output = JSON.stringify({ error: `unknown tool: ${block.name}` });
+        }
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: output,
+        });
+      }
+
+      messages.push({ role: "user", content: toolResults });
+    }
+  }
+
+  (async () => {
+    const answer = await chatWithSearch(
+      "What were the major AI infrastructure announcements this week?",
+    );
+    console.log(answer);
+  })();
+  ```
+</CodeGroup>
+
+<div id="streaming">
+  ## Streaming
+</div>
+
+Pour les réponses en streaming, utilisez `client.messages.stream(...)` et accumulez les blocs `tool_use` issus des événements. Le modèle émet des événements `input_json_delta` contenant des arguments JSON partiels ; la fonction utilitaire du SDK les accumule et expose le bloc `tool_use` complet via `stream.get_final_message()` (Python) ou `stream.finalMessage()` (TypeScript). Pour le reste, la structure de la boucle est identique à celle de la version sans streaming.
+
+<CodeGroup>
+  ```python Python theme={null}
+  with claude.messages.stream(
+      model="claude-sonnet-4-6",
+      max_tokens=1024,
+      tools=[WEB_SEARCH_TOOL],
+      messages=messages,
+  ) as stream:
+      for text in stream.text_stream:
+          print(text, end="", flush=True)
+      final = stream.get_final_message()
+
+  # Inspectez final.stop_reason et final.content pour y trouver les blocs tool_use, puis
+  # reprenez la boucle de la même manière que dans la version sans streaming.
+  ```
+
+  ```typescript Typescript theme={null}
+  const stream = claude.messages.stream({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
+    tools: [WEB_SEARCH_TOOL],
+    messages,
+  });
+
+  for await (const chunk of stream) {
+    if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+      process.stdout.write(chunk.delta.text);
+    }
+  }
+  const final = await stream.finalMessage();
+  // Inspectez final.stop_reason et final.content comme dans la version sans streaming.
+  ```
+</CodeGroup>
+
+<div id="notes">
+  ## Notes
+</div>
+
+* **Appels d&#39;outils parallèles.** Claude peut émettre plusieurs blocs `tool_use` au cours d&#39;un même tour de l&#39;assistant. Chaque bloc doit avoir un `tool_result` correspondant dans le *même* message utilisateur suivant, apparié par `tool_use_id`. Pour désactiver ce comportement, définissez `tool_choice={"type": "auto", "disable_parallel_tool_use": True}`.
+* **Mise en forme des résultats.** La chaîne renvoyée dans `tool_result.content` est ce que le modèle lira ensuite. Indiquer l&#39;URL en plus de l&#39;extrait aide le modèle à citer ses sources lorsqu&#39;il rédige sa réponse finale.
+* **Erreurs.** Pour signaler l&#39;échec d&#39;un appel d&#39;outil, définissez `"is_error": True` sur le bloc `tool_result` et placez un bref message d&#39;erreur dans `content`. Le modèle prendra connaissance de l&#39;erreur et pourra s&#39;en remettre (en reformulant les requêtes, par exemple).
+* **Domaines et dates.** Passez `search_domain_filter`, `country` et les autres paramètres de la Search API dans `run_web_search` si vous souhaitez imposer des contraintes de récupération fixes. Consultez le [démarrage rapide de la Search API](/fr/docs/search/quickstart) pour la liste complète des paramètres.
+
+<div id="next-steps">
+  ## Prochaines étapes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Utiliser avec le SDK OpenAI" icon="code" href="/fr/docs/search/agent-sdks/openai">
+    Intégrez la Search API à l&#39;API Responses d&#39;OpenAI.
+  </Card>
+
+  <Card title="Utiliser avec le SDK Gemini" icon="code" href="/fr/docs/search/agent-sdks/gemini">
+    Intégrez la Search API au SDK `google-genai` de Google.
+  </Card>
+
+  <Card title="Démarrage rapide de la Search API" icon="rocket" href="/fr/docs/search/quickstart">
+    Référence complète des paramètres de la Search API.
+  </Card>
+
+  <Card title="Bonnes pratiques de recherche" icon="lightbulb" href="/fr/docs/search/best-practices">
+    Approches recommandées pour les charges de recherche en production.
+  </Card>
+</CardGroup>

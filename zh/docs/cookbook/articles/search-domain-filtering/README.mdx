@@ -1,0 +1,617 @@
+---
+title: "搜索域名过滤模式"
+description: "使用 search_domain_filter 实现聚焦搜索——用允许列表锁定可信来源，用拒绝列表排除域名，并掌握新闻、政府数据与竞品情报等场景的实用模式"
+---
+
+本指南介绍 Agent API 的搜索域名过滤。你将了解如何使用允许列表把搜索限制在可信域名范围内、使用拒绝列表排除不需要的来源，以及仅搜索新闻、获取政府数据、排除竞争对手等常见场景的实用模式。
+
+<Info>
+  域名过滤在 `tools` 数组中按工具分别配置，通过 `tools[].filters.search_domain_filter` 设置。完整参考请见 [Agent API 过滤器](/zh/docs/agent-api/tools/web-search#filters)。
+</Info>
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+安装 Perplexity SDK：
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+如果你还没有 API key：
+
+<Card title="获取你的 Perplexity API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="点击此处" href="https://perplexity.ai/account/api">
+  在 API 门户中打开 **API Keys** 标签页，生成一个新的 key。
+</Card>
+
+然后将 API key 导出为环境变量：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-domain-filtering-works">
+  ## 域名过滤的工作方式
+</div>
+
+`search_domain_filter` 参数接受一个域名字符串列表：
+
+* **允许列表** (无前缀) ：仅返回来自这些域名的结果。`["reuters.com", "apnews.com"]` 表示只搜索 Reuters 和 AP News。
+* **拒绝列表** (`-` 前缀) ：排除来自这些域名的结果。`["-reddit.com", "-twitter.com"]` 表示排除 Reddit 和 Twitter。
+
+*你还可以在域名后加上路径，把结果范围缩小到站点的某个板块——`["nature.com/articles"]` 只搜索该板块，而 `["-reddit.com/r/all"]` 只排除该板块，站点的其余内容仍会被搜索。*
+
+<Warning>
+  **切勿在同一请求中混用允许列表和拒绝列表条目。** API 不支持在同一数组中同时使用 `"reuters.com"` 和 `"-reddit.com"`。请全部使用允许列表条目，或全部使用拒绝列表条目。
+</Warning>
+
+<div id="basic-domain-filtering">
+  ## 基础域名过滤
+</div>
+
+域名过滤器在 `tools` 数组中逐个工具单独配置。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 允许列表：仅搜索指定域名
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the latest developments in AI regulation?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ["reuters.com", "apnews.com", "bbc.com"],
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the latest developments in AI regulation?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ["reuters.com", "apnews.com", "bbc.com"],
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="pattern-denylist-filtering">
+  ## 模式：拒绝列表过滤
+</div>
+
+使用 `-` 前缀可将特定域名排除在搜索结果之外。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 拒绝列表：排除社交媒体和用户生成内容
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the latest developments in AI regulation?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ["-reddit.com", "-twitter.com", "-quora.com", "-medium.com"],
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the latest developments in AI regulation?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ["-reddit.com", "-twitter.com", "-quora.com", "-medium.com"],
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="pattern-path-filtering">
+  ## 模式：路径过滤
+</div>
+
+在域名后添加路径，可将结果限定在站点的某个板块，例如文档、某个 subreddit、博客或新闻栏目。该方式在允许列表和拒绝列表两种模式下均可使用。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 将某站点的单个板块加入允许列表，并排除另一站点的某个板块
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Summarize recent peer-reviewed CRISPR results",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ["nature.com/articles", "science.org"],
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "Summarize recent peer-reviewed CRISPR results",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ["nature.com/articles", "science.org"],
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<Note>
+  路径按路径段边界匹配，因此 `"example.com/docs"` 可匹配 `/docs` 和 `/docs/intro`，但不匹配 `/documentation`。子域名同样包含在内 (`blog.example.com/docs` 可匹配) 。边界之后允许带查询字符串 (如 `/docs?x=1`) 。
+</Note>
+
+<div id="pattern-news-only-search">
+  ## 模式：仅搜索新闻
+</div>
+
+将结果限制在主流新闻媒体，适用于时事与突发新闻场景。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  NEWS_DOMAINS = [
+      "reuters.com",
+      "apnews.com",
+      "bbc.com",
+      "nytimes.com",
+      "washingtonpost.com",
+      "theguardian.com",
+      "bloomberg.com",
+      "ft.com",
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What happened in global markets today?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": NEWS_DOMAINS,
+              "search_recency_filter": "day",
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const NEWS_DOMAINS = [
+      "reuters.com",
+      "apnews.com",
+      "bbc.com",
+      "nytimes.com",
+      "washingtonpost.com",
+      "theguardian.com",
+      "bloomberg.com",
+      "ft.com",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What happened in global markets today?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: NEWS_DOMAINS,
+              search_recency_filter: "day",
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<Tip>
+  对于时效性强的查询，可将 `search_domain_filter` 与 `search_recency_filter` 搭配使用。可选值为 `day`、`week`、`month` 和 `year`。
+</Tip>
+
+<div id="pattern-government-and-official-sources">
+  ## 模式：政府与官方来源
+</div>
+
+在查询政策、法规和官方统计数据时，将检索范围限定为政府域名。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  GOV_DOMAINS = [
+      ".gov",          # 美国联邦及州政府
+      ".gov.uk",       # 英国政府
+      ".europa.eu",    # 欧盟机构
+      "who.int",       # 世界卫生组织
+      "worldbank.org", # 世界银行
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the current US federal guidelines on AI usage in healthcare?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": GOV_DOMAINS,
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const GOV_DOMAINS = [
+      ".gov",
+      ".gov.uk",
+      ".europa.eu",
+      "who.int",
+      "worldbank.org",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the current US federal guidelines on AI usage in healthcare?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: GOV_DOMAINS,
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="pattern-academic-and-research-filtering">
+  ## 模式：学术与研究筛选
+</div>
+
+定向检索教育和研究机构的内容。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  ACADEMIC_DOMAINS = [
+      ".edu",
+      "arxiv.org",
+      "scholar.google.com",
+      "pubmed.ncbi.nlm.nih.gov",
+      "nature.com",
+      "science.org",
+      "ieee.org",
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are recent advances in protein structure prediction?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ACADEMIC_DOMAINS,
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const ACADEMIC_DOMAINS = [
+      ".edu",
+      "arxiv.org",
+      "scholar.google.com",
+      "pubmed.ncbi.nlm.nih.gov",
+      "nature.com",
+      "science.org",
+      "ieee.org",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are recent advances in protein structure prediction?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ACADEMIC_DOMAINS,
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="pattern-competitor-exclusion">
+  ## 模式：排除竞争对手
+</div>
+
+在构建面向客户的内容时，可使用拒绝列表将竞争对手的网站从搜索结果中剔除。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 在产品调研中排除竞争对手域名
+  EXCLUDED_DOMAINS = [
+      "-competitor-a.com",
+      "-competitor-b.io",
+      "-competitor-c.ai",
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the best practices for building real-time data pipelines?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": EXCLUDED_DOMAINS,
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const EXCLUDED_DOMAINS = [
+      "-competitor-a.com",
+      "-competitor-b.io",
+      "-competitor-c.ai",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the best practices for building real-time data pipelines?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: EXCLUDED_DOMAINS,
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="configurable-filter-builder">
+  ## 可配置的过滤器构建器
+</div>
+
+一个可复用的辅助函数，可根据具名 preset 构建域名过滤配置。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 具名过滤器 preset
+  FILTER_PRESETS = {
+      "news": ["reuters.com", "apnews.com", "bbc.com", "bloomberg.com", "ft.com"],
+      "academic": [".edu", "arxiv.org", "nature.com", "science.org", "pubmed.ncbi.nlm.nih.gov"],
+      "government": [".gov", ".gov.uk", ".europa.eu", "who.int"],
+      "tech": ["techcrunch.com", "arstechnica.com", "theverge.com", "wired.com"],
+      "no_social": ["-reddit.com", "-twitter.com", "-facebook.com", "-tiktok.com", "-quora.com"],
+      "no_seo_spam": ["-pinterest.com", "-medium.com", "-hubspot.com"],
+  }
+
+
+  def search_with_preset(query: str, preset: str, recency: str = None) -> str:
+      """使用具名的域名过滤器 preset 执行搜索。"""
+      if preset not in FILTER_PRESETS:
+          raise ValueError(f"Unknown preset: {preset}. Options: {list(FILTER_PRESETS.keys())}")
+
+      filters = {"search_domain_filter": FILTER_PRESETS[preset]}
+      if recency:
+          filters["search_recency_filter"] = recency
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=query,
+          tools=[{"type": "web_search", "filters": filters}],
+      )
+      return response.output_text
+
+
+  # 用法
+  print("--- News Search ---")
+  print(search_with_preset("Latest AI regulation news", "news", recency="week"))
+
+  print("\n--- Academic Search ---")
+  print(search_with_preset("CRISPR gene editing recent papers", "academic"))
+
+  print("\n--- Clean Search (no social media) ---")
+  print(search_with_preset("Best Python testing frameworks", "no_social"))
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const FILTER_PRESETS: Record<string, string[]> = {
+      news: ["reuters.com", "apnews.com", "bbc.com", "bloomberg.com", "ft.com"],
+      academic: [".edu", "arxiv.org", "nature.com", "science.org", "pubmed.ncbi.nlm.nih.gov"],
+      government: [".gov", ".gov.uk", ".europa.eu", "who.int"],
+      tech: ["techcrunch.com", "arstechnica.com", "theverge.com", "wired.com"],
+      no_social: ["-reddit.com", "-twitter.com", "-facebook.com", "-tiktok.com", "-quora.com"],
+      no_seo_spam: ["-pinterest.com", "-medium.com", "-hubspot.com"],
+  };
+
+  async function searchWithPreset(query: string, preset: string, recency?: string): Promise<string> {
+      if (!(preset in FILTER_PRESETS)) {
+          throw new Error(`Unknown preset: ${preset}. Options: ${Object.keys(FILTER_PRESETS).join(", ")}`);
+      }
+
+      const filters: Record<string, any> = { search_domain_filter: FILTER_PRESETS[preset] };
+      if (recency) filters.search_recency_filter = recency;
+
+      const response = await client.responses.create({
+          model: "openai/gpt-5.4",
+          input: query,
+          tools: [{ type: "web_search" as const, filters }],
+      });
+      return response.output_text;
+  }
+
+  console.log("--- News Search ---");
+  console.log(await searchWithPreset("Latest AI regulation news", "news", "week"));
+
+  console.log("\n--- Academic Search ---");
+  console.log(await searchWithPreset("CRISPR gene editing recent papers", "academic"));
+
+  console.log("\n--- Clean Search (no social media) ---");
+  console.log(await searchWithPreset("Best Python testing frameworks", "no_social"));
+  ```
+</CodeGroup>
+
+<div id="common-pitfalls">
+  ## 常见误区
+</div>
+
+<div id="mixing-allowlist-and-denylist">
+  ### 混用允许列表与拒绝列表
+</div>
+
+```python theme={null}
+# ❌ 错误：混用允许列表和拒绝列表
+search_domain_filter=["reuters.com", "-reddit.com"]
+
+# ✅ 正确：仅使用允许列表
+search_domain_filter=["reuters.com", "apnews.com", "bbc.com"]
+
+# ✅ 正确：仅使用拒绝列表
+search_domain_filter=["-reddit.com", "-twitter.com"]
+```
+
+<div id="using-wildcards-incorrectly">
+  ### 通配符使用不当
+</div>
+
+```python theme={null}
+# ❌ 错误：不支持通配符
+search_domain_filter=["*.gov"]
+
+# ✅ 正确：直接使用顶级域名
+search_domain_filter=[".gov"]
+
+# ✅ 正确：用路径前缀限定到某个栏目（不使用通配符）
+search_domain_filter=["example.com/blog"]
+```
+
+<div id="empty-filter-arrays">
+  ### 空过滤器数组
+</div>
+
+```python theme={null}
+# ❌ 错误：空数组的行为未定义
+search_domain_filter=[]
+
+# ✅ 正确：省略该参数即可搜索全部域名
+#（即不传入 search_domain_filter）
+```
+
+<div id="tips-and-best-practices">
+  ## 使用技巧与最佳实践
+</div>
+
+1. **保持允许列表精简。** 通常 5-10 个域名就足够了。域名过多会削弱过滤器的作用。
+
+2. **使用拒绝列表进行大范围排除。** 如果只想排除少数噪声较大的来源、其余仍然搜索全网，拒绝列表比把其他所有域名逐一加入允许列表更实用。
+
+3. **与时效性过滤器搭配使用。** 对于时效敏感的查询，可在域名过滤器之外再加上 `search_recency_filter`。
+
+4. **测试你的过滤器。** 用同一个查询分别在启用和不启用过滤器的情况下运行，验证结果是否按预期发生变化。
+
+5. **顶级域名过滤器的匹配范围很广。** 使用 `.gov` 会匹配所有以 `.gov` 结尾的域名，包括 `whitehouse.gov`、`irs.gov`，以及 `ca.gov` 这类州级域名。
+
+6. **将 preset 存放在配置中。** 在应用配置中定义过滤器 preset，而不要在每个请求里硬编码。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 过滤器" icon="filter" href="/zh/docs/agent-api/tools/web-search#filters">
+    Agent API 中域名、日期范围和地区过滤器的完整参考。
+  </Card>
+
+  <Card title="Search API 过滤器" icon="filter" href="/zh/docs/search/filters/domain-filter">
+    在原始 Search API 上使用域名过滤，实现结果级控制。
+  </Card>
+
+  <Card title="学术搜索" icon="graduation-cap" href="/zh/docs/cookbook/articles/academic-search/README">
+    结合域名过滤的专业学术搜索。
+  </Card>
+</CardGroup>

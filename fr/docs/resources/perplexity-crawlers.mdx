@@ -1,0 +1,103 @@
+---
+title: "Robots d'exploration de Perplexity"
+description: "Nous nous efforçons d'améliorer notre service chaque jour en offrant la meilleure expérience de recherche possible. Pour y parvenir, nous collectons des données à l'aide de robots d'exploration (« robots ») et d'agents utilisateurs qui recueillent et indexent des informations sur Internet, en fonctionnant soit automatiquement, soit en réponse aux demandes des utilisateurs. Les webmasters…"
+---
+
+| Agent utilisateur | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| :---------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PerplexityBot     | `PerplexityBot` sert à faire apparaître des sites web dans les résultats de recherche de Perplexity et à les référencer. Il n&#39;est pas utilisé pour explorer du contenu destiné aux modèles de fondation d&#39;IA. Pour que votre site apparaisse dans les résultats de recherche, nous vous recommandons d&#39;autoriser `PerplexityBot` dans le fichier `robots.txt` de votre site et d&#39;accepter les requêtes provenant de nos plages d&#39;adresses IP publiées ci-dessous.<br /><br />Chaîne d&#39;agent utilisateur complète : `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)`<br /><br />Adresses IP publiées : [https://www.perplexity.com/perplexitybot.json](https://www.perplexity.com/perplexitybot.json)                                                                                                                                                                            |
+| Perplexity‑User   | `Perplexity-User` prend en charge les actions des utilisateurs au sein de Perplexity. Lorsqu&#39;un utilisateur pose une question à Perplexity, celui-ci peut consulter une page web afin de fournir une réponse précise et inclure un lien vers cette page dans sa réponse. `Perplexity-User` détermine les sites auxquels ces requêtes utilisateur peuvent accéder. Il n&#39;est pas utilisé pour l&#39;exploration du web ni pour collecter du contenu destiné à l&#39;entraînement de modèles de fondation d&#39;IA.<br /><br />Chaîne d&#39;agent utilisateur complète : `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)`<br /><br />Adresses IP publiées : [https://www.perplexity.com/perplexity-user.json](https://www.perplexity.com/perplexity-user.json)<br /><br />La récupération étant déclenchée par un utilisateur, cet outil ignore généralement les règles du fichier robots.txt. |
+
+<div id="waf-configuration">
+  ## Configuration du WAF
+</div>
+
+Si vous utilisez un pare-feu applicatif (WAF) pour protéger votre site, vous devrez peut-être ajouter explicitement les robots de Perplexity à la liste d&#39;autorisation afin qu&#39;ils puissent accéder à votre contenu. Vous trouverez ci-dessous des recommandations de configuration pour les principaux fournisseurs de WAF.
+
+<div id="cloudflare-waf">
+  ### WAF Cloudflare
+</div>
+
+Pour configurer le WAF Cloudflare afin d&#39;autoriser les robots de Perplexity :
+
+<Steps>
+  <Step title="Accéder aux paramètres du WAF">
+    Dans votre tableau de bord Cloudflare, rendez-vous dans **Security** → **WAF**.
+  </Step>
+
+  <Step title="Créer une nouvelle règle">
+    Cliquez sur **Custom rules** et créez une nouvelle règle autorisant les robots de Perplexity.
+  </Step>
+
+  <Step title="Configurer les conditions de la règle">
+    Définissez une règle combinant une condition sur le User-Agent et une condition sur l&#39;adresse IP :
+
+    * **Champ** : User Agent
+    * **Opérateur** : Contains
+    * **Valeur** : `PerplexityBot` OU `Perplexity-User`
+
+    **AND**
+
+    * **Champ** : IP Source Address
+    * **Opérateur** : Is in
+    * **Valeur** : utilisez les plages d&#39;IP des points de terminaison officiels indiqués ci-dessous
+  </Step>
+
+  <Step title="Définir l'action de la règle">
+    Réglez l&#39;action sur **Allow** afin que ces requêtes contournent les autres règles de sécurité.
+  </Step>
+</Steps>
+
+<div id="aws-waf">
+  ### AWS WAF
+</div>
+
+Pour la configuration d&#39;AWS WAF, créez des ensembles d&#39;adresses IP et des conditions de correspondance de chaîne :
+
+<Steps>
+  <Step title="Créer des ensembles d'adresses IP">
+    Dans la console AWS WAF, créez des ensembles d&#39;adresses IP pour PerplexityBot et Perplexity-User à partir des adresses IP des points de terminaison officiels répertoriés ci-dessous.
+  </Step>
+
+  <Step title="Créer des conditions de correspondance de chaîne">
+    Créez des conditions de correspondance de chaîne pour les en-têtes User-Agent :
+
+    * `PerplexityBot`
+    * `Perplexity-User`
+  </Step>
+
+  <Step title="Créer des règles d'autorisation">
+    Créez des règles combinant les ensembles d&#39;adresses IP et les chaînes User-Agent correspondantes, puis définissez l&#39;action sur **Allow**.
+  </Step>
+
+  <Step title="Associer à une Web ACL">
+    Associez ces règles à votre Web ACL et vérifiez qu&#39;elles ont une priorité supérieure à celle des règles de blocage.
+  </Step>
+</Steps>
+
+<div id="ip-address-sources">
+  ### Sources d&#39;adresses IP
+</div>
+
+<Warning>
+  Utilisez toujours les plages d&#39;adresses IP les plus récentes fournies par les points de terminaison JSON officiels. Ces adresses sont mises à jour régulièrement et doivent faire office de source de vérité pour vos configurations WAF.
+</Warning>
+
+* **Adresses IP de PerplexityBot** : [https://www.perplexity.com/perplexitybot.json](https://www.perplexity.com/perplexitybot.json)
+* **Adresses IP de Perplexity-User** : [https://www.perplexity.com/perplexity-user.json](https://www.perplexity.com/perplexity-user.json)
+
+<Tip>
+  Mettez en place des processus automatisés qui récupèrent périodiquement les plages d&#39;adresses IP les plus récentes depuis ces points de terminaison et actualisent vos règles WAF, afin de garantir un accès continu aux robots de Perplexity.
+</Tip>
+
+<div id="best-practices">
+  ### Bonnes pratiques
+</div>
+
+<Tip>
+  Lorsque vous configurez des règles WAF pour les robots de Perplexity, combinez la correspondance sur la chaîne User-Agent et la vérification des adresses IP afin de renforcer la sécurité tout en permettant au trafic légitime des robots de Perplexity d&#39;accéder à votre contenu.
+</Tip>
+
+<Note>
+  La propagation des modifications apportées aux configurations WAF peut prendre un certain temps. Surveillez vos journaux pour vérifier que les règles fonctionnent comme prévu et que le trafic légitime des robots de Perplexity est bien autorisé.
+</Note>

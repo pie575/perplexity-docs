@@ -1,0 +1,346 @@
+---
+title: "SEC 申报文件检索"
+description: "使用搜索域名过滤功能查询 SEC.gov 和 EDGAR 上的财务申报文件，提取关键财务数据，并生成结构化的财务摘要"
+---
+
+<div id="sec-filing-search">
+  # SEC 申报文件检索
+</div>
+
+利用域名过滤在 SEC.gov 和 EDGAR 上检索财务申报文件，提取关键财务指标，并生成上市公司备案文件的结构化摘要。本示例展示如何结合 Agent API 与精准的域名过滤条件，完成实用的财务数据提取。
+
+<div id="features">
+  ## 功能
+</div>
+
+* 使用 `search_domain_filter` 仅搜索 SEC.gov 和 EDGAR
+* 从 10-K、10-Q 和 8-K 申报文件中提取关键指标
+* 以结构化 JSON 输出财务数据
+* 跨公司或跨时间段对比申报文件
+* 通过网页搜索将 SEC 数据与更广泛的市场背景相结合
+
+<Info>
+  本示例使用 Agent API 的 `web_search` 工具，并借助域名过滤专门定位 SEC.gov。搜索结果以真实的 SEC 申报文件为依据，而非二手报道。
+</Info>
+
+<div id="installation">
+  ## 安装
+</div>
+
+```bash theme={null}
+pip install perplexityai
+```
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## 用法
+</div>
+
+将下面的完整代码保存为 `sec_search.py` 并运行：
+
+```bash theme={null}
+python sec_search.py "Apple 10-K 2025 revenue and operating income"
+```
+
+对比公司：
+
+```bash theme={null}
+python sec_search.py --compare AAPL MSFT GOOGL --metric revenue
+```
+
+<div id="full-code">
+  ## 完整代码
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import sys
+  import json
+  import argparse
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  SEC_DOMAINS = [
+      "sec.gov",
+      "edgar.sec.gov",
+      "efts.sec.gov",
+  ]
+
+
+  def search_sec_filings(query: str) -> dict:
+      """Search SEC filings with domain-filtered web search."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=query,
+          tools=[{
+              "type": "web_search",
+              "filters": {
+                  "search_domain_filter": SEC_DOMAINS,
+              },
+          }],
+          instructions=(
+              "You are a financial analyst assistant. Search SEC filings for the requested "
+              "information. Cite specific filing types (10-K, 10-Q, 8-K) and dates. "
+              "Report exact numbers from the filings, not estimates."
+          ),
+          max_output_tokens=2048,
+      )
+
+      return {
+          "query": query,
+          "answer": response.output_text,
+          "model": response.model,
+          "cost": response.usage.cost.total_cost,
+      }
+
+
+  def extract_financial_metrics(company: str, filing_type: str = "10-K") -> dict:
+      """Extract structured financial metrics from SEC filings."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=f"Find the most recent {filing_type} filing for {company} on SEC EDGAR and extract key financial metrics.",
+          tools=[{
+              "type": "web_search",
+              "filters": {
+                  "search_domain_filter": SEC_DOMAINS,
+              },
+          }],
+          instructions=(
+              f"Search SEC EDGAR for {company}'s most recent {filing_type} filing. "
+              "Extract the exact financial figures reported. Use numbers directly from the filing."
+          ),
+          response_format={
+              "type": "json_schema",
+              "json_schema": {
+                  "name": "sec_financials",
+                  "schema": {
+                      "type": "object",
+                      "properties": {
+                          "company": {"type": "string"},
+                          "ticker": {"type": "string"},
+                          "filing_type": {"type": "string"},
+                          "filing_period": {"type": "string"},
+                          "filing_date": {"type": "string"},
+                          "total_revenue": {"type": "string"},
+                          "net_income": {"type": "string"},
+                          "total_assets": {"type": "string"},
+                          "total_debt": {"type": "string"},
+                          "operating_income": {"type": "string"},
+                          "eps_diluted": {"type": "string"},
+                          "cash_and_equivalents": {"type": "string"},
+                      },
+                      "required": [
+                          "company", "ticker", "filing_type", "filing_period", "filing_date",
+                          "total_revenue", "net_income", "total_assets", "total_debt",
+                          "operating_income", "eps_diluted", "cash_and_equivalents",
+                      ],
+                      "additionalProperties": False,
+                  },
+              },
+          },
+      )
+
+      return json.loads(response.output_text)
+
+
+  def compare_companies(tickers: list[str], metric: str = "revenue") -> list[dict]:
+      """Compare a specific financial metric across multiple companies."""
+      results = []
+      for ticker in tickers:
+          print(f"  Searching {ticker}...")
+          try:
+              data = extract_financial_metrics(ticker)
+              results.append(data)
+          except Exception as e:
+              results.append({"ticker": ticker, "error": str(e)})
+      return results
+
+
+  def search_filing_changes(company: str) -> str:
+      """Search for material changes or risk factors in recent filings."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=(
+              f"What are the key risk factors and material changes disclosed in {company}'s "
+              f"most recent 10-K or 10-Q filing on SEC EDGAR?"
+          ),
+          tools=[{
+              "type": "web_search",
+              "filters": {
+                  "search_domain_filter": SEC_DOMAINS,
+              },
+          }],
+          instructions=(
+              "Focus on risk factors (Item 1A) and material changes. "
+              "Cite specific sections and filing dates."
+          ),
+          max_output_tokens=2048,
+      )
+      return response.output_text
+
+
+  def main():
+      parser = argparse.ArgumentParser(description="SEC Filing Search")
+      parser.add_argument("query", nargs="?", help="Search query for SEC filings")
+      parser.add_argument("--extract", help="Extract financial metrics for a company ticker")
+      parser.add_argument("--compare", nargs="+", help="Compare companies by ticker")
+      parser.add_argument("--metric", default="revenue", help="Metric to compare")
+      parser.add_argument("--risks", help="Search risk factors for a company")
+      parser.add_argument("--json", action="store_true", help="Output as JSON")
+      args = parser.parse_args()
+
+      if args.compare:
+          print(f"Comparing {len(args.compare)} companies...\n")
+          results = compare_companies(args.compare, args.metric)
+          if args.json:
+              print(json.dumps(results, indent=2))
+          else:
+              for r in results:
+                  if "error" in r:
+                      print(f"  {r['ticker']}: ERROR - {r['error']}")
+                  else:
+                      print(f"  {r['company']} ({r['ticker']}) — {r['filing_type']} ({r['filing_period']})")
+                      print(f"    Revenue: {r['total_revenue']}")
+                      print(f"    Net Income: {r['net_income']}")
+                      print(f"    Operating Income: {r['operating_income']}")
+                      print(f"    EPS: {r['eps_diluted']}")
+                      print()
+
+      elif args.extract:
+          print(f"Extracting financials for {args.extract}...\n")
+          data = extract_financial_metrics(args.extract)
+          if args.json:
+              print(json.dumps(data, indent=2))
+          else:
+              print(f"{data['company']} ({data['ticker']})")
+              print(f"Filing: {data['filing_type']} for {data['filing_period']} (filed {data['filing_date']})")
+              print(f"  Revenue:          {data['total_revenue']}")
+              print(f"  Net Income:       {data['net_income']}")
+              print(f"  Operating Income: {data['operating_income']}")
+              print(f"  Total Assets:     {data['total_assets']}")
+              print(f"  Total Debt:       {data['total_debt']}")
+              print(f"  Cash:             {data['cash_and_equivalents']}")
+              print(f"  EPS (diluted):    {data['eps_diluted']}")
+
+      elif args.risks:
+          print(f"Searching risk factors for {args.risks}...\n")
+          print(search_filing_changes(args.risks))
+
+      elif args.query:
+          result = search_sec_filings(args.query)
+          if args.json:
+              print(json.dumps(result, indent=2))
+          else:
+              print(result["answer"])
+
+      else:
+          print("Error: Provide a query, --extract TICKER, --compare TICKERS, or --risks COMPANY", file=sys.stderr)
+          sys.exit(1)
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## 示例输出
+</div>
+
+<div id="basic-filing-search">
+  ### 基础申报文件搜索
+</div>
+
+```bash theme={null}
+python sec_search.py "Apple 10-K 2025 revenue breakdown by segment"
+```
+
+```
+根据 Apple 2025 财年 10-K 文件（2025 年 10 月提交），净收入总额为
+3943 亿美元。各业务板块收入构成：
+
+- iPhone：2006 亿美元（50.8%）
+- 服务：962 亿美元（24.4%）
+- Mac：294 亿美元（7.5%）
+- iPad：283 亿美元（7.2%）
+- 可穿戴设备、家居和配件：398 亿美元（10.1%）
+
+服务业务收入同比增长 14%，仍是增长最快的板块。
+（来源：Apple Inc. 10-K，SEC EDGAR）
+```
+
+<div id="structured-extraction">
+  ### 结构化提取
+</div>
+
+```bash theme={null}
+python sec_search.py --extract AAPL --json
+```
+
+```json theme={null}
+{
+  "company": "Apple Inc.",
+  "ticker": "AAPL",
+  "filing_type": "10-K",
+  "filing_period": "FY2025 (ending September 2025)",
+  "filing_date": "2025-10-31",
+  "total_revenue": "$394.3 billion",
+  "net_income": "$101.2 billion",
+  "total_assets": "$352.6 billion",
+  "total_debt": "$98.3 billion",
+  "operating_income": "$123.4 billion",
+  "eps_diluted": "$6.72",
+  "cash_and_equivalents": "$29.9 billion"
+}
+```
+
+<div id="company-comparison">
+  ### 公司对比
+</div>
+
+```bash theme={null}
+python sec_search.py --compare AAPL MSFT GOOGL
+```
+
+```
+正在比较 3 家公司……
+
+  Apple Inc. (AAPL) — 10-K (FY2025)
+    营业收入：3943 亿美元
+    净利润：1012 亿美元
+    营业利润：1234 亿美元
+    每股收益：6.72 美元
+
+  Microsoft Corporation (MSFT) — 10-K (FY2025)
+    营业收入：2542 亿美元
+    净利润：894 亿美元
+    营业利润：1156 亿美元
+    每股收益：12.01 美元
+
+  Alphabet Inc. (GOOGL) — 10-K (FY2025)
+    营业收入：3482 亿美元
+    净利润：867 亿美元
+    营业利润：1083 亿美元
+    每股收益：7.02 美元
+```
+
+<Tip>
+  SEC EDGAR 收录了所有美国上市公司经审计的官方财务数据。将搜索范围限制在 `sec.gov` 和 `edgar.sec.gov`，可确保财务数据来自一手申报文件，而非二手报道。
+</Tip>
+
+<Warning>
+  model 提取的财务数据在用于正式报告或投资决策前，应对照原始申报文件核实。model 有时可能会错误解析表格或脚注。
+</Warning>
+
+<div id="limitations">
+  ## 限制
+</div>
+
+* 搜索范围仅限于 SEC EDGAR 公开提供且可被索引的内容。
+* 刚刚提交的文件可能尚未被搜索引擎收录。
+* 复杂的财务表格 (跨年度对比、带脚注的分部明细) 可能只会被概括，而非完整提取。
+* 模型按申报文件原样提供数据，不会针对不同期间的会计方法变更进行调整。

@@ -1,0 +1,200 @@
+---
+title: "プロファイル"
+description: "保存・管理できる再利用可能なバージョン管理された構成で、Agent API リクエストを実行します。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+プロファイルとは、自分で保存・管理できる再利用可能かつバージョン管理された構成です。
+実行の挙動を決める設定 (モデル または モデル のフォールバックチェーン、システム指示、推論の強度、ツール、エージェントループのステップ予算) を、単一の ID にまとめます。
+リクエストごとに構成全体を書き直す必要はなく、ID を指定してプロファイルを選択できます。
+
+プロファイルは、[プリセット](/ja/docs/agent-api/presets) に相当するものを自分で管理する仕組みです。
+プリセット は Perplexity が保守・調整する構成であり、プロファイルは自分で定義してバージョン管理する構成です。
+
+|         | プリセット                                   | Profile                            |
+| ------- | ---------------------------------------- | ---------------------------------- |
+| 所有者     | Perplexity                               | ユーザー                               |
+| 参照方法    | 名前 (例: `preset="low"`)                   | ID (例: `profile_8Qw3x7tJm2N6pR4`)  |
+| バージョン管理 | なし。名前は常に Perplexity が推奨する最新の構成に解決されます。   | あり。特定のバージョンを固定するか、最新を追跡できます。       |
+| 適した用途   | ユースケースに合わせて Perplexity が最適化した既定値を使いたい場合。 | 自分で標準化して管理する構成を使いたい場合。             |
+
+<Note>
+  すでに [プリセット](/ja/docs/agent-api/presets) を使用している場合、プロファイルはその設定を保存してバージョン管理するための手段になります。
+  プリセット の[現在の値](/ja/docs/agent-api/presets#current-preset-values)を出発点として、それをプロファイルとして管理すれば、すべてのリクエストが 1 つの ID を参照するようになります。
+  1 つのリクエストで使用できるのは プリセット かプロファイルのいずれか一方で、両方を同時には使用できません。
+</Note>
+
+<div id="add-a-profile">
+  ## プロファイルを追加する
+</div>
+
+1. [API ポータルの プロファイル](https://console.perplexity.ai/project/profiles) を開きます。
+2. **Create profile** を選択します。
+3. プロファイルで使用する モデル、指示、ツールを設定して保存します。
+4. プロファイル ID をコピーします。
+5. Agent API リクエストに `profile` エントリを追加します。`type` に `"custom"`、`id` にプロファイル ID を指定し、同じリクエストでは `preset` を指定しないでください。
+
+実行時にはプロファイルの モデル、指示、ツールなどの設定が適用されるため、これらを改めて指定する必要はありません。
+次のリクエストはプロファイルを使って実行する例です。
+`profile_YOUR_PROFILE_ID` は、コピーした ID に置き換えてください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      profile={
+          "type": "custom",
+          "id": "profile_YOUR_PROFILE_ID",
+      },
+      input="Summarize this week's most important AI research.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    profile: {
+      type: 'custom',
+      id: 'profile_YOUR_PROFILE_ID',
+    },
+    input: "Summarize this week's most important AI research.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "profile": {
+        "type": "custom",
+        "id": "profile_YOUR_PROFILE_ID"
+      },
+      "input": "Summarize this weeks most important AI research."
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="override-profile-settings">
+  ## プロファイル設定の上書き
+</div>
+
+プロファイルは実行時の既定値を提供します。
+リクエストで指定したパラメータは、該当フィールドのプロファイル値を上書きします。そのため、1つのプロファイルを再利用しながら、リクエストごとに特定の設定だけを変更できます。
+たとえば `model` を指定すると、プロファイルの指示やツール、その他の設定はそのまま維持したまま、別のモデルで実行できます。
+
+ただし `tools` は例外で、セット全体を置き換えるのではなく、ツール単位でマージされます。
+1つのツールを指定した場合、上書きされるのはそのツールのオプションのみで、プロファイルの他のツールは有効なまま残ります。
+
+<div id="profile-parameters">
+  ## プロファイルパラメータ
+</div>
+
+| フィールド     | 型      | 必須  | 説明                                                  |
+| --------- | ------ | --- | --------------------------------------------------- |
+| `type`    | string | はい  | `"custom"` を指定します。                                  |
+| `id`      | string | はい  | プロファイル ID。1〜128 文字。                                 |
+| `version` | string | いいえ | バインドするバージョン、または `"latest"`。省略した場合は最新バージョンにバインドされます。 |
+
+<div id="versioning">
+  ## バージョン管理
+</div>
+
+プロファイルの各バージョンはイミュータブルです。プロファイルを編集すると、既存のバージョンが変更されるのではなく、新しいバージョンが作成されます。
+特定のバージョンに固定したリクエストは常にまったく同じ構成で実行されるため、新しいバージョンが反映されるのは `"latest"` を指定した場合のみです。
+バージョンはリクエストが受理された時点で解決されるため、リクエストの処理中にバージョンが変更されても、その実行には影響しません。
+
+本番トラフィックを特定のバージョンに固定する:
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      profile={
+          "type": "custom",
+          "id": "profile_YOUR_PROFILE_ID",
+          "version": "3",
+      },
+      input="Summarize this week's most important AI research.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    profile: {
+      type: 'custom',
+      id: 'profile_YOUR_PROFILE_ID',
+      version: '3',
+    },
+    input: "Summarize this week's most important AI research.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "profile": {
+        "type": "custom",
+        "id": "profile_YOUR_PROFILE_ID",
+        "version": "3"
+      },
+      "input": "Summarize this weeks most important AI research."
+    }' | jq
+  ```
+</CodeGroup>
+
+`"latest"` を指定している場合、いずれかの管理者が新しいバージョンをアップロードすると、本番リクエストの実行内容が即座に切り替わります。
+バージョン履歴の確認と各バージョンのダウンロードは [API ポータル](https://console.perplexity.ai/project/profiles) から行えます。
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+プロファイルに問題がある場合、実行が始まる前に `4xx` ステータスでリクエストが失敗します。他のリクエストエラーと同様に処理してください。
+発生し得るケースは次のとおりです。
+
+* **プロファイルで使用できない モデル が指定されている。** リクエストは `model "<model>" is not supported` で失敗します。サポートされている モデル を使うようプロファイルを編集してください。
+* **プロファイル ID が誤っている、またはアクセス権がない。** リクエストは `The requested profile does not exist or is not accessible.` で失敗します。ID を確認してください。
+* **`version` が無効。** 存在するバージョン、または `"latest"` を指定してください。
+
+プロファイルの管理は [API ポータルの プロファイル](https://console.perplexity.ai/project/profiles) から行えます。問題が解消しない場合は [api@perplexity.ai](mailto:api@perplexity.ai) までお問い合わせください。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="プリセット" icon="sliders" href="/ja/docs/agent-api/presets">
+    Perplexity が管理する設定を名前で指定して使用します。
+  </Card>
+
+  <Card title="モデルのフォールバック" icon="arrow-right-arrow-left" href="/ja/docs/agent-api/model-fallback">
+    フォールバックチェーンを設定して、モデルが利用できない場合でも実行を継続します。
+  </Card>
+</CardGroup>

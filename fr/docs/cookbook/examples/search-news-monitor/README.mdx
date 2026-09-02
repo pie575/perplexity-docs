@@ -1,0 +1,366 @@
+---
+title: "Moniteur d'actualités Search"
+description: "Un outil en ligne de commande qui s'appuie sur la Search API de Perplexity pour surveiller l'actualité en temps réel sur plusieurs sujets configurables, avec filtrage par domaine et par fraîcheur"
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="search-news-monitor">
+  # Moniteur d&#39;actualités Search
+</div>
+
+Un outil en ligne de commande qui utilise la Search API de Perplexity (`client.search.create(...)`) pour surveiller l&#39;actualité en temps réel sur plusieurs sujets. Configurez les sujets, les filtres de domaines et les fenêtres de fraîcheur pour mettre en place un pipeline de veille d&#39;actualité en continu.
+
+<div id="features">
+  ## Fonctionnalités
+</div>
+
+* Surveillez plusieurs sujets en une seule exécution grâce à la Search API
+* Filtrez les résultats par domaine avec `search_domain_filter` (liste d&#39;autorisation ou liste de blocage)
+* Contrôlez la fraîcheur des résultats avec `search_recency_filter` (day, week, month, year)
+* Accédez à des champs de résultats structurés : `title`, `url`, `snippet`, `date`
+* Intervalle d&#39;interrogation configurable pour une surveillance continue
+* Sortie en texte formaté ou en JSON pour un traitement en aval
+
+<div id="installation">
+  ## Installation
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+<div id="api-key-setup">
+  ## Configuration de la clé API
+</div>
+
+Définissez votre clé API Perplexity dans une variable d&#39;environnement. Le SDK la lit automatiquement :
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## Utilisation
+</div>
+
+```bash theme={null}
+# Surveiller les sujets par défaut
+python news_monitor.py
+
+# Spécifier des sujets personnalisés
+python news_monitor.py --topics "artificial intelligence" "climate policy" "space exploration"
+
+# Filtrer sur des domaines précis (liste d'autorisation)
+python news_monitor.py --topics "AI regulation" --domains reuters.com apnews.com bbc.co.uk
+
+# Exclure des domaines (liste de blocage)
+python news_monitor.py --topics "technology" --exclude-domains pinterest.com reddit.com
+
+# Définir le filtre de fraîcheur
+python news_monitor.py --topics "semiconductor industry" --recency day
+
+# Exécuter en mode surveillance continue
+python news_monitor.py --topics "cybersecurity" --watch --interval 300
+
+# Exporter au format JSON
+python news_monitor.py --topics "renewable energy" --json > news.json
+```
+
+<div id="how-it-works">
+  ## Fonctionnement
+</div>
+
+1. La CLI accepte une liste de sujets et des paramètres de filtrage facultatifs.
+2. Pour chaque sujet, elle appelle `client.search.create(query=..., max_results=...)` avec les filtres de domaine et de fraîcheur configurés.
+3. Chaque résultat de recherche contient les champs `title`, `url`, `snippet` et `date`, qui sont extraits puis mis en forme.
+4. En mode surveillance, l&#39;outil relance la recherche à un intervalle configurable et n&#39;affiche que les nouveaux résultats depuis la dernière interrogation.
+
+<Tip>
+  Utilisez le paramètre `search_recency_filter` avec des valeurs telles que `"day"`, `"week"`, `"month"` ou `"year"` pour cibler les actualités récentes. C&#39;est plus simple que de spécifier des plages de dates précises et cela convient bien aux workflows de surveillance.
+</Tip>
+
+<Warning>
+  Les filtres de domaine fonctionnent soit en mode liste d&#39;autorisation, soit en mode liste de blocage, mais jamais les deux à la fois. Utilisez `--domains` pour la liste d&#39;autorisation ou `--exclude-domains` pour la liste de blocage, mais pas les deux dans une même requête. Vous pouvez spécifier 20 domaines au maximum.
+</Warning>
+
+<div id="full-code">
+  ## Code complet
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import sys
+  import json
+  import time
+  import argparse
+  from typing import List, Optional
+  from perplexity import Perplexity
+
+  DEFAULT_TOPICS = ["artificial intelligence", "climate change", "cybersecurity"]
+
+
+  def search_topic(
+      client, topic, max_results=5, domains=None, exclude_domains=None, recency=None,
+  ):
+      """Search for news on a single topic and return structured results."""
+      params = {"query": topic, "max_results": max_results}
+      if domains:
+          params["search_domain_filter"] = domains
+      elif exclude_domains:
+          params["search_domain_filter"] = [f"-{d}" for d in exclude_domains]
+      if recency:
+          params["search_recency_filter"] = recency
+
+      search = client.search.create(**params)
+      return [
+          {
+              "title": item.title,
+              "url": item.url,
+              "snippet": item.snippet[:200] if item.snippet else "",
+              "date": item.date if hasattr(item, "date") else None,
+          }
+          for item in search.results
+      ]
+
+
+  def monitor_once(client, topics, max_results, domains, exclude_domains, recency):
+      """Run a single monitoring pass across all topics."""
+      return {
+          topic: search_topic(client, topic, max_results, domains, exclude_domains, recency)
+          for topic in topics
+      }
+
+
+  def format_results(all_results):
+      """Format monitoring results as human-readable text."""
+      lines = [f"NEWS MONITOR - {time.strftime('%Y-%m-%d %H:%M:%S')}", "=" * 60]
+      for topic, results in all_results.items():
+          lines.append(f"\n[ {topic.upper()} ] - {len(results)} results")
+          lines.append("-" * 40)
+          if not results:
+              lines.append("  No results found.")
+              continue
+          for i, r in enumerate(results, 1):
+              lines.append(f"  {i}. {r['title']}")
+              lines.append(f"     {r['url']}")
+              if r["date"]:
+                  lines.append(f"     Published: {r['date']}")
+              if r["snippet"]:
+                  lines.append(f"     {r['snippet']}...")
+              lines.append("")
+      return "\n".join(lines)
+
+
+  def main():
+      parser = argparse.ArgumentParser(description="Search News Monitor")
+      parser.add_argument("--topics", nargs="+", default=DEFAULT_TOPICS)
+      parser.add_argument("--max-results", type=int, default=5)
+      parser.add_argument("--domains", nargs="+", help="Allowlist domains")
+      parser.add_argument("--exclude-domains", nargs="+", help="Denylist domains")
+      parser.add_argument("--recency", choices=["day", "week", "month", "year"], default="week")
+      parser.add_argument("--watch", action="store_true", help="Continuous monitoring")
+      parser.add_argument("--interval", type=int, default=300, help="Poll interval (seconds)")
+      parser.add_argument("--json", action="store_true", help="Output as JSON")
+      args = parser.parse_args()
+
+      if args.domains and args.exclude_domains:
+          print("Error: Use --domains or --exclude-domains, not both.", file=sys.stderr)
+          sys.exit(1)
+
+      client = Perplexity()
+      print(f"Monitoring {len(args.topics)} topics: {', '.join(args.topics)}")
+      print(f"Recency: {args.recency} | Max results per topic: {args.max_results}\n")
+
+      seen_urls = set()
+      while True:
+          all_results = monitor_once(
+              client, args.topics, args.max_results, args.domains, args.exclude_domains, args.recency,
+          )
+          if args.watch:
+              filtered = {}
+              for topic, results in all_results.items():
+                  new = [r for r in results if r["url"] not in seen_urls]
+                  seen_urls.update(r["url"] for r in new)
+                  filtered[topic] = new
+              all_results = filtered
+
+          print(json.dumps(all_results, indent=2) if args.json else format_results(all_results))
+
+          if not args.watch:
+              break
+          print(f"\nNext check in {args.interval} seconds... (Ctrl+C to stop)\n")
+          time.sleep(args.interval)
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const DEFAULT_TOPICS = ["artificial intelligence", "climate change", "cybersecurity"];
+
+  interface SearchResult {
+    title: string;
+    url: string;
+    snippet: string;
+    date: string | null;
+  }
+
+  async function searchTopic(
+    client: InstanceType<typeof Perplexity>,
+    topic: string,
+    maxResults: number,
+    domains?: string[],
+    recency?: string
+  ): Promise<SearchResult[]> {
+    const params: Record<string, unknown> = { query: topic, max_results: maxResults };
+    if (domains) params.search_domain_filter = domains;
+    if (recency) params.search_recency_filter = recency;
+
+    const search = await client.search.create(params as any);
+    return (search as any).results.map((item: any) => ({
+      title: item.title,
+      url: item.url,
+      snippet: item.snippet ? item.snippet.substring(0, 200) : "",
+      date: item.date || null,
+    }));
+  }
+
+  function formatResults(allResults: Record<string, SearchResult[]>): string {
+    const lines: string[] = [];
+    const ts = new Date().toISOString().replace("T", " ").substring(0, 19);
+    lines.push(`NEWS MONITOR - ${ts}`, "=".repeat(60));
+
+    for (const [topic, results] of Object.entries(allResults)) {
+      lines.push(`\n[ ${topic.toUpperCase()} ] - ${results.length} results`, "-".repeat(40));
+      if (!results.length) { lines.push("  No results found."); continue; }
+      results.forEach((r, i) => {
+        lines.push(`  ${i + 1}. ${r.title}`, `     ${r.url}`);
+        if (r.date) lines.push(`     Published: ${r.date}`);
+        if (r.snippet) lines.push(`     ${r.snippet}...`);
+        lines.push("");
+      });
+    }
+    return lines.join("\n");
+  }
+
+  async function main() {
+    const args = process.argv.slice(2);
+    const topicsIdx = args.indexOf("--topics");
+    let topics = DEFAULT_TOPICS;
+    if (topicsIdx !== -1) {
+      topics = [];
+      for (let i = topicsIdx + 1; i < args.length && !args[i].startsWith("--"); i++)
+        topics.push(args[i]);
+    }
+
+    const recencyIdx = args.indexOf("--recency");
+    const recency = recencyIdx !== -1 ? args[recencyIdx + 1] : "week";
+    const maxIdx = args.indexOf("--max-results");
+    const maxResults = maxIdx !== -1 ? parseInt(args[maxIdx + 1]) : 5;
+    const watch = args.includes("--watch");
+    const intervalIdx = args.indexOf("--interval");
+    const interval = intervalIdx !== -1 ? parseInt(args[intervalIdx + 1]) : 300;
+    const outputJson = args.includes("--json");
+
+    const client = new Perplexity();
+    console.log(`Monitoring ${topics.length} topics: ${topics.join(", ")}`);
+    console.log(`Recency: ${recency} | Max results per topic: ${maxResults}\n`);
+
+    const seenUrls = new Set<string>();
+    while (true) {
+      const allResults: Record<string, SearchResult[]> = {};
+      for (const topic of topics)
+        allResults[topic] = await searchTopic(client, topic, maxResults, undefined, recency);
+
+      let display = allResults;
+      if (watch) {
+        display = {};
+        for (const [topic, results] of Object.entries(allResults)) {
+          const fresh = results.filter((r) => !seenUrls.has(r.url));
+          fresh.forEach((r) => seenUrls.add(r.url));
+          display[topic] = fresh;
+        }
+      }
+
+      console.log(outputJson ? JSON.stringify(display, null, 2) : formatResults(display));
+      if (!watch) break;
+      console.log(`\nNext check in ${interval} seconds... (Ctrl+C to stop)\n`);
+      await new Promise((r) => setTimeout(r, interval * 1000));
+    }
+  }
+
+  main();
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## Exemple de sortie
+</div>
+
+```bash theme={null}
+python news_monitor.py --topics "artificial intelligence" "climate policy" --recency day
+```
+
+```
+Surveillance de 2 sujets : intelligence artificielle, politique climatique
+Récence : jour | Nombre max de résultats par sujet : 5
+
+MONITEUR D'ACTUALITÉS - 2026-02-26 14:30:00
+============================================================
+
+[ INTELLIGENCE ARTIFICIELLE ] - 5 résultats
+----------------------------------------
+  1. OpenAI annonce un nouveau cadre de sécurité pour l'IA en entreprise
+     https://www.reuters.com/technology/openai-enterprise-safety-2026
+     Publié : 2026-02-26
+     OpenAI a présenté un cadre de sécurité complet pour les déploiements
+     en entreprise, répondant aux inquiétudes sur le comportement des agents autonomes...
+
+  2. Le règlement européen sur l'IA entre en application pour les systèmes à haut risque
+     https://www.bbc.co.uk/news/technology-ai-act-enforcement
+     Publié : 2026-02-26
+     L'Union européenne a commencé à appliquer de nouvelles exigences aux
+     systèmes d'IA à haut risque au titre du règlement sur l'IA...
+
+[ POLITIQUE CLIMATIQUE ] - 3 résultats
+----------------------------------------
+  1. Les pays du G7 s'accordent sur le calendrier de l'ajustement carbone aux frontières
+     https://www.reuters.com/sustainability/g7-carbon-border-2026
+     Publié : 2026-02-26
+     Les dirigeants du G7 sont parvenus à un consensus sur la mise en place de
+     mécanismes coordonnés d'ajustement carbone aux frontières d'ici 2028...
+```
+
+<Info>
+  La Search API renvoie des résultats structurés comportant les champs `title`, `url`, `snippet` et `date`. Contrairement à l&#39;Agent API ou à la Sonar API, elle ne génère pas de résumés par IA : elle retourne des résultats web bruts, classés par pertinence. Consultez le [démarrage rapide de la Search API](/fr/docs/search/quickstart) pour plus de détails.
+</Info>
+
+<div id="continuous-monitoring-tips">
+  ## Conseils pour la surveillance continue
+</div>
+
+1. **Choisissez des intervalles adaptés.** Pour l&#39;actualité brûlante, utilisez des intervalles de 60 à 120 secondes. Pour la surveillance générale d&#39;un sujet, 300 à 600 secondes suffisent.
+2. **Combinez le filtre de fraîcheur et les filtres de domaine.** Utilisez `--recency day` avec des domaines d&#39;actualité fiables pour obtenir un flux d&#39;actualités trié sur le volet.
+3. **Redirigez la sortie JSON vers d&#39;autres outils.** Utilisez `--json` avec des outils comme `jq` ou des scripts en aval pour les alertes et l&#39;agrégation.
+4. **Suivez les URL déjà vues.** Le mode surveillance déduplique automatiquement les résultats d&#39;un cycle d&#39;interrogation à l&#39;autre grâce au suivi des URL.
+
+<div id="limitations">
+  ## Limitations
+</div>
+
+* La Search API est facturée à la requête. Une interrogation fréquente sur de nombreux sujets fera augmenter les coûts.
+* Le paramètre `search_recency_filter` s&#39;applique par rapport à l&#39;heure actuelle et ne permet pas de spécifier des plages de dates exactes. Pour un filtrage par date précis, utilisez plutôt `search_after_date_filter` et `search_before_date_filter`.
+* La disponibilité des résultats de recherche dépend de l&#39;indexation du web. Les contenus très récents (publiés il y a quelques minutes) peuvent ne pas apparaître immédiatement.
+* La longueur du champ `snippet` varie d&#39;un résultat à l&#39;autre et peut être tronquée pour les pages longues.

@@ -1,0 +1,156 @@
+---
+title: "Perplexity avec SuperPlane"
+description: "Exécutez des agents Perplexity au sein de workflows SuperPlane — étapes de recherche, de synthèse et d'analyse avec recherche web, récupération d'URL et citation des sources."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+[SuperPlane](https://superplane.com) est un plan de contrôle DevOps open source conçu pour les workflows événementiels de longue durée. Il expose Perplexity comme **composant** natif sur le canevas : ajoutez un nœud Perplexity à n&#39;importe quel workflow et il exécute un agent Perplexity doté de la recherche web et de la récupération d&#39;URL, puis émet la réponse et les citations des sources sous forme de charge utile pour les nœuds en aval.
+
+<Info>
+  **SuperPlane** modélise les workflows sous forme de canevas événementiels : les nœuds émettent des charges utiles, les nœuds en aval s&#39;y abonnent et le runtime assure le suivi de chaque exécution avec une observabilité complète. Pour en savoir plus, consultez [superplane.com](https://superplane.com).
+</Info>
+
+<div id="component-perplexity">
+  ## Composant : Perplexity
+</div>
+
+Le composant Perplexity exécute un agent Perplexity AI comme étape d&#39;un workflow. Utilisez-le pour la recherche, la synthèse, l&#39;analyse automatisée et la génération de contenu s&#39;appuyant sur des sources web en temps réel.
+
+<div id="action">
+  ### Action
+</div>
+
+| Action        | Description                                                                                         |
+| ------------- | --------------------------------------------------------------------------------------------------- |
+| **Run Agent** | Exécuter un agent Perplexity AI capable d&#39;effectuer des recherches web et de récupérer des URL. |
+
+<div id="configuration">
+  ### Configuration
+</div>
+
+| Paramètre        | Description                                                                                                                                                                                                                                          |
+| ---------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Preset**       | Preset d&#39;agent à utiliser : `fast-search`, `pro-search`, `deep-research` ou `advanced-deep-research`. Ces valeurs correspondent aux niveaux `fast` / `low` / `medium` / `high` de l&#39;Agent API. Lorsqu&#39;il est défini, `Model` est ignoré. |
+| **Model**        | Identifiant du model de l&#39;Agent API à utiliser lorsqu&#39;aucun preset n&#39;est spécifié (par exemple, `perplexity/sonar`).                                                                                                                     |
+| **Input**        | Le prompt ou la question adressée à l&#39;agent. Prend en charge les [expressions](https://docs.superplane.com/concepts/expressions) SuperPlane.                                                                                                     |
+| **Instructions** | Instructions système facultatives pour l&#39;agent.                                                                                                                                                                                                  |
+| **Web Search**   | Active l&#39;outil `web_search` (valeur par défaut : `true`).                                                                                                                                                                                        |
+| **Fetch URL**    | Active l&#39;outil `fetch_url` (valeur par défaut : `true`).                                                                                                                                                                                         |
+
+<div id="output-payload">
+  ### Charge utile de sortie
+</div>
+
+Le composant émet une charge utile contenant les champs suivants, accessibles par les nœuds en aval via des expressions :
+
+| Champ       | Description                                              |
+| ----------- | -------------------------------------------------------- |
+| `text`      | La réponse textuelle générée.                            |
+| `citations` | Les citations des sources issues des résultats web.      |
+| `model`     | Le model utilisé pour cette exécution.                   |
+| `usage`     | Les informations d&#39;utilisation en tokens et en coût. |
+
+<div id="api-key-setup">
+  ## Configuration de la clé API
+</div>
+
+Configurez l&#39;intégration Perplexity dans SuperPlane avec votre clé API. Ouvrez les paramètres **Integrations** de votre canvas, ajoutez une intégration Perplexity, puis collez-y votre clé.
+
+<Card title="Obtenir une clé API" icon="key" href="https://console.perplexity.ai/project/keys">
+  Générez votre clé API Perplexity depuis le portail API.
+</Card>
+
+<div id="quick-start">
+  ## Démarrage rapide
+</div>
+
+Un workflow minimal qui pose une question à Perplexity à chaque déclenchement d&#39;une exécution manuelle :
+
+<Steps>
+  <Step title="Ajouter un déclencheur Manual Run">
+    Déposez un nœud **Manual Run** sur le canevas : c&#39;est le point d&#39;entrée du workflow.
+  </Step>
+
+  <Step title="Ajouter un nœud Perplexity">
+    Cliquez sur **+ Components**, choisissez **Perplexity → Run Agent**, puis faites-le glisser sur le canevas. Reliez **Manual Run → Perplexity**.
+  </Step>
+
+  <Step title="Configurer l'agent">
+    Dans le nœud Perplexity :
+
+    * **Preset** : `pro-search`
+    * **Input** : `What is the latest news on nuclear fusion?`
+    * **Web Search** : activé
+    * **Fetch URL** : activé
+  </Step>
+
+  <Step title="Exécuter">
+    Cliquez sur **Run** dans le nœud Manual Run. Le nœud Perplexity renvoie une charge utile contenant `text`, `citations`, `model` et `usage`.
+  </Step>
+</Steps>
+
+<div id="reading-the-response-downstream">
+  ## Exploiter la réponse en aval
+</div>
+
+Utilisez les expressions SuperPlane pour transmettre la sortie de Perplexity au nœud suivant — par exemple un message Slack ou une écriture en base de données :
+
+```
+Research result: {{ $['Perplexity'].data.text }}
+
+Sources:
+{{ $['Perplexity'].data.citations }}
+```
+
+Dans les champs de condition (If / Filter), écrivez les expressions sans `{{ }}` :
+
+```
+$['Perplexity'].data.usage.total_tokens > 1000
+```
+
+<div id="use-cases">
+  ## Cas d&#39;usage
+</div>
+
+* **Tri des incidents** — lorsqu&#39;une alerte se déclenche, lancez une étape de recherche Perplexity pour réunir des informations sur un fournisseur, une bibliothèque ou une CVE avant de solliciter l&#39;astreinte.
+* **Synthèse des notes de version** — transformez les diffs bruts des commits GitHub en notes de version destinées aux clients, avec citations à l&#39;appui.
+* **Veille concurrentielle** — planifiez un canevas quotidien qui interroge Perplexity sur l&#39;actualité du secteur et publie un résumé dans un canal Slack.
+* **Ancrage documentaire** — transmettez le résultat d&#39;une exécution Perplexity à un composant en aval qui met à jour une page Notion ou une base de connaissances.
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Composant Perplexity pour SuperPlane" icon="book" href="https://docs.superplane.com/components/perplexity">
+    Documentation officielle du composant.
+  </Card>
+
+  <Card title="Documentation SuperPlane" icon="globe" href="https://docs.superplane.com">
+    Documentation complète de SuperPlane.
+  </Card>
+
+  <Card title="Agent API de Perplexity" icon="robot" href="/fr/docs/agent-api/quickstart">
+    Fonctionnement de la couche agent de Perplexity.
+  </Card>
+
+  <Card title="Modèles de l'Agent API" icon="sparkles" href="/fr/docs/agent-api/models">
+    Modèles disponibles et tarifs.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Assistance
+</div>
+
+Besoin d&#39;aide pour l&#39;intégration ?
+
+* Consultez la [documentation SuperPlane](https://docs.superplane.com)
+* Parcourez notre [FAQ](/fr/docs/resources/faq)

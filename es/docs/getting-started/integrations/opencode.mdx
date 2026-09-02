@@ -1,0 +1,222 @@
+---
+title: "Perplexity con OpenCode"
+description: "Usa la Agent API de Perplexity dentro de OpenCode, el agente de programación con IA: un solo endpoint, todos los modelos de frontera, una única API key."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+[OpenCode](https://opencode.ai) es un agente de programación con IA de código abierto para tu terminal, IDE o escritorio. La **Agent API** de Perplexity es compatible con la Responses API de OpenAI y expone modelos de frontera de OpenAI, Anthropic, Google, xAI y Perplexity a través de un único endpoint.
+
+Conectar OpenCode a la Agent API te permite incorporar cualquier modelo de frontera en tu agente de programación o en tu subagente de investigación, sin tener que gestionar cuentas de varios proveedores por separado.
+
+<Info>
+  **OpenCode** incluye orquestación multiagente: puedes configurar un agente `primary` para programar y agentes `subagent` para tareas especializadas. Más información en [opencode.ai](https://opencode.ai).
+</Info>
+
+<div id="setup">
+  ## Configuración
+</div>
+
+La Agent API implementa la Responses API de OpenAI, por lo que se configura en OpenCode como un proveedor personalizado mediante [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses) apuntando al endpoint `/v1/responses` de Perplexity.
+
+<Steps>
+  <Step title="Instalar OpenCode">
+    Sigue la [guía de instalación de OpenCode](https://opencode.ai/docs) correspondiente a tu plataforma (macOS, Linux, Windows).
+  </Step>
+
+  <Step title="Obtener una API key de Perplexity">
+    <Card title="Obtener API key" icon="key" href="https://console.perplexity.ai/project/keys">
+      Genera tu API key de Perplexity desde el portal de la API.
+    </Card>
+
+    Expórtala en tu shell:
+
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="pplx-..."
+    ```
+  </Step>
+
+  <Step title="Configurar OpenCode">
+    Añade la Agent API de Perplexity como proveedor en tu `opencode.json` (o `~/.config/opencode/config.json`). Consulta la configuración que aparece más abajo.
+  </Step>
+
+  <Step title="Verificar">
+    Ejecuta `/models` para confirmar que los modelos de Perplexity Agent aparecen en el selector.
+  </Step>
+</Steps>
+
+<div id="provider-configuration">
+  ## Configuración del proveedor
+</div>
+
+El proveedor `@ai-sdk/open-responses` está diseñado para servidores que implementan la Responses API de OpenAI, exactamente el dialecto que habla la Agent API. Apunta su `url` al endpoint `/v1/responses` de Perplexity y declara los modelos que quieras en el selector.
+
+<Warning>
+  Usa un proveedor de **Responses API**: `@ai-sdk/open-responses` (el que se muestra aquí) o `@ai-sdk/openai`, cuyo modelo `.responses()` apunta a la misma ruta. **No** uses `@ai-sdk/openai-compatible`: está orientado a Chat Completions (`/v1/chat/completions`), que no es una ruta válida de la Agent API y devuelve 404.
+</Warning>
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "perplexity-agent": {
+      "npm": "@ai-sdk/open-responses",
+      "name": "Perplexity Agent API",
+      "options": {
+        "name": "perplexity-agent",
+        "url": "https://api.perplexity.ai/v1/responses",
+        "apiKey": "{env:PERPLEXITY_API_KEY}",
+        "headers": {
+          "X-Pplx-Integration": "opencode/1.0"
+        }
+      },
+      "models": {
+        "openai/gpt-5.6-sol": { "name": "GPT-5.6 Sol" },
+        "openai/gpt-5.6-terra": { "name": "GPT-5.6 Terra" },
+        "openai/gpt-5.6-luna": { "name": "GPT-5.6 Luna" },
+        "anthropic/claude-opus-4-8": { "name": "Claude Opus 4.8" },
+        "anthropic/claude-sonnet-5": { "name": "Claude Sonnet 5" },
+        "anthropic/claude-haiku-4-5": { "name": "Claude Haiku 4.5" },
+        "google/gemini-3.1-pro-preview": { "name": "Gemini 3.1 Pro" },
+        "xai/grok-4.5": { "name": "Grok 4.5" },
+        "perplexity/kimi-k2.7-code": { "name": "Kimi K2.7 Code" }
+      }
+    }
+  }
+}
+```
+
+Eso es todo: una API key, un endpoint, todos los modelos de frontera.
+
+<div id="available-models">
+  ## Modelos disponibles
+</div>
+
+La Agent API enruta a modelos de múltiples proveedores. La lista canónica completa está en la [página de modelos](/es/docs/agent-api/models); estos son los identificadores más útiles para tareas de programación:
+
+| ID del modelo                   | Ideal para                                                      |
+| ------------------------------- | --------------------------------------------------------------- |
+| `openai/gpt-5.6-sol`            | Razonamiento profundo y tareas de programación de largo alcance |
+| `openai/gpt-5.6-terra`          | Agente de programación de propósito general                     |
+| `openai/gpt-5.6-luna`           | Completados de código rápidos y económicos                      |
+| `anthropic/claude-opus-4-8`     | Revisión de código y arquitectura de máxima calidad             |
+| `anthropic/claude-sonnet-5`     | Equilibrio entre programación y uso de herramientas             |
+| `anthropic/claude-haiku-4-5`    | Ediciones rápidas y de bajo costo                               |
+| `google/gemini-3.1-pro-preview` | Refactorizaciones con contexto extenso                          |
+| `xai/grok-4.5`                  | Ediciones de baja latencia                                      |
+| `perplexity/kimi-k2.7-code`     | Flujos de trabajo de programación y agénticos dedicados         |
+
+<div id="use-as-a-primary-coding-model">
+  ## Uso como modelo principal de programación
+</div>
+
+Establece cualquier modelo de la Agent API como predeterminado en `opencode.json`:
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "perplexity-agent/anthropic/claude-opus-4-8"
+}
+```
+
+OpenCode hace referencia a cada modelo como `<providerId>/<modelId>`, por lo que el identificador completo es `perplexity-agent/anthropic/claude-opus-4-8`.
+
+<div id="multi-agent-setup">
+  ## Configuración multiagente
+</div>
+
+Asigna distintos modelos de la Agent API a distintos agentes de OpenCode, todo con una sola clave de Perplexity. En este caso, un agente programador principal delega en un subagente más ligero y de solo lectura:
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "perplexity-agent/anthropic/claude-opus-4-8",
+  "agent": {
+    "coder": {
+      "description": "Primary coding agent",
+      "mode": "primary",
+      "model": "perplexity-agent/anthropic/claude-opus-4-8",
+      "temperature": 0.2,
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "researcher": {
+      "description": "Read-only subagent for lookups and summarization",
+      "mode": "subagent",
+      "model": "perplexity-agent/openai/gpt-5.6-sol",
+      "temperature": 0.4,
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+El `coder` controla el sistema de archivos (escritura, edición, bash), mientras que el `researcher`, de solo lectura, se ejecuta en un modelo aparte para analizar y resumir. Puedes sustituir cualquiera de los dos `model` por cualquier [modelo de la Agent API](/es/docs/agent-api/models).
+
+Verifica la configuración:
+
+```
+/agents   # Debería mostrar coder y researcher
+/models   # Debería incluir los modelos de Perplexity Agent
+```
+
+<div id="why-the-agent-api">
+  ## Por qué la Agent API
+</div>
+
+La Agent API está diseñada específicamente para bucles de agentes:
+
+* **Una sola clave, todos los modelos**: cambia entre OpenAI, Anthropic, Google, xAI y Perplexity sin tener que gestionar cuentas independientes.
+* **Compatible con OpenAI Responses**: se integra sin cambios en cualquier ranura de proveedor de OpenCode que admita `/v1/responses`.
+
+<div id="links-resources">
+  ## Enlaces y recursos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Inicio rápido de la Agent API" icon="bolt" href="/es/docs/agent-api/quickstart">
+    Envía tu primera solicitud a la Agent API.
+  </Card>
+
+  <Card title="Modelos de la Agent API" icon="sparkles" href="/es/docs/agent-api/models">
+    Catálogo completo de modelos con precios.
+  </Card>
+
+  <Card title="SDK de Perplexity" icon="code" href="/es/docs/sdk/overview">
+    Llama directamente a la Agent API para usar presets, herramientas y tener control total.
+  </Card>
+
+  <Card title="Compatibilidad con OpenAI" icon="plug" href="/es/docs/agent-api/openai-compatibility">
+    Usa la Agent API con cualquier SDK de OpenAI.
+  </Card>
+
+  <Card title="Proveedores de OpenCode" icon="book" href="https://opencode.ai/docs/providers/">
+    Referencia de proveedores personalizados de OpenCode.
+  </Card>
+
+  <Card title="Documentación de OpenCode" icon="book-open" href="https://opencode.ai/docs">
+    Documentación oficial de OpenCode.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Soporte
+</div>
+
+¿Necesitas ayuda con la integración?
+
+* Consulta la [documentación de OpenCode](https://opencode.ai/docs)
+* Revisa nuestras [preguntas frecuentes](/es/docs/resources/faq)

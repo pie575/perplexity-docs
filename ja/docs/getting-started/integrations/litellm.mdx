@@ -1,0 +1,198 @@
+---
+title: "LiteLLM で Perplexity を使う"
+description: "LiteLLM の統一インターフェース（Python SDK と プロキシ）から、Perplexity の Agent API と preset を利用します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[LiteLLM](https://litellm.ai) は、100 を超える LLM プロバイダーを単一の OpenAI 互換インターフェースで扱える Python SDK 兼プロキシサーバーです。Perplexity の [Agent API](/ja/docs/agent-api/quickstart) (GPT-5、Claude、Gemini などのサードパーティ製 model を Perplexity 経由でルーティング) は、LiteLLM でファーストクラスのプロバイダーとしてサポートされています。
+
+<Info>
+  **LiteLLM** を使えば、コードを書き換えることなくプロバイダーを切り替えられるほか、すべての model を単一の API key の背後に集約するセルフホスト型プロキシを運用したり、プロバイダーごとの利用料・レイテンシ・エラーを追跡したりできます。詳細は [litellm.ai](https://litellm.ai) をご覧ください。
+</Info>
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+pip install litellm
+```
+
+<div id="api-key-setup">
+  ## API key の設定
+</div>
+
+LiteLLM は、環境変数から Perplexity の API key を読み取ります。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="API key を取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  API ポータルで Perplexity API key を発行します。
+</Card>
+
+<div id="agent-api">
+  ## Agent API
+</div>
+
+`litellm.responses` を使用して [Agent API](/ja/docs/agent-api/quickstart) を呼び出します。Agent API は Perplexity 経由でサードパーティの model にルーティングし、ツールのオーケストレーションと preset に対応しています。
+
+<div id="presets">
+  ### プリセット
+</div>
+
+```python theme={null}
+from litellm import responses
+import os
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+response = responses(
+    model="perplexity/preset/low",
+    input="What are the latest developments in AI?",
+    custom_llm_provider="perplexity",
+)
+
+print(response.output)
+```
+
+利用可能な preset: `fast`、`low`、`medium`、`high`、`xhigh`。
+
+<div id="tool-use-web_search-and-fetch_url">
+  ### ツールの使用 (`web_search` と `fetch_url`)
+</div>
+
+```python theme={null}
+from litellm import responses
+
+response = responses(
+    model="perplexity/openai/gpt-5.6-sol",
+    input="Research quantum computing breakthroughs and cite sources.",
+    custom_llm_provider="perplexity",
+    tools=[
+        {"type": "web_search"},
+        {"type": "fetch_url"},
+    ],
+    instructions="Use web_search and fetch_url to gather citations.",
+    max_output_tokens=1000,
+    temperature=0.7,
+)
+
+print(response.output)
+```
+
+<div id="structured-outputs">
+  ### 構造化出力
+</div>
+
+```python theme={null}
+from litellm import responses
+
+response = responses(
+    model="perplexity/preset/low",
+    input="Extract key facts about the Eiffel Tower.",
+    custom_llm_provider="perplexity",
+    text={
+        "format": {
+            "type": "json_schema",
+            "name": "facts",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "height_meters": {"type": "number"},
+                    "year_built": {"type": "integer"},
+                },
+                "required": ["name", "height_meters", "year_built"],
+            },
+            "strict": True,
+        }
+    },
+)
+```
+
+<div id="supported-third-party-models-via-agent-api">
+  ### Agent API でサポートされるサードパーティ model
+</div>
+
+Agent API の model ID には `perplexity/` を接頭辞として付けます (例: `perplexity/openai/gpt-5.6-sol`) 。正式かつ最新の一覧は [Agent API の model 一覧](/ja/docs/agent-api/models) を参照してください。
+
+<div id="litellm-proxy">
+  ## LiteLLM プロキシ
+</div>
+
+LiteLLM をセルフホストのプロキシとして実行し、Perplexity (およびその他任意のプロバイダー) を単一の OpenAI 互換エンドポイントの背後に集約します。
+
+<div id="configyaml">
+  ### config.yaml
+</div>
+
+```yaml theme={null}
+model_list:
+  - model_name: perplexity-low
+    litellm_params:
+      model: perplexity/preset/low
+      api_key: os.environ/PERPLEXITY_API_KEY
+```
+
+<div id="start-the-proxy">
+  ### プロキシの起動
+</div>
+
+```bash theme={null}
+litellm --config /path/to/config.yaml
+```
+
+<div id="call-the-proxy">
+  ### プロキシを呼び出す
+</div>
+
+```bash theme={null}
+curl http://0.0.0.0:4000/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer anything" \
+  -d '{
+    "model": "perplexity-low",
+    "input": "What are the latest developments in AI?",
+    "tools": [{"type": "web_search"}]
+  }'
+```
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="LiteLLM Perplexity ドキュメント" icon="book" href="https://docs.litellm.ai/docs/providers/perplexity">
+    LiteLLM の Perplexity プロバイダー公式ドキュメント。
+  </Card>
+
+  <Card title="LiteLLM ドキュメント" icon="globe" href="https://docs.litellm.ai">
+    LiteLLM の完全なドキュメント。
+  </Card>
+
+  <Card title="Perplexity Agent API" icon="robot" href="/ja/docs/agent-api/quickstart">
+    Agent API のリファレンスと preset。
+  </Card>
+
+  <Card title="Agent API の model" icon="sparkles" href="/ja/docs/agent-api/models">
+    利用可能な Agent API の model 一覧。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+統合でお困りですか?
+
+* [LiteLLM ドキュメント](https://docs.litellm.ai)を参照する
+* [FAQ](/ja/docs/resources/faq)を確認する

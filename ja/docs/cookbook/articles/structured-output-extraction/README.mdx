@@ -1,0 +1,656 @@
+---
+title: "構造化出力の抽出"
+description: "response_format と JSON スキーマを使って Agent API から型付きでスキーマ検証済みの JSON レスポンスを取得し、データ抽出、パイプライン、構造化リサーチに活用する"
+---
+
+このガイドでは、`response_format` パラメータと JSON スキーマを使って Agent API から型付きの構造化された JSON を抽出する方法を説明します。商品データの抽出、研究結果、比較表、信頼性の高いデータパイプラインの構築といった実践的なパターンを、いずれもスキーマへの適合を保証しながら学べます。
+
+<Info>
+  Agent API は生成時に JSON スキーマを強制するため、レスポンスは常に指定した構造に従います。パラメータの詳細なリファレンスは [出力の制御](/ja/docs/agent-api/output-control) を参照してください。
+</Info>
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+Perplexity SDK をインストールします。
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+API key をまだお持ちでない場合:
+
+<Card title="Perplexity API Key を取得する" icon="key" arrow="True" horizontal="True" iconType="solid" cta="こちらをクリック" href="https://perplexity.ai/account/api">
+  API ポータルの **API Keys** タブを開き、新しいキーを生成してください。
+</Card>
+
+続いて、API key を環境変数としてエクスポートします。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-structured-outputs-work">
+  ## 構造化出力の仕組み
+</div>
+
+`type: "json_schema"` を指定した `response_format` を渡すと、Agent API はモデルの出力がスキーマに厳密に一致するよう制約します。`output_text` に格納されるレスポンスは、そのままパースできる有効な JSON 文字列です。
+
+スキーマの形式は [JSON Schema](https://json-schema.org/) に準拠しますが、Perplexity API 固有の制約がいくつかあります。
+
+* **再帰的なスキーマは使用できません。** スキーマ自身を参照することはできません。
+* **制約のないオブジェクトは使用できません。** `additionalProperties: true` や、プロパティを定義していない `object` 型のみの指定は避けてください。
+* **スキーマには名前が必要です。** 各スキーマには識別用の `name` フィールドを指定してください。
+
+<div id="basic-extracting-a-single-entity">
+  ## 基本: 単一エンティティの抽出
+</div>
+
+ウェブ検索によるグラウンディングを用いて、単一のトピックに関する構造化データを抽出します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What is the current market cap, CEO, and founding year of NVIDIA?",
+      tools=[{"type": "web_search"}],
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "company_profile",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "company_name": {"type": "string"},
+                      "ticker": {"type": "string"},
+                      "ceo": {"type": "string"},
+                      "founded_year": {"type": "integer"},
+                      "market_cap_usd": {"type": "string"},
+                      "sector": {"type": "string"},
+                      "headquarters": {"type": "string"},
+                  },
+                  "required": ["company_name", "ticker", "ceo", "founded_year", "market_cap_usd", "sector", "headquarters"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  company = json.loads(response.output_text)
+  print(f"{company['company_name']} ({company['ticker']})")
+  print(f"  CEO: {company['ceo']}")
+  print(f"  Founded: {company['founded_year']}")
+  print(f"  Market Cap: {company['market_cap_usd']}")
+  print(f"  Sector: {company['sector']}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What is the current market cap, CEO, and founding year of NVIDIA?",
+      tools: [{ type: "web_search" }],
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "company_profile",
+              schema: {
+                  type: "object",
+                  properties: {
+                      company_name: { type: "string" },
+                      ticker: { type: "string" },
+                      ceo: { type: "string" },
+                      founded_year: { type: "integer" },
+                      market_cap_usd: { type: "string" },
+                      sector: { type: "string" },
+                      headquarters: { type: "string" },
+                  },
+                  required: ["company_name", "ticker", "ceo", "founded_year", "market_cap_usd", "sector", "headquarters"],
+              },
+          },
+      },
+  });
+
+  const company = JSON.parse(response.output_text);
+  console.log(`${company.company_name} (${company.ticker})`);
+  console.log(`  CEO: ${company.ceo}`);
+  console.log(`  Founded: ${company.founded_year}`);
+  console.log(`  Market Cap: ${company.market_cap_usd}`);
+  console.log(`  Sector: ${company.sector}`);
+  ```
+</CodeGroup>
+
+<div id="extracting-lists-product-comparisons">
+  ## リストの抽出: 製品比較
+</div>
+
+1 回のクエリで複数の項目を構造化して比較した結果を抽出します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Compare the top 3 electric vehicles under $40,000 available in the US in 2026",
+      tools=[{"type": "web_search"}],
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "ev_comparison",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "vehicles": {
+                          "type": "array",
+                          "items": {
+                              "type": "object",
+                              "properties": {
+                                  "make": {"type": "string"},
+                                  "model": {"type": "string"},
+                                  "year": {"type": "integer"},
+                                  "starting_price_usd": {"type": "integer"},
+                                  "range_miles": {"type": "integer"},
+                                  "battery_kwh": {"type": "number"},
+                                  "pros": {"type": "array", "items": {"type": "string"}},
+                                  "cons": {"type": "array", "items": {"type": "string"}},
+                              },
+                              "required": ["make", "model", "year", "starting_price_usd", "range_miles", "battery_kwh", "pros", "cons"],
+                              "additionalProperties": false,
+                          },
+                      },
+                      "comparison_date": {"type": "string"},
+                  },
+                  "required": ["vehicles", "comparison_date"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  data = json.loads(response.output_text)
+  print(f"EV Comparison (as of {data['comparison_date']})\n")
+
+  for v in data["vehicles"]:
+      print(f"{v['year']} {v['make']} {v['model']}")
+      print(f"  Price: ${v['starting_price_usd']:,}")
+      print(f"  Range: {v['range_miles']} mi | Battery: {v['battery_kwh']} kWh")
+      print(f"  Pros: {', '.join(v['pros'])}")
+      print(f"  Cons: {', '.join(v['cons'])}")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "Compare the top 3 electric vehicles under $40,000 available in the US in 2026",
+      tools: [{ type: "web_search" }],
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "ev_comparison",
+              schema: {
+                  type: "object",
+                  properties: {
+                      vehicles: {
+                          type: "array",
+                          items: {
+                              type: "object",
+                              properties: {
+                                  make: { type: "string" },
+                                  model: { type: "string" },
+                                  year: { type: "integer" },
+                                  starting_price_usd: { type: "integer" },
+                                  range_miles: { type: "integer" },
+                                  battery_kwh: { type: "number" },
+                                  pros: { type: "array", items: { type: "string" } },
+                                  cons: { type: "array", items: { type: "string" } },
+                              },
+                              required: ["make", "model", "year", "starting_price_usd", "range_miles", "battery_kwh", "pros", "cons"],
+                          },
+                      },
+                      comparison_date: { type: "string" },
+                  },
+                  required: ["vehicles", "comparison_date"],
+              },
+          },
+      },
+  });
+
+  const data = JSON.parse(response.output_text);
+  console.log(`EV Comparison (as of ${data.comparison_date})\n`);
+
+  for (const v of data.vehicles) {
+      console.log(`${v.year} ${v.make} ${v.model}`);
+      console.log(`  Price: $${v.starting_price_usd.toLocaleString()}`);
+      console.log(`  Range: ${v.range_miles} mi | Battery: ${v.battery_kwh} kWh`);
+      console.log(`  Pros: ${v.pros.join(", ")}`);
+      console.log(`  Cons: ${v.cons.join(", ")}`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<div id="research-findings-extraction">
+  ## 研究結果の抽出
+</div>
+
+検索に基づくリサーチ結果を、レポートやデータベースで扱いやすい構造化フォーマットに変換します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the most recent clinical trial results for GLP-1 receptor agonists in treating obesity?",
+      tools=[{"type": "web_search"}],
+      instructions="Provide findings from the most recent clinical trials. Include specific numbers and trial names where available.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "research_findings",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "topic": {"type": "string"},
+                      "findings": {
+                          "type": "array",
+                          "items": {
+                              "type": "object",
+                              "properties": {
+                                  "trial_name": {"type": "string"},
+                                  "drug": {"type": "string"},
+                                  "phase": {"type": "string"},
+                                  "key_result": {"type": "string"},
+                                  "sample_size": {"type": "string"},
+                                  "publication_year": {"type": "integer"},
+                              },
+                              "required": ["trial_name", "drug", "phase", "key_result", "sample_size", "publication_year"],
+                              "additionalProperties": false,
+                          },
+                      },
+                      "summary": {"type": "string"},
+                  },
+                  "required": ["topic", "findings", "summary"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  data = json.loads(response.output_text)
+  print(f"Topic: {data['topic']}\n")
+  print(f"Summary: {data['summary']}\n")
+
+  for finding in data["findings"]:
+      print(f"  {finding['trial_name']} ({finding['drug']}, Phase {finding['phase']})")
+      print(f"    Result: {finding['key_result']}")
+      print(f"    N={finding['sample_size']}, Published: {finding['publication_year']}")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the most recent clinical trial results for GLP-1 receptor agonists in treating obesity?",
+      tools: [{ type: "web_search" }],
+      instructions: "Provide findings from the most recent clinical trials. Include specific numbers and trial names where available.",
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "research_findings",
+              schema: {
+                  type: "object",
+                  properties: {
+                      topic: { type: "string" },
+                      findings: {
+                          type: "array",
+                          items: {
+                              type: "object",
+                              properties: {
+                                  trial_name: { type: "string" },
+                                  drug: { type: "string" },
+                                  phase: { type: "string" },
+                                  key_result: { type: "string" },
+                                  sample_size: { type: "string" },
+                                  publication_year: { type: "integer" },
+                              },
+                              required: ["trial_name", "drug", "phase", "key_result", "sample_size", "publication_year"],
+                          },
+                      },
+                      summary: { type: "string" },
+                  },
+                  required: ["topic", "findings", "summary"],
+              },
+          },
+      },
+  });
+
+  const data = JSON.parse(response.output_text);
+  console.log(`Topic: ${data.topic}\n`);
+  console.log(`Summary: ${data.summary}\n`);
+
+  for (const finding of data.findings) {
+      console.log(`  ${finding.trial_name} (${finding.drug}, Phase ${finding.phase})`);
+      console.log(`    Result: ${finding.key_result}`);
+      console.log(`    N=${finding.sample_size}, Published: ${finding.publication_year}`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<div id="building-a-data-pipeline">
+  ## データパイプラインの構築
+</div>
+
+構造化出力による抽出をつなぎ合わせ、クエリの実行から抽出、構造化データの保存までを行うパイプラインを構築します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import csv
+  import io
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  SCHEMA = {
+      "type": "json_schema",
+      "json_schema": {
+          "name": "startup_funding",
+          "schema": {
+              "type": "object",
+              "properties": {
+                  "companies": {
+                      "type": "array",
+                      "items": {
+                          "type": "object",
+                          "properties": {
+                              "name": {"type": "string"},
+                              "round": {"type": "string"},
+                              "amount_usd": {"type": "string"},
+                              "lead_investor": {"type": "string"},
+                              "sector": {"type": "string"},
+                              "date": {"type": "string"},
+                          },
+                          "required": ["name", "round", "amount_usd", "lead_investor", "sector", "date"],
+                          "additionalProperties": false,
+                      },
+                  },
+              },
+              "required": ["companies"],
+              "additionalProperties": false,
+          },
+      },
+  }
+
+
+  def extract_funding_rounds(sector: str) -> list[dict]:
+      """APIにクエリを送り、セクターごとの構造化された資金調達データを返す。"""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=f"List the 5 largest startup funding rounds in {sector} from the past 3 months",
+          tools=[{"type": "web_search"}],
+          response_format=SCHEMA,
+      )
+      data = json.loads(response.output_text)
+      return data["companies"]
+
+
+  def pipeline(sectors: list[str]) -> str:
+      """複数のセクターにわたって抽出を実行し、CSVを生成する。"""
+      all_rows = []
+      for sector in sectors:
+          print(f"Extracting: {sector}...")
+          rows = extract_funding_rounds(sector)
+          for row in rows:
+              row["query_sector"] = sector
+              all_rows.append(row)
+
+      # CSVに変換
+      output = io.StringIO()
+      writer = csv.DictWriter(output, fieldnames=["query_sector", "name", "round", "amount_usd", "lead_investor", "sector", "date"])
+      writer.writeheader()
+      writer.writerows(all_rows)
+      return output.getvalue()
+
+
+  if __name__ == "__main__":
+      csv_output = pipeline(["AI infrastructure", "climate tech", "biotech"])
+      print(csv_output)
+  ```
+</CodeGroup>
+
+<div id="schema-design-constraints">
+  ## スキーマ設計時の制約
+</div>
+
+<Warning>
+  Agent API は JSON スキーマに対して次の制約を課します。
+
+  * **`additionalProperties` は `false` にする必要があります。** スキーマ内のすべての `"type": "object"` に `"additionalProperties": false` を含めてください。これはトップレベルのスキーマとネストされたすべてのオブジェクトに適用されます。
+  * **再帰的なスキーマは使用できません。** スキーマが `$ref` で自身の定義を参照することはできません。
+  * **制約のない辞書は使用できません。** `properties` のない `"type": "object"` は避けてください。すべてのオブジェクト型には明示的に定義されたプロパティが必要です。
+  * **すべてのプロパティを `required` にすることを推奨します。** 省略可能なプロパティも使用できますが、すべてのプロパティを必須にすることで出力構造の一貫性が保たれます。
+  * **外部スキーマへの `$ref` は使用できません。** すべての定義はインラインで記述してください。
+</Warning>
+
+<div id="patterns-that-work">
+  ### 有効なパターン
+</div>
+
+```json theme={null}
+// ✅ 型付きフィールドを持つフラットなオブジェクト
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "count": { "type": "integer" },
+    "tags": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["name", "count", "tags"]
+}
+
+// ✅ 型付きオブジェクトの配列
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "key": { "type": "string" },
+      "value": { "type": "number" }
+    },
+    "required": ["key", "value"]
+  }
+}
+
+// ✅ 値を制限するための列挙型（enum）
+{
+  "type": "string",
+  "enum": ["low", "medium", "high"]
+}
+```
+
+<div id="patterns-to-avoid">
+  ### 避けるべきパターン
+</div>
+
+```json theme={null}
+// ❌ 再帰的なスキーマ（自己参照）
+{
+  "type": "object",
+  "properties": {
+    "children": { "$ref": "#" }
+  }
+}
+
+// ❌ 制約のないオブジェクト
+{
+  "type": "object",
+  "additionalProperties": true
+}
+
+// ❌ 定義のない dict/map 型
+{
+  "type": "object"
+}
+```
+
+<div id="combining-structured-output-with-function-calling">
+  ## 構造化出力と関数呼び出しの組み合わせ
+</div>
+
+`response_format` はカスタムツールと併用できます。モデルはまず関数を呼び出し、その後スキーマに従って最終的な応答を整形します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  tools = [
+      {"type": "web_search"},
+      {
+          "type": "function",
+          "name": "get_internal_price",
+          "description": "Look up the internal wholesale price for a product SKU.",
+          "parameters": {
+              "type": "object",
+              "properties": {
+                  "sku": {"type": "string", "description": "Product SKU"}
+              },
+              "required": ["sku"]
+          },
+      },
+  ]
+
+
+  def get_internal_price(sku: str) -> dict:
+      prices = {"SKU-A100": 8500, "SKU-H100": 25000, "SKU-4090": 1600}
+      return {"sku": sku, "wholesale_price_usd": prices.get(sku, 0)}
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      tools=tools,
+      input="Get the current retail price for the NVIDIA H100 GPU from the web, and also look up our internal wholesale price for SKU-H100. Compare them.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "price_comparison",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "product": {"type": "string"},
+                      "retail_price_usd": {"type": "string"},
+                      "wholesale_price_usd": {"type": "integer"},
+                      "margin_percent": {"type": "string"},
+                      "source": {"type": "string"},
+                  },
+                  "required": ["product", "retail_price_usd", "wholesale_price_usd", "margin_percent", "source"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  # 関数呼び出しを処理する
+  while any(item.type == "function_call" for item in response.output):
+      next_input = [item.model_dump() for item in response.output]
+      for item in response.output:
+          if item.type == "function_call":
+              args = json.loads(item.arguments)
+              result = get_internal_price(**args)
+              next_input.append({
+                  "type": "function_call_output",
+                  "call_id": item.call_id,
+                  "output": json.dumps(result),
+              })
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          tools=tools,
+          input=next_input,
+          response_format={
+              "type": "json_schema",
+              "json_schema": {
+                  "name": "price_comparison",
+                  "schema": {
+                      "type": "object",
+                      "properties": {
+                          "product": {"type": "string"},
+                          "retail_price_usd": {"type": "string"},
+                          "wholesale_price_usd": {"type": "integer"},
+                          "margin_percent": {"type": "string"},
+                          "source": {"type": "string"},
+                      },
+                      "required": ["product", "retail_price_usd", "wholesale_price_usd", "margin_percent", "source"],
+                      "additionalProperties": false,
+                  },
+              },
+          },
+      )
+
+  data = json.loads(response.output_text)
+  print(f"Product: {data['product']}")
+  print(f"Retail: {data['retail_price_usd']} (from {data['source']})")
+  print(f"Wholesale: ${data['wholesale_price_usd']:,}")
+  print(f"Margin: {data['margin_percent']}")
+  ```
+</CodeGroup>
+
+<Tip>
+  構造化出力と関数呼び出しを組み合わせる場合は、マルチターンループの各ターンで同じ `response_format` を渡してください。スキーマが適用されるのは最終的なテキスト出力のみで、関数呼び出しの引数には適用されません。
+</Tip>
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="出力の制御" icon="adjustments" href="/ja/docs/agent-api/output-control">
+    response&#95;format、ストリーミング、出力形式の調整に関する完全なリファレンス。
+  </Card>
+
+  <Card title="関数呼び出し" icon="code-circle" href="/ja/docs/cookbook/articles/function-calling-e2e/README">
+    構造化出力とマルチターンの関数呼び出しを組み合わせます。
+  </Card>
+
+  <Card title="Agent API クイックスタート" icon="rocket" href="/ja/docs/agent-api/quickstart">
+    数分で Agent API を使い始めましょう。
+  </Card>
+
+  <Card title="Agent API のモデル" icon="brain" href="/ja/docs/agent-api/models">
+    構造化抽出タスクに適した モデル を選択します。
+  </Card>
+</CardGroup>

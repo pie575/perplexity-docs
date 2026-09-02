@@ -1,0 +1,649 @@
+---
+title: "Configuración"
+description: "Aprende a configurar los SDK de Perplexity para gestionar reintentos, tiempos de espera, proxies y la personalización avanzada del cliente HTTP."
+---
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+Los SDK de Perplexity ofrecen amplias opciones de configuración para adaptar el comportamiento del cliente a distintos entornos y casos de uso. Esta guía cubre la configuración de reintentos, los tiempos de espera y la configuración de clientes HTTP personalizados.
+
+<div id="retries-and-timeouts">
+  ## Reintentos y tiempos de espera
+</div>
+
+<div id="basic-retry-configuration">
+  ### Configuración básica de reintentos
+</div>
+
+Configura cómo gestiona el SDK las solicitudes fallidas:
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+  import httpx
+
+  client = Perplexity(
+      max_retries=3,  # El valor predeterminado es 2
+      timeout=httpx.Timeout(30.0, read=10.0, write=5.0, connect=2.0)
+  )
+
+  # Configuración por solicitud
+  search = client.with_options(max_retries=5).search.create(
+      query="example"
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity({
+      maxRetries: 3, // El valor predeterminado es 2
+      timeout: 30000, // 30 segundos en milisegundos
+  });
+
+  // Configuración por solicitud
+  const search = await client.withOptions({ maxRetries: 5 }).search.create({
+      query: "example"
+  });
+  ```
+</CodeGroup>
+
+<div id="advanced-timeout-configuration">
+  ### Configuración avanzada de tiempos de espera
+</div>
+
+Define controles granulares de tiempo de espera para las distintas fases de la solicitud:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity
+
+  # Configuración detallada del tiempo de espera
+  timeout_config = httpx.Timeout(
+      connect=5.0,    # Tiempo para establecer la conexión
+      read=30.0,      # Tiempo para leer la respuesta
+      write=10.0,     # Tiempo para enviar la solicitud
+      pool=10.0       # Tiempo para obtener una conexión del pool
+  )
+
+  client = Perplexity(timeout=timeout_config)
+
+  # Para operaciones de larga duración
+  long_timeout = httpx.Timeout(
+      connect=5.0,
+      read=120.0,  # 2 minutos para consultas complejas
+      write=10.0,
+      pool=10.0
+  )
+
+  client_long = Perplexity(timeout=long_timeout)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // Tiempo de espera básico (se aplica a toda la solicitud)
+  const client = new Perplexity({
+      timeout: 30000  // 30 segundos
+  });
+
+  // Para operaciones de larga duración
+  const clientLong = new Perplexity({
+      timeout: 120000  // 2 minutos para consultas complejas
+  });
+
+  // Anulación del tiempo de espera para una solicitud concreta
+  const result = await client.withOptions({ 
+      timeout: 60000  // 1 minuto para esta solicitud en concreto
+  }).responses.create({
+      preset: "low",
+      input: "Complex research query..."
+  });
+  ```
+</CodeGroup>
+
+<div id="custom-http-client">
+  ## Cliente HTTP personalizado
+</div>
+
+<div id="proxy-configuration">
+  ### Configuración de proxy
+</div>
+
+Configura el SDK para que funcione con proxies corporativos:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # Proxy HTTP
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="http://proxy.company.com:8080"
+      )
+  )
+
+  # Proxy HTTPS con autenticación
+  client_auth = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="http://username:password@proxy.company.com:8080"
+      )
+  )
+
+  # Proxy SOCKS
+  client_socks = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="socks5://proxy.company.com:1080"
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import { HttpsProxyAgent } from 'https-proxy-agent';
+  import { SocksProxyAgent } from 'socks-proxy-agent';
+
+  // Proxy HTTP/HTTPS
+  const client = new Perplexity({
+      httpAgent: new HttpsProxyAgent('http://proxy.company.com:8080')
+  } as any);
+
+  // Proxy con autenticación
+  const clientAuth = new Perplexity({
+      httpAgent: new HttpsProxyAgent('http://username:password@proxy.company.com:8080')
+  } as any);
+
+  // Proxy SOCKS
+  const clientSocks = new Perplexity({
+      httpAgent: new SocksProxyAgent('socks5://proxy.company.com:1080')
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="custom-headers-and-user-agent">
+  ### Encabezados personalizados y User Agent
+</div>
+
+Añade encabezados personalizados a todas las solicitudes:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # Encabezados personalizados
+  headers = {
+      "User-Agent": "MyApp/1.0",
+      "X-Custom-Header": "custom-value"
+  }
+
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          headers=headers
+      )
+  )
+
+  # Configuración avanzada del cliente HTTP
+  transport = httpx.HTTPTransport(
+      local_address="0.0.0.0",  # Vincular a una interfaz específica
+      verify=True,              # Verificación SSL
+      cert=None,                # Certificado de cliente
+      http2=True               # Habilitar HTTP/2
+  )
+
+  client_advanced = Perplexity(
+      http_client=DefaultHttpxClient(
+          transport=transport,
+          headers=headers
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // Encabezados personalizados
+  const client = new Perplexity({
+      defaultHeaders: {
+          "User-Agent": "MyApp/1.0",
+          "X-Custom-Header": "custom-value"
+      }
+  });
+
+  // Configuración avanzada de fetch
+  const clientAdvanced = new Perplexity({
+      fetch: (url, options) => {
+          return fetch(url, {
+              ...options,
+              headers: {
+                  ...options?.headers,
+                  "User-Agent": "MyApp/1.0",
+                  "X-Custom-Header": "custom-value"
+              }
+          });
+      }
+  });
+  ```
+</CodeGroup>
+
+<div id="ssltls-configuration">
+  ### Configuración de SSL/TLS
+</div>
+
+Configura la verificación SSL y los certificados:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  import ssl
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # Desactivar la verificación SSL (no recomendado en producción)
+  client_no_ssl = Perplexity(
+      http_client=DefaultHttpxClient(
+          verify=False
+      )
+  )
+
+  # Contexto SSL personalizado
+  ssl_context = ssl.create_default_context()
+  ssl_context.check_hostname = False
+  ssl_context.verify_mode = ssl.CERT_NONE
+
+  client_custom_ssl = Perplexity(
+      http_client=DefaultHttpxClient(
+          verify=ssl_context
+      )
+  )
+
+  # Autenticación con certificado de cliente
+  client_cert = Perplexity(
+      http_client=DefaultHttpxClient(
+          cert=("client.crt", "client.key")
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // Agente HTTPS personalizado con opciones SSL
+  const httpsAgent = new https.Agent({
+      rejectUnauthorized: false, // Desactivar la verificación SSL (no recomendado)
+      keepAlive: true,
+      maxSockets: 50
+  });
+
+  const client = new Perplexity({
+      httpAgent: httpsAgent
+  } as any);
+
+  // Para entornos Node.js con certificados de CA personalizados
+  const httpsAgentCA = new https.Agent({
+      ca: ['/* tu certificado de CA en PEM */'],
+      cert: '/* certificado de cliente en PEM */',
+      key: '/* clave privada del cliente en PEM */',
+  } as any);
+
+  const clientCert = new Perplexity({
+      httpAgent: httpsAgentCA
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="connection-pooling">
+  ## Agrupación de conexiones
+</div>
+
+Optimiza el rendimiento mediante la agrupación de conexiones:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # Configurar los límites de conexión
+  limits = httpx.Limits(
+      max_keepalive_connections=20,  # Conexiones persistentes
+      max_connections=100,           # Conexiones totales
+      keepalive_expiry=30.0         # Tiempo de expiración de las conexiones persistentes
+  )
+
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          limits=limits
+      )
+  )
+
+  # Para aplicaciones de alto rendimiento
+  high_throughput_limits = httpx.Limits(
+      max_keepalive_connections=100,
+      max_connections=500,
+      keepalive_expiry=60.0
+  )
+
+  client_high_throughput = Perplexity(
+      http_client=DefaultHttpxClient(
+          limits=high_throughput_limits
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // Configurar los ajustes del grupo de agentes
+  const httpsAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 30000,  // 30 segundos
+      maxSockets: 50,         // Máximo de conexiones por host
+      maxFreeSockets: 10,     // Máximo de conexiones inactivas por host
+      timeout: 60000          // Tiempo de espera del socket
+  });
+
+  const client = new Perplexity({
+      httpAgent: httpsAgent
+  } as any);
+
+  // Para aplicaciones de alto rendimiento
+  const highThroughputAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 60000,
+      maxSockets: 200,
+      maxFreeSockets: 50,
+      timeout: 120000
+  });
+
+  const clientHighThroughput = new Perplexity({
+      httpAgent: highThroughputAgent
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="environment-specific-configuration">
+  ## Configuración específica por entorno
+</div>
+
+<div id="development-configuration">
+  ### Configuración de desarrollo
+</div>
+
+Ajustes optimizados para desarrollo y depuración:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # Configuración de desarrollo
+  dev_client = Perplexity(
+      max_retries=1,           # Fallar rápido en desarrollo
+      timeout=httpx.Timeout(10.0),  # Tiempo de espera corto
+      http_client=DefaultHttpxClient(
+          # Habilitar registro detallado
+          event_hooks={
+              'request': [lambda request: print(f"Request: {request.method} {request.url}")],
+              'response': [lambda response: print(f"Response: {response.status_code}")]
+          }
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // Configuración de desarrollo
+  const devClient = new Perplexity({
+      maxRetries: 1,     // Fallar rápido en desarrollo
+      timeout: 10000,    // Tiempo de espera de 10 segundos
+      
+      // fetch personalizado con registro
+      fetch: (url, options) => {
+          console.log(`Request: ${options?.method || 'GET'} ${url}`);
+          return fetch(url, options).then(response => {
+              console.log(`Response: ${response.status}`);
+              return response;
+          });
+      }
+  });
+  ```
+</CodeGroup>
+
+<div id="production-configuration">
+  ### Configuración de producción
+</div>
+
+Ajustes optimizados para entornos de producción:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # Configuración de producción
+  prod_limits = httpx.Limits(
+      max_keepalive_connections=50,
+      max_connections=200,
+      keepalive_expiry=60.0
+  )
+
+  prod_timeout = httpx.Timeout(
+      connect=5.0,
+      read=60.0,
+      write=10.0,
+      pool=10.0
+  )
+
+  prod_client = Perplexity(
+      max_retries=3,
+      timeout=prod_timeout,
+      http_client=DefaultHttpxClient(
+          limits=prod_limits,
+          verify=True,  # Verifica siempre SSL en producción
+          http2=True    # Habilita HTTP/2 para mejorar el rendimiento
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // Configuración de producción
+  const prodAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 60000,
+      maxSockets: 100,
+      maxFreeSockets: 20,
+      timeout: 60000
+  });
+
+  const prodClient = new Perplexity({
+      maxRetries: 3,
+      timeout: 60000,
+      httpAgent: prodAgent
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="configuration-patterns">
+  ## Patrones de configuración
+</div>
+
+<div id="environment-based-configuration">
+  ### Configuración basada en variables de entorno
+</div>
+
+Usa variables de entorno para configurar el cliente:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  def create_client():
+      # Configuración base
+      timeout = httpx.Timeout(
+          connect=float(os.getenv('PERPLEXITY_CONNECT_TIMEOUT', '5.0')),
+          read=float(os.getenv('PERPLEXITY_READ_TIMEOUT', '30.0')),
+          write=float(os.getenv('PERPLEXITY_WRITE_TIMEOUT', '10.0'))
+      )
+      
+      max_retries = int(os.getenv('PERPLEXITY_MAX_RETRIES', '3'))
+      
+      # Configuración opcional del proxy
+      proxy = os.getenv('PERPLEXITY_PROXY')
+      http_client_kwargs = {}
+      if proxy:
+          http_client_kwargs['proxy'] = proxy
+      
+      return Perplexity(
+          max_retries=max_retries,
+          timeout=timeout,
+          http_client=DefaultHttpxClient(**http_client_kwargs)
+      )
+
+  client = create_client()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import { HttpsProxyAgent } from 'https-proxy-agent';
+
+  function createClient(): Perplexity {
+      const maxRetries = parseInt(process.env.PERPLEXITY_MAX_RETRIES || '3');
+      const timeout = parseInt(process.env.PERPLEXITY_TIMEOUT || '30000');
+      
+      const config: any = {
+          maxRetries,
+          timeout
+      };
+      
+      // Configuración opcional del proxy
+      if (process.env.PERPLEXITY_PROXY) {
+          config.httpAgent = new HttpsProxyAgent(process.env.PERPLEXITY_PROXY);
+      }
+      
+      return new Perplexity(config);
+  }
+
+  const client = createClient();
+  ```
+</CodeGroup>
+
+<div id="configuration-factory">
+  ### Fábrica de configuraciones
+</div>
+
+Crea patrones de configuración reutilizables:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  class PerplexityClientFactory:
+      @staticmethod
+      def development():
+          return Perplexity(
+              max_retries=1,
+              timeout=httpx.Timeout(10.0)
+          )
+      
+      @staticmethod
+      def production():
+          return Perplexity(
+              max_retries=3,
+              timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0),
+              http_client=DefaultHttpxClient(
+                  limits=httpx.Limits(
+                      max_keepalive_connections=50,
+                      max_connections=200
+                  )
+              )
+          )
+      
+      @staticmethod
+      def high_throughput():
+          return Perplexity(
+              max_retries=2,
+              timeout=httpx.Timeout(connect=2.0, read=30.0, write=5.0),
+              http_client=DefaultHttpxClient(
+                  limits=httpx.Limits(
+                      max_keepalive_connections=100,
+                      max_connections=500
+                  )
+              )
+          )
+
+  # Uso
+  client = PerplexityClientFactory.production()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  class PerplexityClientFactory {
+      static development(): Perplexity {
+          return new Perplexity({
+              maxRetries: 1,
+              timeout: 10000
+          });
+      }
+      
+      static production(): Perplexity {
+          const agent = new https.Agent({
+              keepAlive: true,
+              maxSockets: 100,
+              timeout: 60000
+          });
+          
+          return new Perplexity({
+              maxRetries: 3,
+              timeout: 60000,
+              httpAgent: agent
+          } as any);
+      }
+      
+      static highThroughput(): Perplexity {
+          const agent = new https.Agent({
+              keepAlive: true,
+              maxSockets: 500,
+              maxFreeSockets: 100,
+              timeout: 30000
+          });
+          
+          return new Perplexity({
+              maxRetries: 2,
+              timeout: 30000,
+              httpAgent: agent
+          } as any);
+      }
+  }
+
+  // Uso
+  const client = PerplexityClientFactory.production();
+  ```
+</CodeGroup>
+
+<div id="related-resources">
+  ## Recursos relacionados
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Manejo de errores" icon="alert-triangle" href="/es/docs/sdk/error-handling">
+    Gestiona tiempos de espera y errores de conexión
+  </Card>
+
+  <Card title="Rendimiento" icon="bolt" href="/es/docs/sdk/performance">
+    Optimiza las operaciones asíncronas y la agrupación de conexiones
+  </Card>
+</CardGroup>

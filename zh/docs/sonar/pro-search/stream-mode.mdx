@@ -1,0 +1,1053 @@
+---
+title: "流式模式：精简与完整"
+description: "了解如何使用 stream_mode 控制流式响应格式并优化集成"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概述
+</div>
+
+`stream_mode` 参数用于控制流式响应的格式，可在两种模式中选择：
+
+* **`full`** (默认) ——传统流式格式，每个数据块都包含完整的消息对象
+* **`concise`**——优化后的流式格式，冗余更少，并且能更好地展现推理过程
+
+<Info>
+  `concise` 模式旨在尽可能减少带宽占用，并更清晰地呈现模型的推理过程。
+</Info>
+
+<div id="quick-comparison">
+  ## 快速对比
+</div>
+
+| 特性        | 完整模式                         | 简洁模式       |
+| --------- | ------------------------------- | ---------------- |
+| **消息聚合**  | 服务端 (包含 `choices.message`)      | 客户端 (仅 delta)    |
+| **数据块类型** | 单一类型 (`chat.completion.chunk`)  | 按阶段划分的多种类型       |
+| **搜索结果**  | 流式传输过程中多次返回                     | 仅在 `done` 数据块中返回 |
+| **带宽**    | 较高 (包含冗余数据)                     | 较低 (已针对效率优化)     |
+
+<div id="using-concise-mode">
+  ## 使用简洁模式
+</div>
+
+创建流式补全时，设置 `stream_mode: "concise"`：
+
+<Tabs>
+  <Tab title="Python SDK">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "Current weather and 7-day forecast for Seattle, Washington"}],
+        stream=True,
+        stream_mode="concise"
+    )
+
+    for chunk in stream:
+        print(f"Chunk type: {chunk.object}")
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="")
+    ```
+  </Tab>
+
+  <Tab title="Typescript SDK">
+    ```typescript theme={null}
+    import Perplexity from '@perplexity-ai/perplexity_ai';
+
+    const client = new Perplexity();
+
+    const stream = await client.chat.completions.create({
+      model: "sonar-pro",
+      messages: [{ role: "user", content: "Current weather and 7-day forecast for Seattle, Washington" }],
+      stream: true,
+      stream_mode: "concise"
+    });
+
+    for await (const chunk of stream) {
+      console.log(`Chunk type: ${chunk.object}`);
+      if (chunk.choices[0]?.delta?.content) {
+        process.stdout.write((chunk.choices[0]?.delta?.content ?? '') as string);
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="cURL">
+    ```bash theme={null}
+    curl -X POST "https://api.perplexity.ai/v1/sonar" \
+      -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "sonar-pro",
+        "messages": [{"role": "user", "content": "What is the weather in Seattle?"}],
+        "stream": true,
+        "stream_mode": "concise"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+<AccordionGroup>
+  <Accordion title="响应 — 华盛顿州西雅图当前天气和未来 7 天预报">
+    ```json theme={null}
+    {
+      "id": "300fab98-92a3-4a69-9e84-fe05c918f831",
+      "results": [
+        {
+          "snippet": "**当前天气状况：**\n## 波音机场 - 金县国际机场 (KBFI)\n**纬度： ** 47.54548°N**经度： ** 122.3147°W**海拔： ** 20.0英尺\n多云\n61°F\n16°C\n|**湿度**|63%|\n|--|--|\n|**风速**|北风 0 英里/小时|\n|**气压**|29.95 英寸 (1014.22 百帕)|\n|**露点**|48°F (9°C)|\n|**能见度**|10.00 英里|\n|**最后更新**|5月26日 下午03:00 PDT|\n...\n**延伸预报：**\n## 华盛顿州西雅图\n- 今夜\n最低：50 °F\n晴间少云\n- 星期三\n最高：71 °F\n晴\n- 星期三夜间\n最低：54 °F\n晴间少云\n- 星期四\n最高：77 °F\n晴\n- 星期四夜间\n最低：53 °F\n可能有雨\n- 星期五\n最高：60 °F\n可能有雨\n- 星期五夜间\n最低：49 °F\n多云\n- 星期六\n最高：62 °F\n多云间晴\n- 星期六夜间\n最低：48 °F\n局部多云\n## 详细预报\n**今夜**\n晴间少云，最低气温约50度。\n北风 5 至 8 英里/小时，傍晚转为无风。\n**星期三**\n晴，最高气温接近71度。\n微风且风向不定，上午转为北风 5 至 10 英里/小时。\n**星期三夜间**\n晴间少云，最低气温约54度。\n北风 5 至 8 英里/小时，傍晚转为无风。\n**星期四**\n晴，最高气温接近77度。\n无风，下午转为西北偏北风约 5 英里/小时。\n**星期四夜间**\n降雨概率30%，主要在晚上11点之后。\n多云，最低气温约53度。\n西北偏北风 5 至 9 英里/小时，午夜后转为南风。\n**星期五**\n降雨概率50%。\n多云，最高气温接近60度。\n**星期五夜间**\n多云，最低气温约49度。\n**星期六**\n多云间晴，最高气温接近62度。\n**星期六夜间**\n局部多云，最低气温约48度。\n**星期日**\n晴间多云，最高气温接近64度。\n**星期日夜间**\n晴间少云，最低气温约49度。\n**星期一**\n晴，最高气温接近70度。\n**星期一夜间**\n局部多云，最低气温约53度。\n**星期二**\n晴间多云，最高气温接近78度。\n...\n华盛顿州西雅图\n47.62°N 122.36°W（海拔 105 英尺）\n最后更新：\n2026年5月26日 上午11:26 PDT\n预报有效期：\n2026年5月26日下午3点 PDT - 2026年6月2日下午6点 PDT",
+          "title": "7天预报 47.62N 122.36W",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6218&lon=-122.3503",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-26"
+        },
+        {
+          "snippet": "华盛顿州西雅图天气预报 | AccuWeather\n## 今日天气\n5月26日，星期二\n主要为多云；上午短时阵雨，今天下午局部有阵雨\n**最高：62°**\n今夜：局部多云\n**最低：51°**\n## 当前天气\n下午2:32\n57°F\n体感温度®\n60°\n多云 更多详情\n遮阴体感温度™ 56°\n风：西北风 2 英里/小时\n阵风 5 英里/小时\n空气质量：一般\n## 未来展望\n气温回升，星期五又将明显转凉\n## 逐小时天气\n下午3点 59°\n40%\n下午4点 61°\n37%\n下午5点 62°\n32%\n下午6点 62°\n32%\n下午7点 61°\n21%\n下午8点 60°\n0%\n下午9点 59°\n0%\n下午10点 57°\n0%\n下午11点 56°\n0%\n上午12点 54°\n0%\n上午1点 53°\n0%\n上午2点 53°\n0%\n## 10天天气预报\n今天\n5/26\n62° 51°\n今晨有少量阵雨\n夜间：局部多云\n80%\n周三\n5/27\n73° 55°\n多云间晴，天气宜人\n局部多云\n0%\n周四\n5/28\n77° 53°\n晴间多云，天气宜人\n局部多云\n12%\n周五\n5/29\n59° 47°\n转凉\n低云\n25%\n周六\n5/30\n62° 47°\n多云\n多云\n25%\n周日\n5/31\n70° 50°\n云晴相间，天气宜人\n基本晴朗\n19%\n周一\n6/1\n76° 57°\n晴间多云，天气宜人\n基本晴朗\n13%\n周二\n6/2\n93° 58°\n炎热伴有高云\n多云\n2%\n周三\n6/3\n76° 55°\n多云\n多云\n6%\n周四\n6/4\n73° 53°\n阳光伴有少量云\n基本晴朗\n1%\n...\n空气质量：一般\n对大多数人而言，空气质量基本可以接受。\n但敏感人群长期暴露可能出现轻度至中度症状。",
+          "title": "华盛顿州西雅图天气预报",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-26"
+        },
+        {
+          "snippet": "其他天气状况\n气压\n29.93 °英寸\n能见度\n10 °英里\n云况\n局部多云\n露点\n47 °F\n湿度\n60 °%\n降雨量\n0 °英寸\n积雪深度\n0 °英寸\n热门视频报道\n...\n上午5:20\n晚上8:55",
+          "title": "华盛顿州西雅图10天天气预报",
+          "url": "https://www.wunderground.com/forecast/us/wa/seattle",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-27"
+        },
+        {
+          "snippet": "**当前观测地点**\n## 波音机场 - 金县国际机场 (KBFI)\n**纬度： ** 47.54548°N**经度： ** 122.3147°W**海拔： ** 20.0英尺。\n多云\n52°F\n11°C\n|**湿度**|66%|\n|--|--|\n|**风速**|西南西 6 英里/小时|\n|**气压**|30.15 英寸 (1021.0 毫巴)|\n|**露点**|41°F (5°C)|\n|**能见度**|10.00 英里|\n|**最后更新**|5月16日 下午06:20 PDT|\n...\n**扩展预报**\n## 华盛顿州西雅图市中心\n- 今夜\n最低：43 °F\n可能有雨\n随后局部\n多云\n- 周日\n最高：62 °F\n大部晴朗\n- 周日夜间\n最低：48 °F\n云量\n增多\n- 周一\n最高：66 °F\n云量\n减少\n- 周一夜间\n最低：50 °F\n局部多云\n- 周二\n最高：65 °F\n少云见晴\n- 周二夜间\n最低：50 °F\n多云\n- 周三\n最高：68 °F\n大部晴朗\n- 周三夜间\n最低：51 °F\n局部多云\n## 详细预报\n**今夜**\n有50%的降雨概率，主要在晚上8点之前。\n多云，最低气温约43度。\n西风约5英里/小时，傍晚转为无风。\n**周日**\n大部晴朗，最高气温接近62度。\n微风，风向不定。\n**周日夜间**\n云量增多，最低气温约48度。\n无风。\n**周一**\n多云，随后逐渐转为大部晴朗，最高气温接近66度。\n微风，风向不定。\n**周一夜间**\n局部多云，最低气温约50度。\n北风约6英里/小时，傍晚转为无风。\n**周二**\n少云见晴，最高气温接近65度。\n**周二夜间**\n多云，最低气温约50度。\n**周三**\n大部晴朗，最高气温接近68度。\n**周三夜间**\n局部多云，最低气温约51度。\n**周四**\n大部晴朗，最高气温接近69度。\n**周四夜间**\n局部多云，最低气温约52度。\n**周五**\n大部晴朗，最高气温接近69度。\n**周五夜间**\n大部晴朗，最低气温约52度。\n**周六**\n大部晴朗，最高气温接近73度。\n...\n华盛顿州西雅图市中心\n47.61°N 122.32°W (海拔 240 英尺)\n最后更新：\n2026年5月16日 上午11:27 PDT\n预报有效期：\n2026年5月16日 下午6点 PDT - 2026年5月23日 下午6点 PDT\n预报讨论",
+          "title": "7天预报 47.61N 122.32W - 美国国家气象局",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6032&lon=-122.3303",
+          "date": "2026-05-17",
+          "last_updated": "2026-05-17"
+        },
+        {
+          "snippet": "**当前观测地点**\n## 西雅图气象预报办公室 (SEAW1)\n**纬度： ** 47.68528°N**经度： ** 122.25111°W**海拔： ** 29.0英尺。\n无数据\n45°F\n7°C\n|**湿度**|75%|\n|--|--|\n|**风速**|南南西 5 英里/小时|\n|**气压**|30.45 英寸 (1031.16 毫巴)|\n|**露点**|37°F (3°C)|\n|**能见度**|无数据|\n|**风寒温度**|42°F (6°C)|\n|**最后更新**|3月26日 上午09:30 PDT|\n...\n**扩展预报**\n## 华盛顿州西雅图大学区东南偏南2英里\n- 今天\n最高：53 °F\n晴\n- 今夜\n最低：35 °F\n云量\n增多\n- 周五\n最高：56 °F\n大部晴朗\n- 周五夜间\n最低：38 °F\n多云\n- 周六\n最高：54 °F\n少云见晴\n- 周六夜间\n最低：39 °F\n多云\n- 周日\n最高：54 °F\n有轻微\n降雨可能\n- 周日夜间\n最低：39 °F\n可能有雨\n- 周一\n最高：51 °F\n可能有雨\n## 详细预报\n**今天**\n晴，最高气温接近53度。\n南风约6英里/小时。\n**今夜**\n云量增多，最低气温约35度。\n无风。\n**周五**\n大部晴朗，最高气温接近56度。\n无风，午后转为北风5至7英里/小时。\n**周五夜间**\n多云，最低气温约38度。\n北风5至8英里/小时，傍晚转为无风。\n**周六**\n少云见晴，最高气温接近54度。\n无风，午后转为北西北风约5英里/小时。\n**周六夜间**\n多云，最低气温约39度。\n**周日**\n上午11点后有20%的降雨概率。\n多云，最高气温接近54度。\n**周日夜间**\n可能有雨。\n多云，最低气温约39度。\n**周一**\n可能有雨。\n多云，最高气温接近51度。\n**周一夜间**\n可能有雨，主要在晚上11点之前。\n局部多云，最低气温约36度。\n**周二**\n有轻微降雨可能。\n大部晴朗，最高气温接近53度。\n**周二夜间**\n可能有雨。\n多云，最低气温约40度。\n**周三**\n可能有雨。\n多云，最高气温接近53度。\n...\n华盛顿州西雅图大学区东南偏南2英里\n47.63°N 122.3°W (海拔 190 英尺)\n最后更新：\n2026年3月25日 下午11:27 PDT\n预报有效期：\n2026年3月26日 上午10点 PDT - 2026年4月1日 下午6点 PDT\n预报讨论",
+          "title": "7天预报 47.63N 122.3W - 美国国家气象局",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6329523&lon=-122.28918880000003&site=all&smap=1&searchresult=Seattle%2C+WA+98112%2C+USA",
+          "date": "2026-03-26",
+          "last_updated": "2026-03-26"
+        },
+        {
+          "snippet": "受阵风和低湿度影响，预计俄勒冈州和内华达州全境的火险天气条件将升至"高"至"极高"级别，并持续至周二。\n西北地区将出现阵雨和雷暴。\n...\n**当前观测地点**\n## 西雅图天气预报办公室 (SEAW1)\n**纬度： ** 47.68528°N**经度： ** 122.25111°W**海拔： ** 29.0英尺\nNA\n53°F\n12°C\n|**湿度**|86%|\n|--|--|\n|**风速**|东东南风 5 英里/小时|\n|**气压**|29.71 英寸 (1006.1 百帕)|\n|**露点**|49°F (9°C)|\n|**能见度**|NA|\n|**最后更新**|5月25日 太平洋夏令时 晚上10:30|\n...\n**扩展预报**\n## 华盛顿州西雅图大学区\n- 今晚\n最低：48 °F\n有少量\n降雨可能\n- 周二\n最高：65 °F\n可能有雨\n随后局部\n晴朗\n- 周二夜间\n最低：49 °F\n局部多云\n- 周三\n最高：74 °F\n晴\n- 周三夜间\n最低：53 °F\n大部晴朗\n- 周四\n最高：78 °F\n晴\n- 周四夜间\n最低：53 °F\n局部多云\n- 周五\n最高：64 °F\n可能有雨\n- 周五夜间\n最低：48 °F\n可能有雨\n随后大部\n多云\n## 详细预报\n**今晚**\n凌晨5点后有10%的降雨概率。\n局部多云，最低气温约48度。\n南风约6英里/小时，午夜后转为无风。\n**周二**\n有30%的降雨概率，主要出现在上午9点前。\n局部晴朗，最高气温接近65度。\n无风，下午转为北西北风5至7英里/小时。\n**周二夜间**\n局部多云，最低气温约49度。\n北风约6英里/小时，傍晚转为无风。\n**周三**\n晴，最高气温接近74度。\n无风，下午转为北风5至8英里/小时。\n**周三夜间**\n大部晴朗，最低气温约53度。\n北风5至7英里/小时，傍晚转为无风。\n**周四**\n晴，最高气温接近78度。\n**周四夜间**\n局部多云，最低气温约53度。\n**周五**\n可能有雨。\n大部多云，最高气温接近64度。\n**周五夜间**\n晚上11点前可能有雨。\n大部多云，最低气温约48度。\n**周六**\n局部晴朗，最高气温接近65度。\n**周六夜间**\n局部多云，最低气温约47度。\n**周日**\n大部晴朗，最高气温接近66度。\n**周日夜间**\n局部多云，最低气温约48度。\n**周一**\n大部晴朗，最高气温接近72度。\n...\n华盛顿州西雅图大学区\n47.65°N 122.3°W（海拔 33 英尺）\n最后更新：\n2026年5月25日 太平洋夏令时 下午1:00\n预报有效期：\n2026年5月25日 太平洋夏令时 晚上11点 - 2026年6月1日 太平洋夏令时 下午6点\n预报讨论",
+          "title": "7天预报 47.65N 122.3W - 美国国家气象局",
+          "url": "https://forecast.weather.gov/MapClick.php?CityName=Seattle&state=WA&site=SEW&lat=47.6606&lon=-122.292",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-26"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="响应 — 西雅图天气如何？">
+    ```json theme={null}
+    {
+      "id": "3b076c08-870a-45e5-881d-ddaf39781638",
+      "results": [
+        {
+          "snippet": "华盛顿州西雅图天气预报 | AccuWeather\n## 今日天气\n5月20日 星期三\n云层散开，部分时段有阳光\n**最高：68°**\n今夜：大体晴朗\n**最低：51°**\n## 当前天气\n下午1:47\n64°F\n体感温度（RealFeel®）\n77°\n多云 更多详情\n遮阴体感温度（RealFeel Shade™）65°\n风 西北偏北风 3 英里/小时\n阵风 6 英里/小时\n空气质量 一般\n## 未来展望\n...\n68° 51°\n云层散开，部分时段有阳光\n夜间：大体晴朗",
+          "title": "华盛顿州西雅图天气预报 - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "**当前观测地点**\n## 波音机场 - 金县国际机场 (KBFI)\n**纬度：** 47.54548°N**经度：** 122.3147°W**海拔：** 20.0英尺\n晴\n64°F\n18°C\n|**湿度**|52%|\n|--|--|\n|**风速**|西北偏西风 10 英里/小时|\n|**气压**|30.19 英寸 (1022.35 百帕)|\n|**露点**|46°F (8°C)|\n|**能见度**|10.00 英里|\n|**最后更新**|5月20日 下午02:30 PDT|\n...\n## 华盛顿州西雅图\n- 今日下午\n最高：67 °F\n晴间多云\n- 今夜\n最低：51 °F\n云量减少\n- 星期四\n...\n**今日下午**\n大部晴朗，最高气温接近67度。\n西北偏北风约8英里/小时。\n**今夜**\n多云转逐渐转晴，最低气温约51度。\n北风5至7英里/小时，午夜后转为无风。\n...\n2026年5月20日下午2点PDT - 2026年5月26日下午6点PDT",
+          "title": "7天预报 47.62N 122.36W - 美国国家气象局",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6218&lon=-122.3503",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "*access_time* ** 2026年5月20日 下午10:20 PDT** (GMT -7) | 2秒前更新\n--° | 50°\n体感 61°\n晴\n北\n阵风\n预计明天气温将比今天更暖。",
+          "title": "华盛顿州西雅图天气状况 | Weather Underground",
+          "url": "https://www.wunderground.com/weather/us/wa/seattle",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "晴\n56°\n73°\n49°\n降水概率：0%\n风：3 英里/小时 东北偏北\n湿度：69%\n紫外线指数：低\n华盛顿州西雅图\n更改位置\n星期三\n73\n49\n0%\n晴\n风：3 英里/小时 东北偏北\n湿度：69%\n紫外线指数：低\n星期四\n73\n51\n...\n局部多云\n风：9 英里/小时 北\n湿度：56%\n紫外线指数：高\n星期五\n74\n...\n晴\n风：7 英里/小时 西北偏北\n湿度：60%\n紫外线指数：高\n星期六\n...\n上午多云/下午晴\n...\n星期日\n...\n阴\n...\n星期一\n56\n48\n40%\n阵雨\n风：12 英里/小时 西南偏南\n湿度：74%\n紫外线指数：中等\n星期二\n61\n49\n30%\n上午阵雨\n风：8 英里/小时 西\n湿度：71%\n紫外线指数：高",
+          "title": "天气 - KOMO News",
+          "url": "https://komonews.com/weather",
+          "date": "2026-05-21",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "5月20日 星期三\n# 当前天气\n下午2:37\n65°F\n晴\n体感温度（RealFeel®）75°\n舒适\n遮阴体感温度（RealFeel Shade™）64°\n舒适\n体感温度（RealFeel®）\n75°\n遮阴体感温度（RealFeel Shade™）\n64°\n最高紫外线指数\n5.8（高）\n风\n西北偏北风 4 英里/小时\n阵风\n7 英里/小时\n湿度\n65%\n室内湿度\n59%（理想湿度）\n露点\n53° F\n气压\n↓ 30.21 英寸\n云量\n1%\n能见度\n6 英里\n云底高度\n40000 英尺\n## 白天\n5/20\n68°最高\n体感温度（RealFeel®）\n75°\n舒适\n遮阴体感温度（RealFeel Shade™）\n65°\n舒适\n云层散开，部分时段有阳光\n最高紫外线指数8.0（极高）\nAccuLumen 亮度指数™6（中等）\n风 北风 7 英里/小时\n阵风13 英里/小时\n降水概率0%\n雷暴概率0%\n降水量0.00 英寸\n云量59%\n...\n5/20\n51°最低\n体感温度（RealFeel®）\n50°\n微凉\n大体晴朗\n风 东北偏北风 6 英里/小时\n阵风12 英里/小时\n降水概率0%\n雷暴概率0%\n降水量0.00 英寸\n云量22%\n...\n## 西雅图当前天气状况\n华盛顿州西雅图目前天气晴朗，气温65°。\n根据观测到的65%湿度、1%云量、紫外线指数6以及4英里/小时的风速，当前RealFeel®体感温度为75°（舒适）。\n在遮阴处，RealFeel Shade™为64°。",
+          "title": "当前天气 - 华盛顿州西雅图 - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/current-weather/351409",
+          "date": null,
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "其他状况\n气压\n30.14 °英寸\n能见度\n10 °英里\n云况\n局部多云\n露点\n45 °F\n湿度\n44 °%\n降雨量\n0 °英寸\n积雪深度\n0 °英寸\n热门视频报道",
+          "title": "华盛顿州西雅图10天天气预报",
+          "url": "https://www.wunderground.com/forecast/us/wa/seattle",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "华盛顿州西雅图\n57°\n体感 **57°**\n最高：° 最低：49°，截至 PDT 凌晨1:48\n凌晨2点\n...\n直播\n西雅图\n，华盛顿州\n57°\n直播\n西雅图\n，华盛顿州\n57°\n直播\n西雅图\n，华盛顿州\n57°\n直播\n...\n西雅图天气：本周工作日收尾，晴朗天气与70多度气温回归",
+          "title": "FOX 13 西雅图及华盛顿州西部天气",
+          "url": "https://www.fox13seattle.com/weather",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "18\n°C\n晴\n体感 18\n最高：18°   最低：10°\n## 逐小时\n...\n局部多云。\n...\n## 华盛顿州西雅图天气常见问题\n西雅图当前气温是多少？\n18°\n西雅图的“体感”温度是多少？\n18°\n西雅图今天的最高和最低气温是多少？\n18°\n10°\n西雅图今天下雨或下雪的概率是多少？\n20% 降水概率\n西雅图今天的降雨或降雪量有多少？\n预计无降水\n西雅图当前的风速和风向是什么？\n9 公里/小时 西北风\n西雅图当前的湿度是多少？\n52%\n西雅图目前有生效的天气预警吗？\n无\n西雅图现在的紫外线指数是多少？\n低\n西雅图今天的日出和日落时间是几点？\n日出 上午5:25\n日落 晚上8:45",
+          "title": "华盛顿州西雅图当前天气",
+          "url": "https://www.theweathernetwork.com/en/city/us/washington/seattle/current?_guid_iss_=1",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "# Seattle, WA Weather\nAs of\n- **Current Temperature**\n52\nFeels like:52°\n- **Today's high temperature**\n72°\n- **Today's low temperature**\n52°\nCurrent Weather ConditionSunny\n## Live Weather Radar\n...\n## Current Weather Details\n- **Windchill**\n52°\n- **Daily Rain**\n0\"\n- **Dew point**\n46°\n- **Monthly Rain**\n0.35\"\n- **Humidity**\n81%\n- **Avg.\nWind**\nW 2 mph\n- **Pressure**\n30.19\" →\n- **Wind Gust**\nW 3 mph\n- **Sunrise**\n5:25 AM\n- **Moon**\nWaxing Crescent\n- **Sunset**\n8:47 PM\n- **UV Index**\n7 (High)\n## Weather Forecast\n- ### Today\nHi\nSunny.\nHighs in the upper 60s to mid 70s.\nLight wind becoming northwest around 10 mph in the afternoon.\n- ### Tonight\nLo\nMostly clear.\nLows in the lower 50s.\nNorth wind to 10 mph in the evening becoming light.",
+          "title": "Seattle, WA Weather Today & Tomorrow - Local Forecast & Live ...",
+          "url": "https://www.weatherbug.com/weather-forecast/now/seattle-wa-98104",
+          "date": "2026-05-21",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "Seattle, WA Hourly Weather | AccuWeather\n## 11 PM\n56°\nRealFeel®\n53°\nCool\n0%\nMostly clear\nWindNNE 7 mph\nAir QualityPoor\nWind Gusts9 mph\nHumidity68%\nIndoor Humidity44% (Ideal Humidity)\nDew Point45° F\nAccuLumen Brightness Index™0 (Dark)\nCloud Cover13%\nVisibility10 mi\nCloud Ceiling34000 ft\n...\nAccuWeather's hourly forecast for Seattle provides hour-by-hour temperatures, RealFeel® Temperature, and precipitation probability through the next 10 days.\nThe current hour shows 56° with a RealFeel® of 53°, mostly clear with a 0% chance of precipitation.",
+          "title": "Seattle, WA Hourly Weather - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/hourly-weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-21"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<div id="understanding-chunk-types">
+  ## 了解数据块类型
+</div>
+
+在简洁模式下，流式传输过程中你会收到四种不同类型的分块：
+
+<div id="1-chatreasoning">
+  ### 1. `chat.reasoning`
+</div>
+
+在推理阶段以流式返回，包含实时的推理步骤和搜索操作。
+
+<Tabs>
+  <Tab title="结构">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441590,
+      "object": "chat.reasoning",
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": ""
+        },
+        "delta": {
+          "role": "assistant",
+          "content": "",
+          "reasoning_steps": [{
+            "thought": "Searching the web for Seattle's current weather...",
+            "type": "web_search",
+            "web_search": {
+              "search_results": [...],
+              "search_keywords": ["Seattle current weather"]
+            }
+          }]
+        }
+      }],
+      "type": "message"
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python 处理函数">
+    ```python theme={null}
+    def handle_reasoning_chunk(chunk):
+        """处理推理阶段的更新"""
+        if chunk.object == "chat.reasoning":
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'reasoning_steps'):
+                for step in delta.reasoning_steps:
+                    print(f"\n[Reasoning] {step.thought}")
+
+                    if step.type == "web_search":
+                        keywords = step.web_search.search_keywords
+                        print(f"[Search] Keywords: {', '.join(keywords)}")
+    ```
+  </Tab>
+
+  <Tab title="Typescript 处理函数">
+    ```typescript theme={null}
+    function handleReasoningChunk(chunk: any) {
+      if (chunk.object === "chat.reasoning") {
+        const delta = chunk.choices[0].delta;
+
+        if (delta.reasoning_steps) {
+          for (const step of delta.reasoning_steps) {
+            console.log(`\n[Reasoning] ${step.thought}`);
+
+            if (step.type === "web_search") {
+              const keywords = step.web_search.search_keywords;
+              console.log(`[Search] Keywords: ${keywords.join(', ')}`);
+            }
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="2-chatreasoningdone">
+  ### 2. `chat.reasoning.done`
+</div>
+
+标志推理阶段结束，包含全部搜索结果 (网页、图片、视频) 和推理步骤。
+
+<Tabs>
+  <Tab title="结构">
+    ```json theme={null}
+    {
+      "id": "3dd9d463-0fef-47e3-af70-92f9fcc4db1f",
+      "model": "sonar-pro",
+      "created": 1759459505,
+      "object": "chat.reasoning.done",
+      "usage": {
+        "prompt_tokens": 6,
+        "completion_tokens": 0,
+        "total_tokens": 6,
+        "search_context_size": "low"
+      },
+      "search_results": [...],
+      "images": [...],
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": "",
+          "reasoning_steps": [...]
+        },
+        "delta": {
+          "role": "assistant",
+          "content": ""
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python 处理函数">
+    ```python theme={null}
+    def handle_reasoning_done(chunk):
+        """处理推理阶段结束"""
+        if chunk.object == "chat.reasoning.done":
+            print("\n[Reasoning Complete]")
+
+            # 获取所有搜索结果
+            if hasattr(chunk, 'search_results'):
+                print(f"Found {len(chunk.search_results)} sources")
+                for result in chunk.search_results[:3]:
+                    print(f"  • {result['title']}")
+
+            # 获取图片结果
+            if hasattr(chunk, 'images'):
+                print(f"Found {len(chunk.images)} images")
+
+            # 此时可获取部分用量统计
+            if hasattr(chunk, 'usage'):
+                print(f"Tokens used so far: {chunk.usage.total_tokens}")
+    ```
+  </Tab>
+
+  <Tab title="Typescript 处理函数">
+    ```typescript theme={null}
+    function handleReasoningDone(chunk: any) {
+      if (chunk.object === "chat.reasoning.done") {
+        console.log("\n[Reasoning Complete]");
+
+        // 获取所有搜索结果
+        if (chunk.search_results) {
+          console.log(`Found ${chunk.search_results.length} sources`);
+          chunk.search_results.slice(0, 3).forEach((result: any) => {
+            console.log(`  • ${result.title}`);
+          });
+        }
+
+        // 获取图片结果
+        if (chunk.images) {
+          console.log(`Found ${chunk.images.length} images`);
+        }
+
+        // 此时可获取部分用量统计
+        if (chunk.usage) {
+          console.log(`Tokens used so far: ${chunk.usage.total_tokens}`);
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="3-chatcompletionchunk">
+  ### 3. `chat.completion.chunk`
+</div>
+
+在响应生成阶段以流式方式返回，包含正在生成的实际内容。
+
+<Tabs>
+  <Tab title="结构">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441592,
+      "object": "chat.completion.chunk",
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": ""
+        },
+        "delta": {
+          "role": "assistant",
+          "content": " tonight"
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python 处理函数">
+    ```python theme={null}
+    def handle_completion_chunk(chunk):
+        """处理内容生成更新"""
+        if chunk.object == "chat.completion.chunk":
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'content') and delta.content:
+                # 将内容流式输出给用户
+                print(delta.content, end='', flush=True)
+                return delta.content
+
+        return ""
+    ```
+  </Tab>
+
+  <Tab title="Typescript 处理函数">
+    ```typescript theme={null}
+    function handleCompletionChunk(chunk: any): string {
+      if (chunk.object === "chat.completion.chunk") {
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.content) {
+          // 将内容流式输出给用户
+          process.stdout.write(delta.content);
+          return delta.content;
+        }
+      }
+
+      return "";
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="4-chatcompletiondone">
+  ### 4. `chat.completion.done`
+</div>
+
+最后一个数据块，表示流式传输已结束，其中包含最终的搜索结果、用量统计和费用信息。
+
+<Tabs>
+  <Tab title="结构">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441595,
+      "object": "chat.completion.done",
+      "usage": {
+        "prompt_tokens": 6,
+        "completion_tokens": 238,
+        "total_tokens": 244,
+        "search_context_size": "low",
+        "cost": {
+          "input_tokens_cost": 0.0,
+          "output_tokens_cost": 0.004,
+          "request_cost": 0.006,
+          "total_cost": 0.01
+        }
+      },
+      "search_results": [...],
+      "images": [...],
+      "choices": [{
+        "index": 0,
+        "finish_reason": "stop",
+        "message": {
+          "role": "assistant",
+          "content": "## Seattle Weather Forecast\n\nSeattle is experiencing...",
+          "reasoning_steps": [...]
+        },
+        "delta": {
+          "role": "assistant",
+          "content": ""
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python 处理函数">
+    ```python theme={null}
+    def handle_completion_done(chunk):
+        """处理流式传输结束"""
+        if chunk.object == "chat.completion.done":
+            print("\n\n[Stream Complete]")
+
+            # 最终聚合的消息
+            full_message = chunk.choices[0].message.content
+
+            # 最终的搜索结果
+            if hasattr(chunk, 'search_results'):
+                print(f"\nFinal sources: {len(chunk.search_results)}")
+
+            # 完整的用量与费用信息
+            if hasattr(chunk, 'usage'):
+                usage = chunk.usage
+                print(f"\nTokens: {usage.total_tokens}")
+
+                if hasattr(usage, 'cost'):
+                    print(f"Cost: ${usage.cost.total_cost:.4f}")
+
+            return {
+                'content': full_message,
+                'search_results': getattr(chunk, 'search_results', []),
+                'images': getattr(chunk, 'images', []),
+                'usage': getattr(chunk, 'usage', None)
+            }
+    ```
+  </Tab>
+
+  <Tab title="Typescript 处理函数">
+    ```typescript theme={null}
+    function handleCompletionDone(chunk: any) {
+      if (chunk.object === "chat.completion.done") {
+        console.log("\n\n[Stream Complete]");
+
+        // 最终聚合的消息
+        const fullMessage = chunk.choices[0].message.content;
+
+        // 最终的搜索结果
+        if (chunk.search_results) {
+          console.log(`\nFinal sources: ${chunk.search_results.length}`);
+        }
+
+        // 完整的用量与费用信息
+        if (chunk.usage) {
+          console.log(`\nTokens: ${chunk.usage.total_tokens}`);
+
+          if (chunk.usage.cost) {
+            console.log(`Cost: $${chunk.usage.cost.total_cost.toFixed(4)}`);
+          }
+        }
+
+        return {
+          content: fullMessage,
+          search_results: chunk.search_results || [],
+          images: chunk.images || [],
+          usage: chunk.usage || null
+        };
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="complete-implementation-examples">
+  ## 完整实现示例
+</div>
+
+<div id="full-concise-mode-handler">
+  ### 完整的简洁模式处理器
+</div>
+
+<Tabs>
+  <Tab title="Python SDK">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    class ConciseStreamHandler:
+        def __init__(self):
+            self.content = ""
+            self.reasoning_steps = []
+            self.search_results = []
+            self.images = []
+            self.usage = None
+
+        def stream_query(self, query: str, model: str = "sonar-pro"):
+            """Handle a complete concise streaming request"""
+            client = Perplexity()
+
+            stream = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": query}],
+                stream=True,
+                stream_mode="concise"
+            )
+
+            for chunk in stream:
+                self.process_chunk(chunk)
+
+            return self.get_result()
+
+        def process_chunk(self, chunk):
+            """Route chunk to appropriate handler"""
+            chunk_type = chunk.object
+
+            if chunk_type == "chat.reasoning":
+                self.handle_reasoning(chunk)
+            elif chunk_type == "chat.reasoning.done":
+                self.handle_reasoning_done(chunk)
+            elif chunk_type == "chat.completion.chunk":
+                self.handle_content(chunk)
+            elif chunk_type == "chat.completion.done":
+                self.handle_done(chunk)
+
+        def handle_reasoning(self, chunk):
+            """Process reasoning updates"""
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'reasoning_steps'):
+                for step in delta.reasoning_steps:
+                    self.reasoning_steps.append(step)
+                    print(f"💭 {step.thought}")
+
+        def handle_reasoning_done(self, chunk):
+            """Process end of reasoning"""
+            if hasattr(chunk, 'search_results'):
+                self.search_results = chunk.search_results
+                print(f"\n🔍 Found {len(self.search_results)} sources")
+
+            if hasattr(chunk, 'images'):
+                self.images = chunk.images
+                print(f"🖼️  Found {len(self.images)} images")
+
+            print("\n📝 Generating response...\n")
+
+        def handle_content(self, chunk):
+            """Process content chunks"""
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'content') and delta.content:
+                self.content += delta.content
+                print(delta.content, end='', flush=True)
+
+        def handle_done(self, chunk):
+            """Process completion"""
+            if hasattr(chunk, 'usage'):
+                self.usage = chunk.usage
+                print(f"\n\n✅ Complete | Tokens: {self.usage.total_tokens}")
+
+                if hasattr(self.usage, 'cost'):
+                    print(f"💰 Cost: ${self.usage.cost.total_cost:.4f}")
+
+        def get_result(self):
+            """Return complete result"""
+            return {
+                'content': self.content,
+                'reasoning_steps': self.reasoning_steps,
+                'search_results': self.search_results,
+                'images': self.images,
+                'usage': self.usage
+            }
+
+    # 使用示例
+    handler = ConciseStreamHandler()
+    result = handler.stream_query("What's the latest news in AI?")
+
+    print(f"\n\nFinal content length: {len(result['content'])} characters")
+    print(f"Sources used: {len(result['search_results'])}")
+    ```
+  </Tab>
+
+  <Tab title="TypeScript SDK">
+    ```typescript theme={null}
+    import Perplexity from '@perplexity-ai/perplexity_ai';
+
+    interface StreamResult {
+      content: string;
+      reasoning_steps: any[];
+      search_results: any[];
+      images: any[];
+      usage: any;
+    }
+
+    class ConciseStreamHandler {
+      private content: string = "";
+      private reasoning_steps: any[] = [];
+      private search_results: any[] = [];
+      private images: any[] = [];
+      private usage: any = null;
+
+      async streamQuery(query: string, model: string = "sonar-pro"): Promise<StreamResult> {
+        const client = new Perplexity();
+
+        const stream = await client.chat.completions.create({
+          model,
+          messages: [{ role: "user", content: query }],
+          stream: true,
+          stream_mode: "concise"
+        });
+
+        for await (const chunk of stream) {
+          this.processChunk(chunk);
+        }
+
+        return this.getResult();
+      }
+
+      private processChunk(chunk: any) {
+        const chunkType = chunk.object;
+
+        switch (chunkType) {
+          case "chat.reasoning":
+            this.handleReasoning(chunk);
+            break;
+          case "chat.reasoning.done":
+            this.handleReasoningDone(chunk);
+            break;
+          case "chat.completion.chunk":
+            this.handleContent(chunk);
+            break;
+          case "chat.completion.done":
+            this.handleDone(chunk);
+            break;
+        }
+      }
+
+      private handleReasoning(chunk: any) {
+        const delta = chunk.choices[0].delta;
+
+        if (delta.reasoning_steps) {
+          for (const step of delta.reasoning_steps) {
+            this.reasoning_steps.push(step);
+            console.log(`💭 ${step.thought}`);
+          }
+        }
+      }
+
+      private handleReasoningDone(chunk: any) {
+        if (chunk.search_results) {
+          this.search_results = chunk.search_results;
+          console.log(`\n🔍 Found ${this.search_results.length} sources`);
+        }
+
+        if (chunk.images) {
+          this.images = chunk.images;
+          console.log(`🖼️  Found ${this.images.length} images`);
+        }
+
+        console.log("\n📝 Generating response...\n");
+      }
+
+      private handleContent(chunk: any) {
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.content) {
+          this.content += delta.content;
+          process.stdout.write(delta.content);
+        }
+      }
+
+      private handleDone(chunk: any) {
+        if (chunk.usage) {
+          this.usage = chunk.usage;
+          console.log(`\n\n✅ Complete | Tokens: ${this.usage.total_tokens}`);
+
+          if (this.usage.cost) {
+            console.log(`💰 Cost: $${this.usage.cost.total_cost.toFixed(4)}`);
+          }
+        }
+      }
+
+      private getResult(): StreamResult {
+        return {
+          content: this.content,
+          reasoning_steps: this.reasoning_steps,
+          search_results: this.search_results,
+          images: this.images,
+          usage: this.usage
+        };
+      }
+    }
+
+    // 用法
+    const handler = new ConciseStreamHandler();
+    const result = await handler.streamQuery("What's the latest news in AI?");
+
+    console.log(`\n\nFinal content length: ${result.content.length} characters`);
+    console.log(`Sources used: ${result.search_results.length}`);
+    ```
+  </Tab>
+
+  <Tab title="原始 HTTP">
+    ```python theme={null}
+    import os
+    import requests
+    import json
+
+    def stream_concise_mode(query: str):
+        """使用原始 HTTP 处理简洁模式流式输出"""
+        url = "https://api.perplexity.ai/v1/sonar"
+        headers = {
+            "Authorization": f"Bearer {os.environ.get('PERPLEXITY_API_KEY')}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "sonar-pro",
+            "messages": [{"role": "user", "content": query}],
+            "stream": True,
+            "stream_mode": "concise"
+        }
+
+        response = requests.post(url, headers=headers, json=payload, stream=True)
+
+        content = ""
+        search_results = []
+        usage = None
+
+        for line in response.iter_lines():
+            if line:
+                line = line.decode('utf-8')
+                if line.startswith('data: '):
+                    data_str = line[6:]
+                    if data_str == '[DONE]':
+                        break
+
+                    try:
+                        chunk = json.loads(data_str)
+                        chunk_type = chunk.get('object')
+
+                        if chunk_type == 'chat.reasoning':
+                            # 处理推理过程
+                            delta = chunk['choices'][0]['delta']
+                            if 'reasoning_steps' in delta:
+                                for step in delta['reasoning_steps']:
+                                    print(f"💭 {step['thought']}")
+
+                        elif chunk_type == 'chat.reasoning.done':
+                            # 处理推理结束
+                            if 'search_results' in chunk:
+                                search_results = chunk['search_results']
+                                print(f"\n🔍 找到 {len(search_results)} 个来源\n")
+
+                        elif chunk_type == 'chat.completion.chunk':
+                            # 处理内容
+                            delta = chunk['choices'][0]['delta']
+                            if 'content' in delta and delta['content']:
+                                content += delta['content']
+                                print(delta['content'], end='', flush=True)
+
+                        elif chunk_type == 'chat.completion.done':
+                            # 处理生成结束
+                            if 'usage' in chunk:
+                                usage = chunk['usage']
+                                print(f"\n\n✅ Tokens: {usage['total_tokens']}")
+
+                    except json.JSONDecodeError:
+                        continue
+
+        return {
+            'content': content,
+            'search_results': search_results,
+            'usage': usage
+        }
+
+    # 用法
+    result = stream_concise_mode("人工智能领域最新消息是什么？")
+    ```
+  </Tab>
+</Tabs>
+
+<div id="best-practices">
+  ## 最佳实践
+</div>
+
+<Steps>
+  <Step title="在客户端聚合内容">
+    在简洁模式下，`choices.message` 不会增量更新，需要自行聚合各个数据块。
+
+    ```python theme={null}
+    # 自行跟踪内容
+    content = ""
+    for chunk in stream:
+        if chunk.object == "chat.completion.chunk":
+            if chunk.choices[0].delta.content:
+                content += chunk.choices[0].delta.content
+    ```
+  </Step>
+
+  <Step title="利用推理步骤提升透明度">
+    向用户展示推理步骤，提升透明度并增强信任。
+
+    ```python theme={null}
+    def display_reasoning(step):
+        """向用户展示推理过程"""
+        print(f"🔍 Searching for: {step.web_search.search_keywords}")
+        print(f"💭 {step.thought}")
+    ```
+  </Step>
+
+  <Step title="仅从 done 数据块中处理搜索结果">
+    搜索结果和用量信息仅出现在 `chat.reasoning.done` 和 `chat.completion.done` 数据块中。
+
+    ```python theme={null}
+    # 不要在其他类型的数据块中查找 search_results
+    if chunk.object in ["chat.reasoning.done", "chat.completion.done"]:
+        if hasattr(chunk, 'search_results'):
+            process_search_results(chunk.search_results)
+    ```
+  </Step>
+
+  <Step title="实现恰当的类型检查">
+    使用 `object` 字段将数据块分派给相应的处理函数。
+
+    ```python theme={null}
+    chunk_handlers = {
+        "chat.reasoning": handle_reasoning,
+        "chat.reasoning.done": handle_reasoning_done,
+        "chat.completion.chunk": handle_content,
+        "chat.completion.done": handle_done
+    }
+
+    handler = chunk_handlers.get(chunk.object)
+    if handler:
+        handler(chunk)
+    ```
+  </Step>
+
+  <Step title="从最后一个数据块中获取费用">
+    费用信息仅在 `chat.completion.done` 数据块中提供。
+
+    ```python theme={null}
+    if chunk.object == "chat.completion.done":
+        if hasattr(chunk.usage, 'cost'):
+            total_cost = chunk.usage.cost.total_cost
+            print(f"Request cost: ${total_cost:.4f}")
+    ```
+  </Step>
+</Steps>
+
+<div id="migration-from-full-mode">
+  ## 从完整模式迁移
+</div>
+
+如果你要从完整模式迁移到简洁模式，主要变化如下：
+
+<Tabs>
+  <Tab title="迁移前（完整模式）">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "What's the weather?"}],
+        stream=True
+        # stream_mode 默认为 "full"
+    )
+
+    for chunk in stream:
+        # 所有数据块都是 chat.completion.chunk
+        if chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="")
+
+        # 搜索结果可能出现在多个数据块中
+        if hasattr(chunk, 'search_results'):
+            print(f"Sources: {len(chunk.search_results)}")
+    ```
+  </Tab>
+
+  <Tab title="迁移后（简洁模式）">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "What's the weather?"}],
+        stream=True,
+        stream_mode="concise"  # 启用简洁模式
+    )
+
+    for chunk in stream:
+        # 存在多种数据块类型，需分别路由处理
+        if chunk.object == "chat.reasoning":
+            # 新增：处理推理步骤
+            if chunk.choices[0].delta.reasoning_steps:
+                print("Reasoning in progress...")
+
+        elif chunk.object == "chat.reasoning.done":
+            # 新增：推理完成，可获取搜索结果
+            if hasattr(chunk, 'search_results'):
+                print(f"Sources: {len(chunk.search_results)}")
+
+        elif chunk.object == "chat.completion.chunk":
+            # 内容数据块（与完整模式类似）
+            if chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end="")
+
+        elif chunk.object == "chat.completion.done":
+            # 包含完整元数据的最后一个数据块
+            print(f"\nTotal tokens: {chunk.usage.total_tokens}")
+    ```
+  </Tab>
+</Tabs>
+
+<div id="when-to-use-each-mode">
+  ## 何时使用各模式
+</div>
+
+<CardGroup cols={2}>
+  <Card title="使用 完整模式" icon="clipboard-list">
+    * 希望由 SDK 负责聚合的简单集成
+    * 需与现有实现保持向后兼容
+    * 无需查看推理过程时
+  </Card>
+
+  <Card title="使用 简洁模式" icon="bolt">
+    * 需优化带宽占用的生产应用
+    * 需要推理过程透明可见的应用
+    * 需展示推理过程的实时聊天界面
+    * 对成本敏感的应用
+  </Card>
+</CardGroup>
+
+<div id="resources">
+  ## 资源
+</div>
+
+* [流式响应指南](/zh/docs/agent-api/output-control#streaming-responses) - 通用流式传输文档
+* [Sonar API 指南](/zh/docs/sonar/quickstart) - 完整的 Sonar API 指南
+* [API 参考 - Sonar API](/zh/api-reference/sonar-post) - API 文档

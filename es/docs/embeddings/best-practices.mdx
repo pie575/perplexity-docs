@@ -1,0 +1,466 @@
+---
+title: "Buenas prácticas"
+description: "Optimiza tu flujo de trabajo con embeddings mediante procesamiento por lotes, almacenamiento en caché, patrones RAG y consejos de rendimiento."
+---
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+Esta guía cubre las buena prácticas para aprovechar al máximo la Embeddings API de Perplexity, incluidas la reducción de dimensiones, el procesamiento por lotes, los patrones de RAG y el manejo de errores.
+
+<div id="matryoshka-dimension-reduction">
+  ## Reducción de dimensiones Matryoshka
+</div>
+
+Los embeddings de Perplexity admiten el aprendizaje de representaciones Matryoshka, lo que permite reducir las dimensiones de los embeddings sin sacrificar calidad. Esto agiliza la búsqueda por similitud y reduce los costos de almacenamiento.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Dimensiones completas (2560 para el modelo 4b)
+  full_response = client.embeddings.create(
+      input=["Your text here"],
+      model="pplx-embed-v1-4b"
+  )
+  print(f"Full: {full_response.data[0].embedding}")  # cadena base64 de 2560 dimensiones
+
+  # Dimensiones reducidas: búsqueda más rápida, menos almacenamiento
+  reduced_response = client.embeddings.create(
+      input=["Your text here"],
+      model="pplx-embed-v1-4b",
+      dimensions=512
+  )
+  print(f"Reduced: {reduced_response.data[0].embedding}")  # cadena base64 de 512 dimensiones
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // Dimensiones completas (2560 para el modelo 4b)
+  const fullResponse = await client.embeddings.create({
+      input: ["Your text here"],
+      model: "pplx-embed-v1-4b"
+  });
+  console.log(`Full: ${fullResponse.data![0].embedding}`);
+
+  // Dimensiones reducidas: búsqueda más rápida, menos almacenamiento
+  const reducedResponse = await client.embeddings.create({
+      input: ["Your text here"],
+      model: "pplx-embed-v1-4b",
+      dimensions: 512
+  });
+  console.log(`Reduced: ${reducedResponse.data![0].embedding}`);
+  ```
+</CodeGroup>
+
+<Note>
+  **Compensación:** menos dimensiones = búsqueda más rápida + menos almacenamiento, pero una calidad ligeramente inferior. Comienza con las dimensiones completas y redúcelas si lo necesitas.
+</Note>
+
+<div id="encoding-formats">
+  ## Formatos de codificación
+</div>
+
+Controla la precisión y el tamaño de las salidas de embeddings:
+
+| Formato         | Descripción                                                                |  Tamaño decodificado  | Métrica de similitud | Caso de uso                                            |
+| --------------- | -------------------------------------------------------------------------- | :-------------------: | :------------------: | ------------------------------------------------------ |
+| `base64_int8`   | int8 con signo codificado en base64 (-128 a 127)                           |   dimensiones bytes   | Similitud del coseno | Predeterminado; buen equilibrio entre calidad y tamaño |
+| `base64_binary` | bits empaquetados codificados en base64 (1 bit por dimensión, LSB primero) | dimensiones / 8 bytes | Distancia de Hamming | Máxima compresión para recuperación a gran escala      |
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+
+  # Decodificar base64_int8 (predeterminado)
+  response = client.embeddings.create(
+      input=["Your text"],
+      model="pplx-embed-v1-4b"
+  )
+  int8_embedding = np.frombuffer(
+      base64.b64decode(response.data[0].embedding), dtype=np.int8
+  )
+
+  # Embeddings binarios para sistemas de recuperación a gran escala
+  response = client.embeddings.create(
+      input=["Your text"],
+      model="pplx-embed-v1-4b",
+      encoding_format="base64_binary"
+  )
+  binary_bytes = np.frombuffer(
+      base64.b64decode(response.data[0].embedding), dtype=np.uint8
+  )
+  # Desempaquetar bits: cada byte contiene 8 dimensiones (LSB primero)
+  binary_embedding = np.unpackbits(binary_bytes, bitorder="little")
+  ```
+
+  ```typescript TypeScript theme={null}
+  // Decodificar base64_int8 (predeterminado)
+  const response = await client.embeddings.create({
+      input: ["Your text"],
+      model: "pplx-embed-v1-4b"
+  });
+  const buffer = Buffer.from(response.data![0].embedding, 'base64');
+  const int8Embedding = new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+  // Embeddings binarios para sistemas de recuperación a gran escala
+  const binaryResponse = await client.embeddings.create({
+      input: ["Your text"],
+      model: "pplx-embed-v1-4b",
+      encoding_format: "base64_binary"
+  });
+  const binaryBuffer = Buffer.from(binaryResponse.data![0].embedding, 'base64');
+  // Cada byte contiene 8 dimensiones como bits empaquetados (LSB primero)
+  ```
+</CodeGroup>
+
+<Tip>
+  `base64_int8` ofrece la misma calidad que bfloat16 con un almacenamiento mucho menor. Usa `base64_binary` cuando necesites una compresión extrema en sistemas a gran escala.
+</Tip>
+
+<div id="similarity-metrics">
+  ## Métricas de similitud
+</div>
+
+Los modelos de embeddings de Perplexity generan embeddings **sin normalizar**. Elegir la métrica de similitud adecuada es fundamental para lograr una recuperación precisa.
+
+<Warning>
+  `pplx-embed-v1` y `pplx-embed-context-v1` generan de forma nativa embeddings sin normalizar y cuantizados en int8. **Debes** compararlos mediante similitud del coseno. Usar directamente el producto interno o la distancia L2 dará resultados incorrectos, ya que la mayoría de los modelos de embeddings vienen normalizados de antemano, pero los de Perplexity no.
+</Warning>
+
+<div id="int8-embeddings-base64_int8">
+  ### Embeddings int8 (`base64_int8`)
+</div>
+
+Compara usando **similitud del coseno**. Si tu base de datos vectorial no admite la similitud del coseno de forma nativa, convierte los embeddings a float32 y aplícales normalización L2 antes de almacenarlos:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+
+  def decode_and_normalize(b64_string):
+      """Decodifica y aplica normalización L2 para bases de datos vectoriales que solo admiten producto interno."""
+      embedding = np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+      norm = np.linalg.norm(embedding)
+      if norm > 0:
+          embedding = embedding / norm
+      return embedding
+
+  # Tras la normalización, similitud del coseno == producto interno
+  ```
+
+  ```typescript TypeScript theme={null}
+  function decodeAndNormalize(b64String: string): Float32Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      const int8 = new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+      const float32 = new Float32Array(int8.length);
+
+      // Convertir a float32
+      let norm = 0;
+      for (let i = 0; i < int8.length; i++) {
+          float32[i] = int8[i];
+          norm += float32[i] * float32[i];
+      }
+
+      // Normalización L2 para que el producto interno == similitud del coseno
+      norm = Math.sqrt(norm);
+      if (norm > 0) {
+          for (let i = 0; i < float32.length; i++) {
+              float32[i] /= norm;
+          }
+      }
+      return float32;
+  }
+  ```
+</CodeGroup>
+
+<div id="binary-embeddings-base64_binary">
+  ### Embeddings binarios (`base64_binary`)
+</div>
+
+Compáralos usando la **distancia de Hamming**. Los embeddings binarios codifican cada dimensión como un único bit, por lo que la métrica de distancia natural es el número de bits que difieren entre dos vectores.
+
+```python theme={null}
+import numpy as np
+
+def hamming_distance(a: np.ndarray, b: np.ndarray) -> int:
+    """Hamming distance between two binary vectors (as uint8 packed bits)."""
+    return np.unpackbits(np.bitwise_xor(a, b)).sum()
+```
+
+<Note>
+  La mayoría de las bases de datos vectoriales (Pinecone, Weaviate, Qdrant, Milvus) admiten la similitud del coseno como métrica de distancia. Verifica la configuración de tu base de datos antes de indexar los embeddings.
+</Note>
+
+<div id="rag-pattern">
+  ## Patrón RAG
+</div>
+
+Combina embeddings con la Agentic Research API de Perplexity para generación aumentada por recuperación (RAG):
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string):
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a, b):
+      return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+  # 1. Tu base de conocimiento (genera los embeddings una vez y guárdalos en una base de datos vectorial)
+  knowledge_base = [
+      "Perplexity API provides web-grounded AI responses",
+      "The Embeddings API supports Matryoshka dimension reduction",
+      "Contextualized embeddings share context across document chunks"
+  ]
+
+  kb_response = client.embeddings.create(input=knowledge_base, model="pplx-embed-v1-4b")
+  kb_embeddings = [decode_embedding(emb.embedding) for emb in kb_response.data]
+
+  # 2. Consulta del usuario
+  user_query = "How do I reduce embedding dimensions?"
+
+  # 3. Busca el contexto relevante
+  query_response = client.embeddings.create(input=[user_query], model="pplx-embed-v1-4b")
+  query_embedding = decode_embedding(query_response.data[0].embedding)
+
+  scores = [(i, cosine_similarity(query_embedding, emb)) for i, emb in enumerate(kb_embeddings)]
+  top_docs = sorted(scores, key=lambda x: x[1], reverse=True)[:2]
+  context = "\n".join([knowledge_base[i] for i, _ in top_docs])
+
+  # 4. Genera la respuesta con el contexto
+  response = client.responses.create(
+      model="openai/gpt-5.5",
+      input=f"Answer using this context:\n\n{context}\n\nQuestion: {user_query}"
+  )
+
+  print(response.output[0].content[0].text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dotProduct = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dotProduct += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // 1. Tu base de conocimiento
+  const knowledgeBase = [
+      "Perplexity API provides web-grounded AI responses",
+      "The Embeddings API supports Matryoshka dimension reduction",
+      "Contextualized embeddings share context across document chunks"
+  ];
+
+  const kbResponse = await client.embeddings.create({
+      input: knowledgeBase,
+      model: "pplx-embed-v1-4b"
+  });
+  const kbEmbeddings = kbResponse.data!.map(emb => decodeEmbedding(emb.embedding!));
+
+  // 2. Consulta del usuario
+  const userQuery = "How do I reduce embedding dimensions?";
+
+  // 3. Busca el contexto relevante
+  const queryResponse = await client.embeddings.create({
+      input: [userQuery],
+      model: "pplx-embed-v1-4b"
+  });
+  const queryEmbedding = decodeEmbedding(queryResponse.data![0].embedding!);
+
+  const scores = kbEmbeddings.map((emb, i) => ({
+      index: i,
+      score: cosineSimilarity(queryEmbedding, emb)
+  }));
+  const topDocs = scores.sort((a, b) => b.score - a.score).slice(0, 2);
+  const context = topDocs.map(d => knowledgeBase[d.index]).join("\n");
+
+  // 4. Genera la respuesta con el contexto
+  const response = await client.responses.create({
+      model: "openai/gpt-5.5",
+      input: `Answer using this context:\n\n${context}\n\nQuestion: ${userQuery}`
+  });
+
+  console.log((response.output[0] as any).content[0].text);
+  ```
+</CodeGroup>
+
+<div id="batch-processing">
+  ## Procesamiento por lotes
+</div>
+
+Procesa grandes conjuntos de datos de forma eficiente con lotes asíncronos:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  from perplexity import AsyncPerplexity
+
+  async def batch_embed(texts: list[str], batch_size: int = 100):
+      async with AsyncPerplexity() as client:
+          results = []
+          for i in range(0, len(texts), batch_size):
+              batch = texts[i:i + batch_size]
+              response = await client.embeddings.create(
+                  input=batch,
+                  model="pplx-embed-v1-4b"
+              )
+              results.extend(response.data)
+              print(f"Processed {min(i + batch_size, len(texts))}/{len(texts)}")
+          return results
+
+  # Uso
+  texts = ["Document " + str(i) for i in range(1000)]
+  embeddings = asyncio.run(batch_embed(texts))
+  print(f"Generated {len(embeddings)} embeddings")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  async function batchEmbed(texts: string[], batchSize: number = 100) {
+      const client = new Perplexity();
+      const results: any[] = [];
+
+      for (let i = 0; i < texts.length; i += batchSize) {
+          const batch = texts.slice(i, i + batchSize);
+          const response = await client.embeddings.create({
+              input: batch,
+              model: "pplx-embed-v1-4b"
+          });
+          results.push(...(response.data ?? []));
+          console.log(`Processed ${Math.min(i + batchSize, texts.length)}/${texts.length}`);
+      }
+
+      return results;
+  }
+
+  // Uso
+  const texts = Array.from({ length: 1000 }, (_, i) => `Document ${i}`);
+  const embeddings = await batchEmbed(texts);
+  console.log(`Generated ${embeddings.length} embeddings`);
+  ```
+</CodeGroup>
+
+<div id="error-handling">
+  ## Manejo de errores
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  try:
+      response = client.embeddings.create(
+          input=["Your text"],
+          model="pplx-embed-v1-4b"
+      )
+  except perplexity.BadRequestError as e:
+      print(f"Invalid request: {e}")
+  except perplexity.RateLimitError:
+      print("Rate limited, please retry later")
+  except perplexity.APIStatusError as e:
+      print(f"API error: {e.status_code}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  try {
+      const response = await client.embeddings.create({
+          input: ["Your text"],
+          model: "pplx-embed-v1-4b"
+      });
+  } catch (error) {
+      if (error instanceof Perplexity.BadRequestError) {
+          console.error("Invalid request:", error.message);
+      } else if (error instanceof Perplexity.RateLimitError) {
+          console.error("Rate limited, please retry later");
+      } else if (error instanceof Perplexity.APIError) {
+          console.error(`API error: ${error.status}`);
+      }
+  }
+  ```
+</CodeGroup>
+
+<div id="tips">
+  ## Consejos
+</div>
+
+<Steps>
+  <Step title="Agrupa las solicitudes en lotes">
+    Envía hasta 512 textos por solicitud para maximizar el rendimiento y reducir las llamadas a la API.
+  </Step>
+
+  <Step title="Usa el mismo modelo">
+    Utiliza siempre el mismo modelo de embeddings tanto para las consultas como para los documentos, de modo que las puntuaciones de similitud sean coherentes.
+  </Step>
+
+  <Step title="Usa similitud del coseno">
+    Los embeddings de Perplexity no están normalizados. Usa siempre similitud del coseno para `base64_int8` y distancia de Hamming para `base64_binary`. Si tu base de datos vectorial solo admite producto interno, normaliza los embeddings con L2 antes de almacenarlos.
+  </Step>
+
+  <Step title="Almacena los embeddings en caché">
+    Guarda los embeddings calculados en una base de datos vectorial. Nunca vuelvas a calcular los embeddings de un mismo texto.
+  </Step>
+
+  <Step title="Usa Matryoshka con criterio">
+    Empieza con las dimensiones completas para obtener la mejor calidad. Redúcelas solo si necesitas búsquedas más rápidas o menos almacenamiento.
+  </Step>
+
+  <Step title="Binario para gran escala">
+    Usa el formato de codificación `base64_binary` en sistemas de recuperación a gran escala donde el almacenamiento y la velocidad son críticos.
+  </Step>
+</Steps>
+
+<div id="related-resources">
+  ## Recursos relacionados
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Inicio rápido" icon="rocket" href="/es/docs/embeddings/quickstart">
+    Empieza a usar las funciones básicas de embeddings.
+  </Card>
+
+  <Card title="Embeddings contextualizados" icon="file-lines" href="/es/docs/embeddings/contextualized-embeddings">
+    Embeddings que tienen en cuenta el documento para fragmentos con contexto compartido.
+  </Card>
+
+  <Card title="Referencia de la API" icon="book" href="/es/api-reference/embeddings-post">
+    Documentación completa de la Embeddings API.
+  </Card>
+
+  <Card title="Guía del SDK" icon="code" href="/es/docs/sdk/overview">
+    Funciones y buenas prácticas del SDK de Perplexity.
+  </Card>
+</CardGroup>

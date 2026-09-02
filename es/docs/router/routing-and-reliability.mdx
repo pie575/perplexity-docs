@@ -1,0 +1,55 @@
+---
+title: "Enrutamiento y fiabilidad"
+description: "Cómo la Router API de Perplexity enruta las solicitudes entre los despliegues de modelos y qué ocurre automáticamente cuando un proveedor se degrada o falla."
+---
+
+<Note>
+  La Router API está en versión preliminar privada. Escribe a [api@perplexity.ai](mailto:api@perplexity.ai) para solicitar acceso.
+</Note>
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+Según el modelo, un id de modelo del [catálogo](/es/docs/router/models) puede ser atendido por cualquiera de varios despliegues subyacentes. La plataforma decide dónde se ejecuta cada solicitud: no hay parámetros de enrutamiento que configurar ni configuración por proveedor de tu parte. Envías un id de modelo y el enrutamiento, la supervisión del estado y la conmutación por error ocurren automáticamente.
+
+Las respuestas siempre devuelven el id de modelo que solicitaste y la facturación siempre aplica las [tarifas publicadas](/es/docs/router/models) de ese modelo, sin importar qué despliegue atendió la solicitud.
+
+<div id="how-requests-are-routed">
+  ## Cómo se enrutan las solicitudes
+</div>
+
+Cuando un modelo tiene más de un despliegue, el tráfico se reparte entre ellos según una distribución ponderada que se ajusta continuamente en función del estado observado: tasas de error, capacidad y latencia. Los despliegues que se degradan ceden tráfico automáticamente a los que están en buen estado y lo recuperan de forma gradual a medida que se restablecen.
+
+Las conversaciones de varios turnos se mantienen en el mismo despliegue siempre que es posible, de modo que el almacenamiento en caché de prompts sigue funcionando entre solicitudes: envía el mismo prefijo de conversación y te beneficiarás de los [precios de lectura de caché](/es/docs/router/models) sin hacer nada especial.
+
+<div id="automatic-failover">
+  ## Conmutación por error automática
+</div>
+
+Cuando un despliegue falla —por un error del proveedor, un límite de tasa o un tiempo de espera agotado—, la solicitud se reintenta en otro despliegue de ese modelo, si hay alguno disponible. Cada intento está acotado por los límites de tiempo hasta el primer token y de duración total; superar cualquiera de ellos cuenta como un fallo.
+
+Dos comportamientos que conviene tener en cuenta al diseñar:
+
+* **Los errores que puedes corregir no se reintentan.** Los errores de cliente deterministas —una solicitud no válida o un prompt que excede la ventana de contexto del modelo— se devuelven de inmediato como un `400` en lugar de reintentarse en otros despliegues.
+* **Cuando fallan todos los despliegues**, la solicitud devuelve un `429` que indica que el modelo está sobrecargado, junto con una cabecera `Retry-After`. Reintentar después del intervalo indicado es seguro: las solicitudes que fallan antes de producir salida alguna no se facturan.
+
+<div id="streaming-and-reliability">
+  ## Streaming y fiabilidad
+</div>
+
+Los fallos previos al primer token se gestionan de forma transparente: la conmutación por error se produce antes de que comience el stream, por lo que recibes una respuesta normal. Si un stream falla después de haber empezado a generar salida, finaliza con un evento de error dentro del propio flujo; tu cliente debe tratar como incompleto todo stream que no haya terminado correctamente. Las solicitudes en streaming se facturan según los tokens realmente entregados.
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Modelos y precios" icon="brain" href="/es/docs/router/models">
+    El catálogo de modelos con las tarifas por token.
+  </Card>
+
+  <Card title="Referencia de la API" icon="code" href="/es/api-reference/gateway-chat-completions-post">
+    Esquemas de solicitud y respuesta, incluida la estructura de los errores.
+  </Card>
+</CardGroup>

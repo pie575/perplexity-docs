@@ -1,0 +1,151 @@
+---
+title: "AG2 で Perplexity を使う"
+description: "AG2（AutoGen）エージェント内で Perplexity の Search API をツールとして利用します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+AG2 には、[Perplexity Search API](/ja/docs/search/quickstart) を AG2 ネイティブのツールとしてラップした `PerplexitySearchToolkit` が同梱されています。このツールは LLM による回答を生成せず、ランク付けされたウェブ検索結果 (タイトル、URL、スニペット、日付) を返します。そのため token 使用量を最小限に抑えられ、結果をどう活用するかは呼び出し元のエージェントが判断できます。
+
+<Info>
+  **AG2** (旧 AutoGen) は、マルチエージェントの対話型 AI システムを構築するためのオープンソースフレームワークです。詳しくは [ag2.ai](https://ag2.ai) をご覧ください。
+</Info>
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+pip install "ag2[perplexity]"
+```
+
+<div id="api-key-setup">
+  ## API キーの設定
+</div>
+
+Perplexity API キーを環境変数に設定するか、ツールキットのコンストラクターに渡してください。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  Perplexity のダッシュボードから API キーを発行します。
+</Card>
+
+<div id="quick-start">
+  ## クイックスタート
+</div>
+
+`PerplexitySearchToolkit` を AG2 の `Agent` に登録します。
+
+```python theme={null}
+from autogen.beta import Agent
+from autogen.beta.tools.search import PerplexitySearchToolkit
+
+toolkit = PerplexitySearchToolkit()
+search = toolkit.search()
+
+agent = Agent(
+    "researcher",
+    prompt="Answer using fresh information from the web.",
+    tools=[search],
+)
+
+await agent.ask("What were the top tech announcements this week?")
+```
+
+このツールは内部で Perplexity Search API を呼び出し、構造化された `PerplexitySearchResult` オブジェクトを返します。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+検索パラメータはすべて `toolkit.search()` に渡され、Search API へ転送されます。
+
+```python theme={null}
+from autogen.beta.tools.search import PerplexitySearchToolkit
+
+toolkit = PerplexitySearchToolkit()
+search = toolkit.search(
+    max_results=5,
+    max_tokens_per_page=512,
+    search_domain_filter=["arxiv.org", "-medium.com"],  # 先頭に '-' を付けると除外
+    search_recency_filter="week",                         # hour | day | week | month | year
+    search_after_date_filter="1/1/2025",
+    search_before_date_filter="12/31/2025",
+)
+```
+
+また、任意のパラメータを AG2 の `Variable` として渡すこともできます。この場合、実行時に会話コンテキストから値が解決されます。
+
+```python theme={null}
+from autogen.beta import Variable
+from autogen.beta.tools.search import PerplexitySearchToolkit
+
+toolkit = PerplexitySearchToolkit()
+search = toolkit.search(
+    max_results=Variable("user_max"),
+    search_recency_filter=Variable(),  # パラメーター名と同名の変数から解決される
+)
+```
+
+<div id="response-shape">
+  ## レスポンスの構造
+</div>
+
+各呼び出しは、元のクエリと `PerplexitySearchResult` のリストを含む `PerplexitySearchResponse` を返します。
+
+```python theme={null}
+@dataclass(slots=True)
+class PerplexitySearchResult:
+    title: str
+    url: str
+    snippet: str | None = None
+    date: str | None = None
+
+@dataclass(slots=True)
+class PerplexitySearchResponse:
+    query: str
+    results: list[PerplexitySearchResult]
+    content: str | None = None
+    citations: list[str]
+    images: list[PerplexityImageMeta]
+```
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="AG2 ドキュメント" icon="book" href="https://docs.ag2.ai">
+    AG2 でマルチエージェントシステムを構築する。
+  </Card>
+
+  <Card title="ツールのソースコード" icon="brand-github" href="https://github.com/ag2ai/ag2/blob/main/autogen/beta/tools/search/perplexity.py">
+    PerplexitySearchToolkit の実装。
+  </Card>
+
+  <Card title="Search API クイックスタート" icon="search" href="/ja/docs/search/quickstart">
+    基盤となる Perplexity Search API について詳しく知る。
+  </Card>
+
+  <Card title="共通ツールキット" icon="toolbox" href="https://docs.ag2.ai/docs/beta/tools/common_toolkits">
+    AG2 の組み込みツールをすべて見る。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+連携でお困りですか？
+
+* [AG2 ドキュメント](https://docs.ag2.ai)を参照する
+* [FAQ](/ja/docs/resources/faq)を確認する

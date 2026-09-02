@@ -1,0 +1,541 @@
+---
+title: "Recherche académique et scientifique"
+description: "Utilisez le filtrage par domaine de l'Agent API pour restreindre la recherche aux sources académiques, extraire les DOI et les métadonnées des articles, constituer des chaînes de citations et rédiger des synthèses de recherche correctement sourcées"
+---
+
+Ce guide explique comment utiliser le paramètre `search_domain_filter` de l&#39;Agent API pour restreindre les résultats de recherche aux sources académiques et scientifiques. Vous apprendrez à extraire les métadonnées des articles (DOI, auteurs, dates de publication), à constituer des chaînes de citations entre articles connexes et à produire des synthèses de recherche correctement sourcées.
+
+<Info>
+  Le paramètre `search_domain_filter` de l&#39;outil `web_search` de l&#39;Agent API détermine les domaines dans lesquels la recherche puise ses résultats. En filtrant sur des domaines académiques tels que `arxiv.org`, `nature.com` et `.edu`, vous limitez les résultats aux revues à comité de lecture, aux serveurs de prépublications et aux bases de données académiques. Pour en savoir plus sur le filtrage, consultez la documentation [Filtres de l&#39;Agent API](/fr/docs/agent-api/tools/web-search#filters).
+</Info>
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+Installez le SDK Perplexity :
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+Si vous n&#39;avez pas encore de clé API :
+
+<Card title="Obtenez votre clé API Perplexity" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Cliquez ici" href="https://perplexity.ai/account/api">
+  Rendez-vous dans l&#39;onglet **API Keys** du portail API et générez une nouvelle clé.
+</Card>
+
+Exportez ensuite votre clé API dans une variable d&#39;environnement :
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="basic-academic-search">
+  ## Recherche académique de base
+</div>
+
+Utilisez `search_domain_filter` pour limiter l&#39;outil `web_search` de l&#39;Agent API aux seules sources académiques.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  ACADEMIC_DOMAINS = [
+      "arxiv.org",
+      "pubmed.ncbi.nlm.nih.gov",
+      "nature.com",
+      "science.org",
+      ".edu",
+      "scholar.google.com",
+      "semanticscholar.org",
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the latest findings on the relationship between gut microbiome and mental health?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ACADEMIC_DOMAINS,
+          },
+      }],
+      instructions="Focus on peer-reviewed academic sources. Cite papers with authors and publication years when possible.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const ACADEMIC_DOMAINS = [
+      "arxiv.org",
+      "pubmed.ncbi.nlm.nih.gov",
+      "nature.com",
+      "science.org",
+      ".edu",
+      "scholar.google.com",
+      "semanticscholar.org",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the latest findings on the relationship between gut microbiome and mental health?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ACADEMIC_DOMAINS,
+          },
+      }],
+      instructions: "Focus on peer-reviewed academic sources. Cite papers with authors and publication years when possible.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash curl theme={null}
+  curl "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.4",
+      "input": "What are the latest findings on the relationship between gut microbiome and mental health?",
+      "tools": [{"type": "web_search", "filters": {"search_domain_filter": ["arxiv.org", "pubmed.ncbi.nlm.nih.gov", "nature.com", "science.org", ".edu"]}}],
+      "instructions": "Focus on peer-reviewed academic sources. Cite papers with authors and publication years when possible."
+    }'
+  ```
+</CodeGroup>
+
+<Tip>
+  Le filtrage par domaines académiques cible les articles issus de PubMed, arXiv, Google Scholar, Semantic Scholar et des grands éditeurs de revues. Associez `search_domain_filter` à des `instructions` explicites pour que le modèle se concentre sur des contenus académiques évalués par les pairs ou en prépublication.
+</Tip>
+
+<div id="extracting-paper-metadata">
+  ## Extraction des métadonnées d&#39;articles
+</div>
+
+Utilisez les sorties structurées pour extraire des métadonnées détaillées d&#39;articles à partir de résultats de recherche académique.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Utiliser l'Agent API avec web_search pour une extraction structurée
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Find the 5 most cited recent papers on transformer architectures in computer vision (Vision Transformers).",
+      tools=[{"type": "web_search"}],
+      instructions=(
+          "Search for academic papers only. For each paper, extract the title, authors, "
+          "publication year, journal or venue, DOI if available, and a one-sentence summary of the key contribution."
+      ),
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "academic_papers",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "query": {"type": "string"},
+                      "papers": {
+                          "type": "array",
+                          "items": {
+                              "type": "object",
+                              "properties": {
+                                  "title": {"type": "string"},
+                                  "authors": {"type": "string"},
+                                  "year": {"type": "integer"},
+                                  "venue": {"type": "string"},
+                                  "doi": {"type": "string"},
+                                  "key_contribution": {"type": "string"},
+                              },
+                              "required": ["title", "authors", "year", "venue", "doi", "key_contribution"],
+                              "additionalProperties": false,
+                          },
+                      },
+                  },
+                  "required": ["query", "papers"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  data = json.loads(response.output_text)
+  print(f"Query: {data['query']}\n")
+
+  for paper in data["papers"]:
+      print(f"  {paper['title']}")
+      print(f"    Authors: {paper['authors']}")
+      print(f"    Venue: {paper['venue']} ({paper['year']})")
+      if paper["doi"]:
+          print(f"    DOI: {paper['doi']}")
+      print(f"    Contribution: {paper['key_contribution']}")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "Find the 5 most cited recent papers on transformer architectures in computer vision (Vision Transformers).",
+      tools: [{ type: "web_search" }],
+      instructions: "Search for academic papers only. For each paper, extract the title, authors, publication year, journal or venue, DOI if available, and a one-sentence summary of the key contribution.",
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "academic_papers",
+              schema: {
+                  type: "object",
+                  properties: {
+                      query: { type: "string" },
+                      papers: {
+                          type: "array",
+                          items: {
+                              type: "object",
+                              properties: {
+                                  title: { type: "string" },
+                                  authors: { type: "string" },
+                                  year: { type: "integer" },
+                                  venue: { type: "string" },
+                                  doi: { type: "string" },
+                                  key_contribution: { type: "string" },
+                              },
+                              required: ["title", "authors", "year", "venue", "doi", "key_contribution"],
+                          },
+                      },
+                  },
+                  required: ["query", "papers"],
+              },
+          },
+      },
+  });
+
+  const data = JSON.parse(response.output_text);
+  console.log(`Query: ${data.query}\n`);
+
+  for (const paper of data.papers) {
+      console.log(`  ${paper.title}`);
+      console.log(`    Authors: ${paper.authors}`);
+      console.log(`    Venue: ${paper.venue} (${paper.year})`);
+      if (paper.doi) console.log(`    DOI: ${paper.doi}`);
+      console.log(`    Contribution: ${paper.key_contribution}`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<div id="building-citation-chains">
+  ## Construire des chaînes de citations
+</div>
+
+Retracez la façon dont les articles se citent les uns les autres pour comprendre l&#39;évolution d&#39;une idée dans la littérature.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def find_citing_papers(paper_title: str, depth: int = 0, max_depth: int = 2) -> dict:
+      """Trouve récursivement les articles qui citent un article donné."""
+      indent = "  " * depth
+      print(f"{indent}Searching citations for: {paper_title}...")
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=f"What are the 3 most important papers that directly cite or build upon '{paper_title}'?",
+          tools=[{"type": "web_search"}],
+          instructions="Focus on academic papers only. Return papers that explicitly reference or extend the given work.",
+          response_format={
+              "type": "json_schema",
+              "json_schema": {
+                  "name": "citing_papers",
+                  "schema": {
+                      "type": "object",
+                      "properties": {
+                          "source_paper": {"type": "string"},
+                          "citing_papers": {
+                              "type": "array",
+                              "items": {
+                                  "type": "object",
+                                  "properties": {
+                                      "title": {"type": "string"},
+                                      "authors": {"type": "string"},
+                                      "year": {"type": "integer"},
+                                      "relationship": {"type": "string"},
+                                  },
+                                  "required": ["title", "authors", "year", "relationship"],
+                                  "additionalProperties": false,
+                              },
+                          },
+                      },
+                      "required": ["source_paper", "citing_papers"],
+                      "additionalProperties": false,
+                  },
+              },
+          },
+      )
+
+      data = json.loads(response.output_text)
+      result = {
+          "paper": paper_title,
+          "cited_by": [],
+      }
+
+      for citing in data["citing_papers"]:
+          entry = {
+              "title": citing["title"],
+              "authors": citing["authors"],
+              "year": citing["year"],
+              "relationship": citing["relationship"],
+          }
+
+          # Récursion pour des chaînes de citations plus profondes
+          if depth < max_depth:
+              entry["cited_by"] = find_citing_papers(citing["title"], depth + 1, max_depth).get("cited_by", [])
+
+          result["cited_by"].append(entry)
+
+      return result
+
+
+  # Commencer par un article fondateur
+  chain = find_citing_papers("Attention Is All You Need", max_depth=1)
+  print(json.dumps(chain, indent=2))
+  ```
+</CodeGroup>
+
+<Warning>
+  La profondeur des chaînes de citations croît de façon exponentielle. Gardez une valeur faible pour `max_depth` (1 à 2) afin d&#39;éviter un nombre excessif d&#39;appels à l&#39;API. Pour des graphes de citations exhaustifs, utilisez des outils dédiés comme l&#39;API de Semantic Scholar, en complément de Perplexity pour les synthèses.
+</Warning>
+
+<div id="research-summary-with-attribution">
+  ## Synthèse de recherche avec attribution des sources
+</div>
+
+Générez une synthèse de recherche qui attribue correctement chaque affirmation à l&#39;article dont elle provient.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  ACADEMIC_DOMAINS = [
+      "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "nature.com",
+      "science.org", ".edu", "scholar.google.com",
+  ]
+
+
+  def academic_research_summary(topic: str) -> str:
+      """Génère une synthèse de recherche académique avec les citations appropriées."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=(
+              f"Provide a comprehensive academic literature review on: {topic}. "
+              "Include specific findings, methodologies, and conclusions from recent papers. "
+              "Cite each claim with its source."
+          ),
+          tools=[{
+              "type": "web_search",
+              "filters": {
+                  "search_domain_filter": ACADEMIC_DOMAINS,
+              },
+          }],
+          instructions=(
+              "Search for peer-reviewed academic sources only. For each claim, "
+              "attribute it to the specific paper with author names and year. "
+              "Format the output as a structured literature review with a references section."
+          ),
+      )
+
+      return f"# Literature Review: {topic}\n\n{response.output_text}"
+
+
+  report = academic_research_summary(
+      "the effectiveness of large language models for automated code review"
+  )
+  print(report)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const ACADEMIC_DOMAINS = [
+      "arxiv.org", "pubmed.ncbi.nlm.nih.gov", "nature.com",
+      "science.org", ".edu", "scholar.google.com",
+  ];
+
+  async function academicResearchSummary(topic: string): Promise<string> {
+      const response = await client.responses.create({
+          model: "openai/gpt-5.4",
+          input: `Provide a comprehensive academic literature review on: ${topic}. Include specific findings, methodologies, and conclusions from recent papers. Cite each claim with its source.`,
+          tools: [{
+              type: "web_search" as const,
+              filters: {
+                  search_domain_filter: ACADEMIC_DOMAINS,
+              },
+          }],
+          instructions: "Search for peer-reviewed academic sources only. For each claim, attribute it to the specific paper with author names and year. Format the output as a structured literature review with a references section.",
+      });
+
+      return `# Literature Review: ${topic}\n\n${response.output_text}`;
+  }
+
+  const report = await academicResearchSummary(
+      "the effectiveness of large language models for automated code review"
+  );
+  console.log(report);
+  ```
+</CodeGroup>
+
+<div id="multi-field-academic-search">
+  ## Recherche académique multidisciplinaire
+</div>
+
+Utilisez des filtres de domaines propres à chaque discipline pour effectuer des recherches dans différents champs académiques.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  ACADEMIC_DOMAINS = {
+      "biomedical": ["pubmed.ncbi.nlm.nih.gov", "nih.gov", "thelancet.com", "nejm.org"],
+      "computer_science": ["arxiv.org", "dl.acm.org", "ieee.org", "openreview.net"],
+      "social_science": ["jstor.org", "ssrn.com", "journals.sagepub.com"],
+  }
+
+
+  def field_specific_search(query: str, field: str) -> dict:
+      """Recherche de littérature académique dans une discipline donnée."""
+      domains = ACADEMIC_DOMAINS.get(field, [])
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=query,
+          tools=[{
+              "type": "web_search",
+              "filters": {
+                  "search_domain_filter": domains,
+              },
+          }] if domains else [{"type": "web_search"}],
+          instructions=f"Search for peer-reviewed academic sources in the {field.replace('_', ' ')} field. Cite papers with authors and years.",
+      )
+
+      return {
+          "field": field,
+          "content": response.output_text,
+      }
+
+
+  # Recherche dans plusieurs disciplines
+  query = "What are the ethical implications of AI-generated content?"
+  fields = ["computer_science", "social_science"]
+
+  for field in fields:
+      result = field_specific_search(query, field)
+      print(f"\n{'='*60}")
+      print(f"Field: {result['field']}")
+      print(f"{'='*60}")
+      print(result["content"][:500])
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const ACADEMIC_DOMAINS: Record<string, string[]> = {
+      biomedical: ["pubmed.ncbi.nlm.nih.gov", "nih.gov", "thelancet.com", "nejm.org"],
+      computer_science: ["arxiv.org", "dl.acm.org", "ieee.org", "openreview.net"],
+      social_science: ["jstor.org", "ssrn.com", "journals.sagepub.com"],
+  };
+
+  async function fieldSpecificSearch(query: string, field: string) {
+      const domains = ACADEMIC_DOMAINS[field] ?? [];
+
+      const response = await client.responses.create({
+          model: "openai/gpt-5.4",
+          input: query,
+          tools: domains.length > 0
+              ? [{ type: "web_search" as const, filters: { search_domain_filter: domains } }]
+              : [{ type: "web_search" as const }],
+          instructions: `Search for peer-reviewed academic sources in the ${field.replace("_", " ")} field. Cite papers with authors and years.`,
+      });
+
+      return {
+          field,
+          content: response.output_text,
+      };
+  }
+
+  const query = "What are the ethical implications of AI-generated content?";
+  const fields = ["computer_science", "social_science"];
+
+  for (const field of fields) {
+      const result = await fieldSpecificSearch(query, field);
+      console.log(`\n${"=".repeat(60)}`);
+      console.log(`Field: ${result.field}`);
+      console.log("=".repeat(60));
+      console.log(result.content.slice(0, 500));
+  }
+  ```
+</CodeGroup>
+
+<div id="tips-and-best-practices">
+  ## Conseils et bonnes pratiques
+</div>
+
+1. **Utilisez `search_domain_filter` avec des domaines académiques** pour restreindre les résultats aux sources évaluées par des pairs. Ciblez des domaines comme `arxiv.org`, `nature.com`, `pubmed.ncbi.nlm.nih.gov` et `.edu`.
+
+2. **Utilisez `instructions` pour orienter la portée académique.** Demandez au modèle de privilégier les articles évalués par des pairs, de citer les auteurs et les années, et de se concentrer sur des disciplines précises.
+
+3. **Utilisez des listes de domaines propres à chaque discipline** pour limiter les résultats à certains éditeurs ou bases de données (par exemple PubMed pour le biomédical, arXiv pour l&#39;informatique).
+
+4. **Utilisez des sorties structurées** pour l&#39;extraction de métadonnées. Les schémas JSON garantissent des métadonnées d&#39;articles cohérentes d&#39;une requête à l&#39;autre.
+
+5. **Demandez des détails précis dans votre prompt.** Réclamez « les auteurs, l&#39;année, la revue et les principaux résultats » pour obtenir des métadonnées plus complètes dans la réponse.
+
+6. **Combinez `search_domain_filter` et `search_recency_filter`** pour les recherches où l&#39;actualité compte. Utilisez `"week"`, `"month"` ou `"year"` pour trouver des publications récentes.
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Filtres de l'Agent API" icon="filter" href="/fr/docs/agent-api/tools/web-search#filters">
+    Référence complète des filtres de domaine, de récence et de localisation de l&#39;Agent API.
+  </Card>
+
+  <Card title="Sorties structurées" icon="adjustments" href="/fr/docs/cookbook/articles/structured-output-extraction/README">
+    Extrayez du JSON typé pour les métadonnées d&#39;articles scientifiques et les résultats de recherche.
+  </Card>
+
+  <Card title="Filtrage par domaine" icon="filter" href="/fr/docs/cookbook/articles/search-domain-filtering/README">
+    Déterminez les domaines que la recherche inclut ou exclut.
+  </Card>
+</CardGroup>

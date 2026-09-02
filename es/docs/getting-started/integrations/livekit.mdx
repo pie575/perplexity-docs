@@ -1,0 +1,130 @@
+---
+title: "Perplexity con LiveKit Agents"
+description: "Usa la Agent API de Perplexity como el cerebro LLM de un agente de voz de LiveKit."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+La [Agent API](/es/docs/agent-api/quickstart) de Perplexity es compatible con la Responses API de OpenAI, por lo que funciona como un LLM de reemplazo directo en [LiveKit Agents](https://docs.livekit.io/agents/) mediante la clase `openai.responses.LLM` de `livekit-plugins-openai`, apuntando a la URL base de Perplexity.
+
+<Info>
+  **LiveKit Agents** es un framework de código abierto para crear agentes de IA multimodales y de voz en tiempo real. Para nuevas integraciones, usa la **Agent API** de Perplexity a través de `openai.responses.LLM`, y no el plugin `livekit-plugins-perplexity` ni `openai.LLM.with_perplexity()`, ya que ambos invocan el endpoint heredado de Chat Completions de Sonar. Más información en [livekit.io](https://livekit.io).
+</Info>
+
+<div id="installation">
+  ## Instalación
+</div>
+
+```bash theme={null}
+pip install "livekit-agents" "livekit-plugins-openai"
+```
+
+<div id="api-key-setup">
+  ## Configuración de la API key
+</div>
+
+Define tu API key de Perplexity como variable de entorno y pásala al constructor:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="Obtener API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Genera tu API key desde el panel de control de Perplexity.
+</Card>
+
+<div id="quick-start">
+  ## Inicio rápido
+</div>
+
+Usa `openai.responses.LLM` en cualquier punto donde una `AgentSession` de LiveKit espere un LLM:
+
+```python theme={null}
+import os
+
+from livekit.agents import Agent, AgentSession
+from livekit.plugins import openai, silero
+
+session = AgentSession(
+    llm=openai.responses.LLM(
+        model="openai/gpt-5.6-sol",
+        base_url="https://api.perplexity.ai/v1",   # el SDK añade /responses -> POST /v1/responses
+        api_key=os.environ["PERPLEXITY_API_KEY"],  # obligatorio: el constructor no lee PERPLEXITY_API_KEY
+    ),
+    stt=openai.STT(),
+    tts=openai.TTS(),
+    vad=silero.VAD.load(),
+)
+
+agent = Agent(
+    instructions="You are a helpful voice assistant. Use web search to answer with up-to-date information.",
+    tools=[openai.tools.WebSearch()],  # herramienta web_search integrada de Perplexity
+)
+
+# Ejecuta la sesión dentro del entrypoint de tu sala de LiveKit
+```
+
+Dado que la Agent API es compatible con OpenAI Responses, el plugin de OpenAI se comunica con `https://api.perplexity.ai/v1` sin necesidad de ningún otro cambio.
+
+<div id="configuration">
+  ## Configuración
+</div>
+
+`openai.responses.LLM` requiere dos parámetros para apuntar a Perplexity: `base_url` y una `api_key` explícita (el constructor no lee `PERPLEXITY_API_KEY` por sí solo):
+
+```python theme={null}
+import os
+
+from livekit.plugins import openai
+
+llm = openai.responses.LLM(
+    model="openai/gpt-5.6-sol",
+    base_url="https://api.perplexity.ai/v1",
+    api_key=os.environ["PERPLEXITY_API_KEY"],
+)
+```
+
+Las herramientas integradas de Perplexity (como `web_search`, que se muestra en el Inicio rápido) se asocian al `Agent`, no al LLM.
+
+<div id="available-models">
+  ## Modelos disponibles
+</div>
+
+La integración funciona con cualquier modelo disponible a través de la Agent API de Perplexity, indicado con el formato `provider/model` (por ejemplo, `openai/gpt-5.6-sol`). Consulta la lista completa en nuestra [página de modelos](/es/docs/agent-api/models).
+
+<div id="links-resources">
+  ## Enlaces y recursos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Documentación de LiveKit Agents" icon="book" href="https://docs.livekit.io/agents/">
+    Crea agentes de voz y multimodales en tiempo real con LiveKit.
+  </Card>
+
+  <Card title="Código fuente del plugin de OpenAI" icon="brand-github" href="https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-openai">
+    El código fuente de `livekit-plugins-openai`, incluido el `LLM` de Responses.
+  </Card>
+
+  <Card title="Inicio rápido de la Agent API" icon="bolt" href="/es/docs/agent-api/quickstart">
+    El contrato de solicitud, respuesta y herramientas utilizado más arriba.
+  </Card>
+
+  <Card title="Modelos de la Agent API" icon="sparkles" href="/es/docs/agent-api/models">
+    Modelos disponibles y precios.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Soporte
+</div>
+
+¿Necesitas ayuda con la integración?
+
+* Consulta la [documentación de LiveKit Agents](https://docs.livekit.io/agents/)
+* Revisa nuestras [preguntas frecuentes](/es/docs/resources/faq)

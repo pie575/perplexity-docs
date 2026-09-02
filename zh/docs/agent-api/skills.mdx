@@ -1,0 +1,520 @@
+---
+title: "技能"
+description: "通过内置、内联和自定义技能，为智能体按需提供领域专业能力。"
+---
+
+技能可按需为智能体提供领域专业能力。模型只能看到每项技能的名称和描述，只有在判断需要时才会加载完整说明——这就是 [Designing, Refining, and Maintaining Agent Skills](https://research.perplexity.ai/articles/designing-refining-and-maintaining-agent-skills-at-perplexity) 一文中介绍的渐进式披露 (progressive disclosure) 模式。
+
+<div id="why-use-skills">
+  ## 为什么使用 技能
+</div>
+
+* **专业化。** 在基础提示之上叠加文档生成能力和领域工作流。
+* **按需消耗上下文。** 在 技能 被加载之前，它只占用名称和描述的开销。
+* **可组合。** 在同一次请求中将内置 技能 与内联指令搭配使用。
+* **可复用。** 自定义 技能 只需上传一次，之后可在任意请求中通过 ID 引用。
+
+<div id="how-skills-work">
+  ## 技能的工作原理
+</div>
+
+你需要在请求中传入 `skills` 数组。每一项可以是从目录中选取的**内置**技能、你为本次请求定义的**内联**技能，或你创建并上传到 Perplexity 的**自定义**技能。
+单次请求中最多可组合 **16 个**任意类型的技能。
+
+| 阶段 | 模型看到的内容                                               |
+| -- | ----------------------------------------------------- |
+| 发现 | 一份列出所有技能名称和描述的索引。                                     |
+| 加载 | 完整的技能正文，在模型调用 `load_skill` 时返回。                       |
+| 文件 | 内置技能和自定义技能会在加载时将配套文件挂载到 sandbox 中。内联技能只返回其指令，不挂载任何文件。 |
+
+描述是路由触发条件。请在描述中说明模型应在何时加载该技能。
+
+加载技能会消耗一个步骤：模型需用一轮来调用 `load_skill` 并读取正文，之后的轮次才能据此执行操作。
+若直接调用模型的请求省略了 [`max_steps`](/zh/docs/agent-api/building-agents/define-the-run#customize-the-loop-max-steps)，则只会运行一个步骤，模型虽能加载技能，却无法据此执行任何操作。
+请将 `max_steps` 设置得足够大，以同时容纳加载过程和实际工作。
+
+<div id="built-in-skills">
+  ## 内置技能
+</div>
+
+用一个 JSON 对象即可选择内置技能：`{ "type": "builtin", "name": "office/pdf" }`。
+
+<Tabs>
+  <Tab title="office">
+    <Card title="Office">
+      从零生成 PDF、Word、PowerPoint 和 Excel 文档，并进行结构校验与视觉质检。可选择某个具体子项，也可选择 `office` 一次性授予全部四项，由模型自行决定输出格式。
+    </Card>
+
+    | 名称            | 说明                               | 选择方式                                           |
+    | ------------- | -------------------------------- | ---------------------------------------------- |
+    | `office`      | 总项，授予下方全部四个子项。                   | `{ "type": "builtin", "name": "office" }`      |
+    | `office/pdf`  | 创建 PDF 文档，并逐页进行视觉质检。             | `{ "type": "builtin", "name": "office/pdf" }`  |
+    | `office/docx` | 创建可编辑的 Word 文档 (OOXML) 。         | `{ "type": "builtin", "name": "office/docx" }` |
+    | `office/pptx` | 创建 PowerPoint 演示文稿，并逐页进行视觉质检。    | `{ "type": "builtin", "name": "office/pptx" }` |
+    | `office/xlsx` | 创建 Excel 工作簿，公式与图表均经过验证，并进行视觉质检。 | `{ "type": "builtin", "name": "office/xlsx" }` |
+
+    <Note>
+      Office 技能只能从零创建文档，不会编辑你上传的文件。
+    </Note>
+  </Tab>
+</Tabs>
+
+<div id="inline-skills">
+  ## 内联技能
+</div>
+
+对于一次性或账户专属的指导，可使用内联技能让 model 按需加载：风格指南、操作手册、设计系统、内部规范等。
+
+| 字段             | 说明                                  |
+| -------------- | ----------------------------------- |
+| `type`         | 必填。必须为 `"inline"`。                  |
+| `name`         | 必填。1-64 个字符；仅限小写 ASCII 字母、数字和单个连字符。 |
+| `description`  | 必填。1-1,024 字节。应按路由触发条件的方式撰写。        |
+| `instructions` | 必填。1-65,536 字节。model 加载时读取的技能正文。    |
+
+```json theme={null}
+{
+  "type": "inline",
+  "name": "design-system",
+  "description": "Load when creating documents that must follow the house design system.",
+  "instructions": "Model: a 1970s letterpress broadsheet financial page. Paper #EDE9DE; body ink #232220; ..."
+}
+```
+
+内联技能不包含文件、依赖、sandbox 挂载，也没有可复用的库，并且永远不会在响应中被回显。
+
+<div id="example-one-off-inline-skill">
+  ### 示例：一次性内联技能
+</div>
+
+将 `office/pdf` 与内联的 `design-system` 技能结合使用，生成符合品牌风格的一页式 AI 行业股票报告。
+如果这些指引只适用于当前请求，就用这种形式；等它稳定下来后，再将其上传为[自定义技能](#custom-skills)并通过 ID 引用。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  design_book = """
+  Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.
+
+  Colors
+  - Paper #EDE9DE; tinted boxes and alternating table rows #E3DFD2.
+  - Body ink #232220 — soft, never hard black (ink spread on newsprint).
+  - Headlines and rules may deepen to #141311; faded ink #5C5850 for captions and secondary text.
+  - No second color anywhere. Up moves: bold with a ▲. Down moves: parentheses with a ▼.
+
+  Typography
+  - Body: low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated.
+  - Headlines: bold condensed serif with a smaller deck beneath.
+  - Kickers and table headers: condensed grotesque caps (Franklin Gothic or Oswald), letterspaced.
+  - Tables: agate style — 7-8pt condensed, tabular figures.
+
+  Layout
+  - One page, ~18mm margins.
+  - Nameplate in blackletter or heavy serif, with a folio line (date, edition, price) set between an Oxford rule (thick over hairline).
+  - Ticker summary as a boxed agate strip below the nameplate.
+  - News timeline in 3-4 narrow justified columns divided by hairline column rules; each item opens with a bold caps dateline ('LONDON, JULY 17 —').
+  - Data table ruled with hairlines only.
+  - Pack the page — separate blocks with cutoff rules, not white space.
+
+  Imagery
+  - Grayscale halftone only, with a hairline keyline and an italic caption.
+
+  Avoid
+  - Second colors, gradients, shadows, rounded corners, sans-serif body text, and generous white space.
+  """
+
+  response = client.responses.create(
+      preset="xhigh",
+      background=True,
+      skills=[
+          {
+              "type": "inline",
+              "name": "design-system",
+              "description": "Load when creating documents that must follow the house design system.",
+              "instructions": design_book,
+          },
+          {"type": "builtin", "name": "office/pdf"},
+      ],
+      input=(
+          "Create a one-page AI-industry stock report. Include NVDA, MSFT, "
+          "GOOGL, AMD, and AVGO with latest price and weekly move. Include "
+          "this week's key AI news, labeled by date and tagged to the ticker "
+          "it moved. Follow the design-system skill."
+      ),
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(response.status)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const designBook = `
+  Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.
+
+  Colors
+  - Paper #EDE9DE; tinted boxes and alternating table rows #E3DFD2.
+  - Body ink #232220 — soft, never hard black (ink spread on newsprint).
+  - Headlines and rules may deepen to #141311; faded ink #5C5850 for captions and secondary text.
+  - No second color anywhere. Up moves: bold with a ▲. Down moves: parentheses with a ▼.
+
+  Typography
+  - Body: low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated.
+  - Headlines: bold condensed serif with a smaller deck beneath.
+  - Kickers and table headers: condensed grotesque caps (Franklin Gothic or Oswald), letterspaced.
+  - Tables: agate style — 7-8pt condensed, tabular figures.
+
+  Layout
+  - One page, ~18mm margins.
+  - Nameplate in blackletter or heavy serif, with a folio line (date, edition, price) set between an Oxford rule (thick over hairline).
+  - Ticker summary as a boxed agate strip below the nameplate.
+  - News timeline in 3-4 narrow justified columns divided by hairline column rules; each item opens with a bold caps dateline ('LONDON, JULY 17 —').
+  - Data table ruled with hairlines only.
+  - Pack the page — separate blocks with cutoff rules, not white space.
+
+  Imagery
+  - Grayscale halftone only, with a hairline keyline and an italic caption.
+
+  Avoid
+  - Second colors, gradients, shadows, rounded corners, sans-serif body text, and generous white space.
+  `;
+
+  let response = await client.responses.create({
+    preset: 'xhigh',
+    background: true,
+    skills: [
+      {
+        type: 'inline',
+        name: 'design-system',
+        description: 'Load when creating documents that must follow the house design system.',
+        instructions: designBook,
+      },
+      { type: 'builtin', name: 'office/pdf' },
+    ],
+    input:
+      'Create a one-page AI-industry stock report. Include NVDA, MSFT, ' +
+      'GOOGL, AMD, and AVGO with latest price and weekly move. Include ' +
+      'this week\'s key AI news, labeled by date and tagged to the ticker ' +
+      'it moved. Follow the design-system skill.',
+  });
+
+  while (response.status === 'queued' || response.status === 'in_progress') {
+    await new Promise((r) => setTimeout(r, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(response.status);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "xhigh",
+      "background": true,
+      "skills": [
+        {
+          "type": "inline",
+          "name": "design-system",
+          "description": "Load when creating documents that must follow the house design system.",
+          "instructions": "Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.\nColors: paper #EDE9DE (tinted boxes and alternating table rows #E3DFD2); body ink #232220 (soft, never hard black); headlines and rules may deepen to #141311; faded ink #5C5850 for captions. No second color. Up moves: bold + ▲; down moves: parentheses + ▼.\nTypography: body low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated; headlines bold condensed serif with a smaller deck; kickers and table headers condensed grotesque caps (Franklin Gothic or Oswald), letterspaced; tables agate 7-8pt condensed with tabular figures.\nLayout: one page, ~18mm margins; blackletter or heavy-serif nameplate with a folio line (date, edition, price) between an Oxford rule (thick over hairline); boxed agate ticker strip below; news timeline in 3-4 narrow justified columns with hairline column rules, items opening with bold caps datelines ('LONDON, JULY 17 —'); data table ruled with hairlines only. Pack the page — cutoff rules, not padding.\nImagery: grayscale halftone with hairline keyline and italic caption.\nAvoid: second colors, gradients, shadows, rounded corners, sans body text, generous white space."
+        },
+        { "type": "builtin", "name": "office/pdf" }
+      ],
+      "input": "Create a one-page AI-industry stock report. Include NVDA, MSFT, GOOGL, AMD, and AVGO with latest price and weekly move. Include this week'\''s key AI news, labeled by date and tagged to the ticker it moved. Follow the design-system skill."
+    }' | jq
+  ```
+</CodeGroup>
+
+可通过[使用文件](/zh/docs/agent-api/working-with-files)中的 files 端点获取文件字节内容。
+
+<div id="custom-skills">
+  ## 自定义技能
+</div>
+
+自定义技能是由你创建并上传到 Perplexity 的技能：它是一个带版本的指令与配套文件技能包，在 [API Portal](https://console.perplexity.ai/project/skills)中管理，并可在任意请求中通过 ID 引用。
+自定义技能采用开放的 [Agent Skills 格式](https://agentskills.io/specification)。
+
+每个自定义技能都绑定到某一个[项目](/zh/docs/getting-started/projects#what-is-a-project)，并存放在该项目内。
+技能归项目所有：该项目中的任意 API key 都可以引用它，其他项目的 key 则不行。
+这类技能专为在你自己的运行框架中调用 Agent API 而设计：技能承载着流水线所需的处理流程与输出约定，且独立于代码单独进行版本管理。
+
+技能包中不只有文本。除指令之外，你还可以加入 `.py` 和 `.sh` 脚本，模型会在 [Sandbox](/zh/docs/agent-api/tools/sandbox) 中运行它们——因此一个技能不仅能说明该*如何*完成工作，还能携带真正执行工作的代码本身，以及供模型按需读取的各类参考文件。
+
+<div id="parameters">
+  ### 参数
+</div>
+
+| 字段        | 类型     | 必填 | 说明                                     |
+| --------- | ------ | -- | -------------------------------------- |
+| `type`    | string | 是  | 必须为 `"custom"`。                        |
+| `id`      | string | 是  | 从 API Portal 复制的技能 ID，格式为 `skill_...`。 |
+| `version` | string | 否  | 要加载的版本，或 `"latest"`。省略时默认为 `"latest"`。 |
+
+技能的名称和描述取自已存储的技能包。
+
+<div id="create-a-custom-skill-bundle">
+  ### 创建自定义技能包
+</div>
+
+技能包是一个 ZIP 压缩包，其中只能有一个顶层文件夹，且该文件夹中只能包含一个 `SKILL.md`：
+
+```text theme={null}
+fact-check/
+├── SKILL.md
+├── scripts/
+│   └── check_factcheck.py
+└── references/
+    └── verification-rubric.md
+```
+
+<Card title="下载示例包" icon="download" horizontal="True" href="/zh/docs/assets/skills/fact-check.zip">
+  `fact-check.zip` —— 就是本示例技能包，可直接上传到 API Portal。
+</Card>
+
+`SKILL.md` 以 [YAML frontmatter](https://agentskills.io/specification#frontmatter) 开头，用于定义模型如何发现该技能，其后是技能正文：
+
+<Accordion title="SKILL.md 示例">
+  ```markdown theme={null}
+  ---
+  name: fact-check
+  description: Load before answering a question whose answer contains factual claims — dates, numbers, names, prices, or events — to verify them before responding. Do not load for opinions, code, or creative writing.
+  ---
+
+  You are the verification gate of an answer pipeline. Verify your own draft
+  before it reaches the user.
+
+  Use the `web_search` tool for every lookup. Do not run searches or fetch
+  pages from inside the sandbox; reserve the sandbox for writing and validating
+  `fact_check.json`.
+
+  1. Draft the answer, then extract every factual claim from it: dates,
+     numbers, names, prices, events.
+  2. Verify each claim with the `web_search` tool, following
+     `references/verification-rubric.md` from this skill's folder.
+  3. Correct the draft wherever a claim fails verification.
+  4. Write the audit trail to `fact_check.json` with exactly these fields:
+     `claims` (list of objects with `claim`, `verdict`, `source_url`) and
+     `corrections` (integer).
+  5. Run `python scripts/check_factcheck.py fact_check.json` from this
+     skill's folder and fix every violation it reports until it passes.
+  6. Once the check passes, give the corrected answer.
+  ```
+</Accordion>
+
+description 还兼具防护作用：它会告诉模型在哪些情况下**不要**加载该技能，从而节省请求的步骤预算。
+
+| 字段            | 规则                                          |
+| ------------- | ------------------------------------------- |
+| `name`        | 必填。1-64 个字符；仅限小写字母、数字和单个连字符。                |
+| `description` | 必填。1-1,024 字节。它是路由触发条件——编写时要写清楚模型应在何时加载该技能。 |
+
+其他 [frontmatter](https://agentskills.io/specification#frontmatter) 键会被忽略。
+frontmatter 之后的全部内容即技能正文，模型加载该技能时会返回这部分内容。
+
+技能包中可以包含任意类型的文件：既可以是模型按需读取的参考文档，也可以是在 [Sandbox](/zh/docs/agent-api/tools/sandbox) 中运行的 `.py` 或 `.sh` 脚本，该环境可访问网络，并支持用 `pip` 安装软件包。
+配套文件在模型读取之前不消耗任何 token。
+如上例所示，在正文中用相对路径引用它们。
+
+<div id="manage-custom-skills">
+  ### 管理自定义技能
+</div>
+
+1. 打开 [API 门户中的技能](https://console.perplexity.ai/project/skills)。
+2. 选择 **创建技能**，以 `.zip` 形式上传技能包——名称和描述会从 `SKILL.md` 中读取。
+   不接受单独的 `SKILL.md` 文件。
+3. 从表格中复制技能 ID (`skill_...`) 。
+
+只有管理员 (Admin) 才能创建、更新或删除技能。
+[项目](/zh/docs/getting-started/projects)中的任何 API key 都可以在请求中使用这些技能。
+在每个技能的操作菜单中，你还可以执行 **更新技能** (上传新文件作为新版本) 、**Download files** (下载任意版本) 和 **删除技能** (不可恢复，将删除所有版本) 。
+
+<div id="use-a-custom-skill">
+  ### 使用自定义技能
+</div>
+
+自定义技能专为在你自己的流水线中运行 Agent API 而设计：技能中包含模型必须遵循的流程以及必须通过的自检，且与提示词分开进行版本管理。
+下面的请求提出了一个事实性问题，并要求模型使用上文技能包中的 `fact-check` 技能来核实自己的回答。
+将 `YOUR_SKILL_ID` 替换为你从 API Portal 复制的 ID。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      max_steps=10,
+      tools=[{"type": "web_search"}],
+      skills=[{"type": "custom", "id": "YOUR_SKILL_ID"}],
+      input=(
+          "What were NVIDIA's total revenue and data center revenue in its "
+          "latest reported quarter? Use the fact-check skill to verify your "
+          "answer before responding."
+      ),
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    max_steps: 10,
+    tools: [{ type: 'web_search' }],
+    skills: [{ type: 'custom', id: 'YOUR_SKILL_ID' }],
+    input:
+      "What were NVIDIA's total revenue and data center revenue in its " +
+      'latest reported quarter? Use the fact-check skill to verify your ' +
+      'answer before responding.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "max_steps": 10,
+      "tools": [ { "type": "web_search" } ],
+      "skills": [
+        { "type": "custom", "id": "YOUR_SKILL_ID" }
+      ],
+      "input": "What were NVIDIAs total revenue and data center revenue in its latest reported quarter? Use the fact-check skill to verify your answer before responding."
+    }' | jq
+  ```
+</CodeGroup>
+
+模型会先起草答案，通过 web 搜索逐条核实其中的论断，修正未通过核实的内容，然后写入 `fact_check.json`，并在 sandbox 中运行技能包附带的校验器——通过这一自检后才作答。
+
+响应的 `output` 数组会先将加载的技能记录为一个 `skill_loaded` 条目，随后是本次运行执行的各个 sandbox 步骤——读取技能的参考文件、写入 `fact_check.json`、运行校验器——最后以助手的 `message` 结束：
+
+<Accordion title="响应输出（已截断）">
+  ```json theme={null}
+  [
+    { "type": "skill_loaded", "name": "fact-check" },
+    {
+      "type": "sandbox_read_file",
+      "call_id": "call_...",
+      "file_path": "/home/user/workspace/skills/fact-check/references/verification-rubric.md",
+      "start_line": 1,
+      "total_lines": 22,
+      "content": "# Verification rubric\n..."
+    },
+    {
+      "type": "sandbox_write_file",
+      "call_id": "call_...",
+      "file_path": "/home/user/workspace/fact_check.json",
+      "size_bytes": 939
+    },
+    {
+      "type": "sandbox_results",
+      "call_id": "call_...",
+      "container_id": "01a0...",
+      "language": "python",
+      "code": "python scripts/check_factcheck.py fact_check.json",
+      "status": "completed",
+      "results": [
+        { "status": "completed", "exit_code": 0, "duration_ms": 1023, "stdout": "OK: fact_check.json satisfies the contract.\n", "stderr": "" }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_...",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        { "type": "output_text", "text": "NVIDIA's latest reported quarter was Q2 fiscal 2027, ended July 26, 2026 ...", "annotations": [] }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+在流式传输模式下，每次加载技能还会发出一个 `response.skill.loaded` 事件。
+你在请求中传入的 `skills` 数组不会在响应对象中回显。
+
+<div id="versioning">
+  ### 版本管理
+</div>
+
+每次上传自定义技能都会创建一个新版本。
+每个版本都是整个技能包的不可变完整快照,而不是增量差异。
+
+省略 `version`(或传入 `"latest"`)表示选用最新版本,该版本在请求被接受时解析一次即确定——运行途中的上传不会改变正在运行的响应所加载的内容。
+
+将生产流量固定到指定版本:
+
+```json theme={null}
+{ "type": "custom", "id": "YOUR_SKILL_ID", "version": "2" }
+```
+
+固定的 `version` 始终加载同一个不可变的技能包，永不改变；只有 `"latest"` 会变动——任何管理员上传新版本后，都会立即改变 `"latest"` 请求实际运行的内容。
+可在 [API Portal](https://console.perplexity.ai/project/skills) 中查看版本历史并下载任意版本。
+
+<div id="error-handling">
+  ### 错误处理
+</div>
+
+自定义技能引用会在你提交请求时进行校验。
+引用有误会导致整个请求在运行开始前以 HTTP 400 失败：
+
+| 消息                                                       | 含义                                                             | 建议处理方式                          |
+| -------------------------------------------------------- | -------------------------------------------------------------- | ------------------------------- |
+| `A requested skill does not exist or is not accessible.` | 该 ID 与你项目中的任何技能都不匹配——可能是拼写错误、技能已删除，或使用了其他项目的密钥。                | 从 API Portal 复制 ID，并确认密钥属于同一项目。 |
+| `A requested skill is invalid.`                          | ID 或 `version` 格式有误。`version` 必须是版本号字符串，例如 `"2"` 或 `"latest"`。 | 修正该引用。                          |
+| `A requested skill conflicts with a built-in skill.`     | 该技能的名称 (来自 `SKILL.md`) 与某个内置技能名称重复。                            | 在新版本中重命名该技能。                    |
+| `Two requested skills resolve to the same name.`         | `skills` 中的两个条目名称相同——例如一个自定义技能与一个同名的内联技能。                      | 移除或重命名其中之一。                     |
+
+运行开始之后的失败则改为带内处理：如果某个技能在运行中途无法加载，错误会返回给 model，model 会在没有该技能的情况下继续执行，响应仍会正常完成。
+
+<Note>
+  `skill_loaded` 输出项会记录此次加载尝试，即使加载失败也会出现；错误文本只会发送给 model，不会进入响应中。
+</Note>
+
+<div id="limits">
+  ### 限制
+</div>
+
+技能包必须满足以下限制，上传时会进行检查：
+
+* 总大小 **32 MiB** —— 上传的 ZIP 文件及其解压后的内容均受此限制。
+* 最多 **100 个文件**。
+* 有且仅有**一个顶层文件夹**和**一个 `SKILL.md`**。
+* 文件或文件夹名称不得超过 **255 个字符**。
+* **每个项目最多 500 个自定义技能**。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent skills 实战手册" icon="book-open" href="/zh/docs/cookbook/articles/agent-skills/README">
+    完整讲解每日 AI 股票新闻 PDF 的实现过程，涵盖文件下载与完整的设计文档。
+  </Card>
+
+  <Card title="处理文件" icon="file" href="/zh/docs/agent-api/working-with-files" />
+
+  <Card title="后台模式" icon="clock" href="/zh/docs/agent-api/background-mode" />
+
+  <Card title="Agent API 参考" icon="code" href="/zh/api-reference/agent-post" />
+</CardGroup>

@@ -1,0 +1,222 @@
+---
+title: "事实核查 CLI"
+description: "一款命令行工具，借助 Perplexity 的 Sonar API 识别文章或言论中虚假或具有误导性的说法"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="fact-checker-cli">
+  # 事实核查 CLI
+</div>
+
+一款命令行工具，借助 Perplexity 的 Sonar API 进行网络检索，识别文章或言论中的虚假或误导性说法。
+
+<div id="features">
+  ## 功能
+</div>
+
+* 分析单条主张或整篇文章的事实准确性
+* 识别虚假、误导性或无法核实的说法
+* 针对不准确的信息给出解释与更正
+* 以易读格式或结构化 JSON 输出结果
+* 为事实核查结论引用可靠来源
+* 借助 Perplexity 的结构化输出实现可靠的 JSON 解析 (适用于 Tier 3+ 用户)
+
+<div id="installation">
+  ## 安装
+</div>
+
+<div id="1-install-required-dependencies">
+  ### 1. 安装所需依赖
+</div>
+
+```bash theme={null}
+# 通过依赖文件安装（推荐）
+pip install -r requirements.txt
+
+# 或手动安装
+pip install requests pydantic newspaper3k
+```
+
+<div id="2-make-the-script-executable">
+  ### 2. 为脚本添加可执行权限
+</div>
+
+```bash theme={null}
+chmod +x fact_checker.py
+```
+
+<div id="api-key-setup">
+  ## API key 配置
+</div>
+
+该工具需要 Perplexity API key 才能运行。你可以通过以下任一方式提供：
+
+<div id="1-as-a-command-line-argument">
+  ### 1. 作为命令行参数
+</div>
+
+```bash theme={null}
+./fact_checker.py --api-key YOUR_API_KEY
+```
+
+<div id="2-as-an-environment-variable">
+  ### 2. 作为环境变量
+</div>
+
+```bash theme={null}
+export PPLX_API_KEY=YOUR_API_KEY
+```
+
+<div id="3-in-a-file">
+  ### 3. 在文件中
+</div>
+
+在与脚本相同的目录下创建一个名为 `pplx_api_key` 或 `.pplx_api_key` 的文件：
+
+```bash theme={null}
+echo "YOUR_API_KEY" > .pplx_api_key
+chmod 600 .pplx_api_key
+```
+
+**注意：** 如果要使用结构化输出功能，你的 Perplexity API 账户需要达到 Tier 3 或更高的访问级别。
+
+<div id="quick-start">
+  ## 快速开始
+</div>
+
+完成设置后立即运行以下命令：
+
+```bash theme={null}
+./fact_checker.py -t "The Earth is flat and NASA is hiding the truth."
+```
+
+它会分析该说法，通过 Perplexity 的 Sonar API 进行查证，并返回包含评级、解释和来源的详细事实核查结果。
+
+<div id="usage">
+  ## 使用方法
+</div>
+
+<div id="check-a-claim">
+  ### 核查一条主张
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "The Earth is flat and NASA is hiding the truth."
+```
+
+<div id="check-an-article-from-a-file">
+  ### 核查文件中的文章
+</div>
+
+```bash theme={null}
+./fact_checker.py --file article.txt
+```
+
+<div id="check-an-article-from-a-url">
+  ### 通过 URL 核查文章
+</div>
+
+```bash theme={null}
+./fact_checker.py --url https://www.example.com/news/article-to-check
+```
+
+<div id="specify-a-different-model">
+  ### 指定其他 model
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "Global temperatures have decreased over the past century." --model "sonar-pro"
+```
+
+<div id="output-results-as-json">
+  ### 以 JSON 格式输出结果
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "Mars has a breathable atmosphere." --json
+```
+
+<div id="use-a-custom-prompt-file">
+  ### 使用自定义提示词文件
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "The first human heart transplant was performed in the United States." --prompt-file custom_prompt.md
+```
+
+<div id="enable-structured-outputs-for-tier-3-users">
+  ### 启用结构化输出 (适用于 Tier 3 及以上用户) 
+</div>
+
+结构化输出默认为禁用状态。如需启用，请传入 `--structured-output` 标志：
+
+```bash theme={null}
+./fact_checker.py --text "Vaccines cause autism." --structured-output
+```
+
+<div id="get-help">
+  ### 获取帮助
+</div>
+
+```bash theme={null}
+./fact_checker.py --help
+```
+
+<div id="output-format">
+  ## 输出格式
+</div>
+
+该工具输出的内容包括：
+
+* **总体评级**：MOSTLY&#95;TRUE、MIXED 或 MOSTLY&#95;FALSE
+* **摘要**：事实核查结果的简要概述
+* **论断分析**：列出各项具体论断及其单独评级：
+  * TRUE：事实准确，有证据支持
+  * FALSE：与证据相矛盾
+  * MISLEADING：包含部分事实，但可能导致错误结论
+  * UNVERIFIABLE：根据现有信息无法得出确定结论
+* **解释**：针对每项论断的详细推理
+* **来源**：用于验证的引用来源和链接
+
+<div id="example">
+  ## 示例
+</div>
+
+运行以下命令：
+
+```bash theme={null}
+./fact_checker.py -t "The Great Wall of China is visible from the moon."
+```
+
+示例输出：
+
+```
+正在进行事实核查……
+
+🔴 总体评级：MOSTLY_FALSE
+
+📝 摘要：
+“从月球上可以看到中国长城”这一说法不成立。这是一个常见的误解，NASA 航天员的证言和科学证据均已将其推翻。
+
+🔍 论断分析：
+
+论断 1：❌ FALSE  
+  陈述：“从月球上可以看到中国长城。”  
+  解释：在月球上用肉眼无法看到中国长城。NASA 航天员已证实这一点，其中 Neil Armstrong 表示他在环月轨道上看不到长城。长城过于狭窄，且在如此远的距离上，其颜色与周围环境十分接近。  
+  来源：
+    - NASA.gov
+    - Scientific American
+    - National Geographic
+```
+
+<div id="limitations">
+  ## 局限性
+</div>
+
+* 事实核查的准确性取决于通过 Perplexity Sonar API 获取到的信息质量。
+* 与所有语言模型一样，底层 AI 在某些专业领域可能存在局限。
+* 结构化输出功能需要 Tier 3 或更高等级的 Perplexity API 账户。
+* 对于高度敏感或复杂的内容，本工具无法替代专业的事实核查服务。

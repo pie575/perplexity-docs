@@ -1,0 +1,184 @@
+---
+title: "Perplexity avec Haystack"
+description: "Utilisez l'Agent API, l'Embeddings API et la Search API ancrée dans le web de Perplexity dans vos pipelines Haystack."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Le package `perplexity-haystack` fournit des composants Haystack pour l&#39;Agent API, l&#39;Embeddings API et la Search API ancrée de Perplexity, ce qui vous permet de créer des pipelines agentiques et augmentés par la recherche combinant chat, embeddings et recherche web en temps réel.
+
+<Info>
+  **Haystack** est un framework Python open source développé par [deepset](https://deepset.ai) pour créer des applications LLM prêtes pour la production, notamment des pipelines RAG et des workflows agentiques. Pour en savoir plus, consultez [haystack.deepset.ai](https://haystack.deepset.ai).
+</Info>
+
+L&#39;intégration comprend :
+
+* **PerplexityChatGenerator** — Génération de réponses de chat via l&#39;[Agent API](/fr/docs/agent-api/quickstart).
+* **PerplexityTextEmbedder** et **PerplexityDocumentEmbedder** — Embeddings via l&#39;[Embeddings API](/fr/docs/embeddings/quickstart).
+* **PerplexityWebSearch** — Résultats web classés et ancrés via la [Search API](/fr/docs/search/quickstart).
+
+<div id="installation">
+  ## Installation
+</div>
+
+<Tabs>
+  <Tab title="pip">
+    ```bash theme={null}
+    pip install perplexity-haystack
+    ```
+  </Tab>
+
+  <Tab title="uv">
+    ```bash theme={null}
+    uv add perplexity-haystack
+    ```
+  </Tab>
+</Tabs>
+
+<div id="api-key-setup">
+  ## Configuration de la clé API
+</div>
+
+Définissez votre clé API Perplexity comme variable d&#39;environnement :
+
+```python theme={null}
+import os
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+```
+
+<Card title="Obtenir une API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Générez votre API key depuis le tableau de bord Perplexity.
+</Card>
+
+<div id="quick-start-chat-agent-api">
+  ## Démarrage rapide : Chat (Agent API)
+</div>
+
+`PerplexityChatGenerator` repose sur l&#39;Agent API de Perplexity et utilise par défaut `openai/gpt-5.4`.
+
+```python theme={null}
+import os
+
+from haystack.dataclasses import ChatMessage
+from haystack_integrations.components.generators.perplexity import PerplexityChatGenerator
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+client = PerplexityChatGenerator()
+response = client.run(
+    messages=[ChatMessage.from_user("What are Agentic Pipelines? Be brief.")]
+)
+
+print(response["replies"])
+```
+
+<div id="selecting-a-model">
+  ### Sélectionner un modèle
+</div>
+
+Vous pouvez choisir n&#39;importe quel modèle pris en charge par l&#39;Agent API via le paramètre `model` :
+
+```python theme={null}
+client = PerplexityChatGenerator(model="anthropic/claude-sonnet-4-6")
+```
+
+Les modèles pris en charge sont `openai/gpt-5.4` (par défaut), `openai/gpt-5.5`, `anthropic/claude-sonnet-4-6`, `xai/grok-4.5` et `google/gemini-3-flash-preview`. Consultez la [page des modèles de l&#39;Agent API](/fr/docs/agent-api/models) pour la liste complète.
+
+<div id="quick-start-embeddings">
+  ## Démarrage rapide : embeddings
+</div>
+
+Générez l&#39;embedding d&#39;une requête unique avec `PerplexityTextEmbedder` :
+
+```python theme={null}
+import os
+
+from haystack_integrations.components.embedders.perplexity import PerplexityTextEmbedder
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+embedder = PerplexityTextEmbedder()
+response = embedder.run(text="What is Haystack by deepset?")
+
+print(response["embedding"])
+```
+
+Générez les embeddings d&#39;une liste de documents avec `PerplexityDocumentEmbedder` :
+
+```python theme={null}
+from haystack import Document
+from haystack_integrations.components.embedders.perplexity import PerplexityDocumentEmbedder
+
+docs = [Document(content="What is Haystack by deepset?")]
+result = PerplexityDocumentEmbedder().run(documents=docs)
+
+print(result["documents"][0].embedding)
+```
+
+Les deux embedders utilisent `pplx-embed-v1-0.6b` par défaut. Le model plus volumineux `pplx-embed-v1-4b` est également disponible : sélectionnez-le via le paramètre `model`.
+
+<div id="quick-start-web-search-search-api">
+  ## Démarrage rapide : recherche web (Search API)
+</div>
+
+Utilisez `PerplexityWebSearch` pour obtenir des résultats web classés et ancrés dans un pipeline Haystack :
+
+```python theme={null}
+import os
+
+from haystack.utils import Secret
+from haystack_integrations.components.websearch.perplexity import PerplexityWebSearch
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+websearch = PerplexityWebSearch(
+    api_key=Secret.from_env_var("PERPLEXITY_API_KEY"),
+    top_k=5,
+)
+result = websearch.run(query="What is Haystack by deepset?")
+
+documents = result["documents"]
+links = result["links"]
+
+print(documents)
+print(links)
+```
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Intégrations Haystack" icon="book" href="https://haystack.deepset.ai/integrations/perplexity">
+    Fiche du catalogue sur haystack.deepset.ai
+  </Card>
+
+  <Card title="Code source" icon="github" href="https://github.com/deepset-ai/haystack-core-integrations/tree/main/integrations/perplexity">
+    perplexity-haystack sur GitHub
+  </Card>
+
+  <Card title="Paquet PyPI" icon="brand-python" href="https://pypi.org/project/perplexity-haystack">
+    Voir sur PyPI
+  </Card>
+
+  <Card title="Documentation Haystack" icon="book-open" href="https://docs.haystack.deepset.ai">
+    Documentation complète de Haystack
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Assistance
+</div>
+
+Besoin d&#39;aide pour l&#39;intégration ?
+
+* Consultez la [documentation Haystack](https://docs.haystack.deepset.ai)
+* Ouvrez un ticket sur [haystack-core-integrations](https://github.com/deepset-ai/haystack-core-integrations/issues)
+* Consultez notre [FAQ](/fr/docs/resources/faq)

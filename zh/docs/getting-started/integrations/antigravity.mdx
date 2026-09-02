@@ -1,0 +1,218 @@
+---
+title: "在 Google Antigravity 中使用 Perplexity"
+description: "在你于 Google Antigravity 中构建或编辑的应用里调用 Perplexity 的 Agent API。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+[Google Antigravity](https://antigravity.google) 是一个以智能体为核心的开发环境，AI 智能体可在编辑器、终端和浏览器等界面中规划、编写并迭代你的代码。虽然 Antigravity 自带内置的智能体模型，但智能体编写的代码可以调用任意外部 API——包括 Perplexity 的 [Agent API](/zh/docs/agent-api/quickstart) 和 [Search API](/zh/docs/search/quickstart)——从而实现实时联网调研、引用来源和有据可依的回答。
+
+本指南介绍如何借助 OpenAI Responses 兼容接口，在你于 Antigravity 中开发的项目里接入 Perplexity Agent API。
+
+<Info>
+  **本指南的适用范围。** Antigravity 目前尚未提供 BYOK 或自定义供应商接口，无法用 Perplexity 替换其内置的智能体模型。本指南介绍的是受支持的方式：从你在 Antigravity 中编写的**应用代码** (Web 应用、CLI、编码助手、内部工具等) 中调用 Perplexity。若 Antigravity 日后新增自定义供应商配置，本文所述的基础 URL 和 API 密钥同样适用。
+</Info>
+
+<Card title="获取 Perplexity API 密钥" icon="key" arrow="True" horizontal="True" iconType="solid" cta="获取密钥" href="https://console.perplexity.ai/project/keys">
+  在 Perplexity API 控制台中生成一个 API 密钥，然后以 `PERPLEXITY_API_KEY` 的形式保存到项目中。
+</Card>
+
+***
+
+<div id="when-to-use-this">
+  ## 适用场景
+</div>
+
+如果你用 Antigravity 构建的项目需要有据可查、能感知实时网络信息的回答，又不想自己搭建搜索、抓取和引用处理这一整套流程，Agent API 会是很合适的选择。常见用法包括：
+
+* **Web 或移动应用中的 AI 功能** —— 无需自建检索栈，即可为产品加入研究或问答入口。
+* **编程助手与开发工具** —— 让智能体在运行时获取最新的库文档、报错说明或更新日志。
+* **内部工具与仪表盘** —— 基于实时网络信息 (市场数据、竞品动向、新闻) 作答，并附上来源。
+* **命令行工具与脚本** —— 在 Antigravity 终端中随手运行的轻量研究工具。
+
+***
+
+<div id="setup">
+  ## 设置
+</div>
+
+<Steps>
+  <Step title="将 API 密钥存储为环境变量">
+    在 Antigravity 终端 (或项目的 `.env` 文件) 中设置：
+
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash theme={null}
+        export PERPLEXITY_API_KEY="pplx-..."
+        ```
+      </Tab>
+
+      <Tab title="Windows (PowerShell)">
+        ```powershell theme={null}
+        setx PERPLEXITY_API_KEY "pplx-..."
+        ```
+      </Tab>
+
+      <Tab title=".env 文件">
+        ```bash theme={null}
+        PERPLEXITY_API_KEY=pplx-...
+        ```
+      </Tab>
+    </Tabs>
+
+    切勿将密钥硬编码在源文件中——Antigravity 智能体可能会提交或分享其读取到的代码，改用环境变量保存密钥可以避免密钥进入代码仓库。
+  </Step>
+
+  <Step title="安装 SDK">
+    Agent API 兼容 [OpenAI Responses API](/zh/docs/agent-api/openai-compatibility)，因此可以直接使用 OpenAI SDK。原生 Perplexity SDK 同样可用，其预设语法更为简洁。
+
+    <Tabs>
+      <Tab title="TypeScript / Node">
+        ```bash theme={null}
+        npm install openai
+        ```
+      </Tab>
+
+      <Tab title="Python">
+        ```bash theme={null}
+        pip install openai
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="将客户端指向 Perplexity">
+    将基础 URL 设置为 `https://api.perplexity.ai/v1`，并从环境变量中读取 API 密钥。
+
+    <Tabs>
+      <Tab title="TypeScript / Node">
+        ```typescript theme={null}
+        import OpenAI from "openai";
+
+        const client = new OpenAI({
+          apiKey: process.env.PERPLEXITY_API_KEY,
+          baseURL: "https://api.perplexity.ai/v1",
+        });
+
+        const response = await client.responses.create({
+          input: "Summarize the top three AI infrastructure announcements this week with sources.",
+          preset: "low",
+        } as any);
+
+        console.log(response.output_text);
+        ```
+      </Tab>
+
+      <Tab title="Python">
+        ```python theme={null}
+        import os
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=os.environ.get("PERPLEXITY_API_KEY"),
+            base_url="https://api.perplexity.ai/v1",
+        )
+
+        response = client.responses.create(
+            input="Summarize the top three AI infrastructure announcements this week with sources.",
+            extra_body={"preset": "low"},
+        )
+
+        print(response.output_text)
+        ```
+      </Tab>
+    </Tabs>
+
+    OpenAI SDK 会将 `client.responses.create(...)` 发送至 `POST /v1/responses`，Perplexity 会将其视为标准端点 `POST /v1/agent` 的别名予以接受。无需任何其他配置。
+  </Step>
+</Steps>
+
+***
+
+<div id="using-it-from-inside-antigravity">
+  ## 在 Antigravity 中使用
+</div>
+
+客户端接入完成后，只要应用中需要有据可依的答案，都可以提示 Antigravity 的智能体调用 Perplexity 客户端。以下几类提示效果较好：
+
+* *“添加一个 `/research` 端点，接收 `query` 字符串并返回带引用的 Perplexity Agent API 响应。”*
+* *“将 Perplexity 调用封装成 `researchTopic(topic: string)` 辅助函数，并在仪表板的新闻组件中调用它。”*
+* *“编写一个 CLI 子命令 `pplx ask`，将 Perplexity Agent API 响应流式输出到 stdout。”*
+
+由于该 SDK 就是标准的 OpenAI 客户端，Antigravity 的智能体本身就了解调用方式——你主要需要确保它使用正确的 `baseURL`，并从环境变量中读取 `PERPLEXITY_API_KEY`。
+
+<Tip>
+  如果 Antigravity 的智能体生成的代码指向 `https://api.openai.com/v1`，或干脆省略了 `baseURL`，可以要求它“使用 Perplexity 的基础 URL `https://api.perplexity.ai/v1`”——它会用正确的端点重新生成客户端。
+</Tip>
+
+***
+
+<div id="troubleshooting">
+  ## 故障排查
+</div>
+
+<AccordionGroup>
+  <Accordion title="基础 URL 必须严格为 https://api.perplexity.ai/v1">
+    OpenAI SDK 会自动在基础 URL 后追加 `/responses`。**不要**在基础 URL 中包含 `/agent` 或 `/responses`，也不要省略 `/v1`。
+
+    | 正确                             | 错误                                       |
+    | ------------------------------ | ---------------------------------------- |
+    | `https://api.perplexity.ai/v1` | `https://api.perplexity.ai/v1/agent`     |
+    |                                | `https://api.perplexity.ai/v1/responses` |
+    |                                | `https://api.perplexity.ai` (缺少 `/v1`)   |
+
+    基础 URL 填写错误通常表现为 404 或认证错误。
+  </Accordion>
+
+  <Accordion title="可以用 Perplexity 替换 Antigravity 的内置 agent 模型吗？">
+    目前还不行。Antigravity 没有提供自定义供应商或 BYOK 设置，因此无法把编辑器内的 agent 路由到 Perplexity。请改用本指南介绍的方式：在你的应用代码中调用 Perplexity Agent API。
+
+    如果 Antigravity 日后支持自定义供应商，配置方式将是：基础 URL 为 `https://api.perplexity.ai/v1`，API 密钥取自 `PERPLEXITY_API_KEY`，并使用兼容 OpenAI Responses 的传输方式。
+  </Accordion>
+
+  <Accordion title="API 密钥未生效">
+    Antigravity 的终端会话会继承启动 Antigravity 时所在环境的环境变量。如果在集成终端中执行 `echo $PERPLEXITY_API_KEY` 输出为空，可以将其写入 shell 配置文件 (`~/.zshrc`、`~/.bashrc`) 后重新启动 Antigravity，或借助 `dotenv` 之类的工具从项目本地的 `.env` 文件加载。
+  </Accordion>
+
+  <Accordion title="选择模型还是预设">
+    像 `low` 这样的预设已针对常见研究场景做好预配置，是最简便的起点。如果你需要指定某个第三方模型 (Claude、GPT、Gemini 等) ，可以传入 `model="anthropic/claude-sonnet-4-6"` (或 [Agent API 模型列表](/zh/docs/agent-api/models) 中的其他取值) 来代替 `preset`。
+  </Accordion>
+</AccordionGroup>
+
+***
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 快速开始" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    使用 OpenAI 兼容 SDK 或原生 SDK 基于 Agent API 进行开发。
+  </Card>
+
+  <Card title="OpenAI 兼容性" icon="plug" href="/zh/docs/agent-api/openai-compatibility">
+    使用 OpenAI SDK 调用 Perplexity 的完整参考文档。
+  </Card>
+
+  <Card title="Agent API 预设" icon="sparkles" href="/zh/docs/agent-api/presets">
+    面向常见工作负载的预配置方案，例如 `low`。
+  </Card>
+
+  <Card title="Agent API 模型" icon="brain" href="/zh/docs/agent-api/models">
+    可通过 Agent API 使用的第三方模型与 Perplexity 模型完整列表。
+  </Card>
+
+  <Card title="Perplexity SDK" icon="code" href="/zh/docs/sdk/overview">
+    原生 SDK，预设语法更简洁，并提供完整的类型安全。
+  </Card>
+
+  <Card title="API 控制台" icon="key" href="https://console.perplexity.ai">
+    生成并管理你的 Perplexity API 密钥。
+  </Card>
+</CardGroup>

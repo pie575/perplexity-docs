@@ -1,0 +1,218 @@
+---
+title: "Perplexity avec Google Antigravity"
+description: "Appelez l'Agent API de Perplexity depuis les applications que vous créez ou modifiez dans Google Antigravity."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+[Google Antigravity](https://antigravity.google) est un environnement de développement centré sur les agents, où des agents IA planifient, écrivent et font évoluer votre code dans l&#39;éditeur, le terminal et le navigateur. Antigravity est livré avec ses propres modèles d&#39;agents intégrés, mais le code écrit par vos agents peut appeler n&#39;importe quelle API externe — y compris l&#39;[Agent API](/fr/docs/agent-api/quickstart) et la [Search API](/fr/docs/search/quickstart) de Perplexity — pour effectuer des recherches web en temps réel et obtenir des citations et des réponses ancrées dans des sources.
+
+Ce guide explique comment ajouter l&#39;Agent API de Perplexity à un projet que vous développez dans Antigravity, à l&#39;aide de l&#39;interface compatible avec OpenAI Responses.
+
+<Info>
+  **Portée de ce guide.** Antigravity n&#39;expose pour l&#39;instant aucun mécanisme BYOK ni point d&#39;extension permettant de remplacer son modèle d&#39;agent intégré par Perplexity. Ce guide couvre la voie prise en charge : appeler Perplexity depuis le **code de votre application** écrit dans Antigravity (applications web, CLI, assistants de codage, outils internes, etc.). Si Antigravity ajoute par la suite une configuration de fournisseur personnalisé, l&#39;URL de base et l&#39;API key documentées ici resteront valables.
+</Info>
+
+<Card title="Obtenir une API key Perplexity" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Obtenir une clé" href="https://console.perplexity.ai/project/keys">
+  Générez une API key dans la console Perplexity API, puis stockez-la dans votre projet sous le nom `PERPLEXITY_API_KEY`.
+</Card>
+
+***
+
+<div id="when-to-use-this">
+  ## Quand l&#39;utiliser
+</div>
+
+L&#39;Agent API est tout indiquée lorsque votre projet développé avec Antigravity a besoin de réponses sourcées et à jour issues du web, sans que vous ayez à mettre en place vous-même la recherche, le scraping et la gestion des citations. Cas d&#39;usage courants :
+
+* **Fonctionnalités d&#39;IA dans des applications web ou mobiles** — intégrez une surface de recherche ou de questions-réponses à un produit sans déployer votre propre pile de récupération d&#39;information.
+* **Assistants de code et outils de développement** — laissez les agents récupérer à l&#39;exécution la documentation à jour des bibliothèques, des explications d&#39;erreurs ou des journaux de modifications.
+* **Outils internes et tableaux de bord** — répondez à des questions à partir du web en direct (données de marché, mouvements de la concurrence, actualités), sources à l&#39;appui.
+* **CLI et scripts** — de petits utilitaires de recherche que vous lancez depuis le terminal Antigravity.
+
+***
+
+<div id="setup">
+  ## Configuration
+</div>
+
+<Steps>
+  <Step title="Stockez votre API key dans une variable d'environnement">
+    Dans le terminal Antigravity (ou le fichier `.env` de votre projet), définissez :
+
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash theme={null}
+        export PERPLEXITY_API_KEY="pplx-..."
+        ```
+      </Tab>
+
+      <Tab title="Windows (PowerShell)">
+        ```powershell theme={null}
+        setx PERPLEXITY_API_KEY "pplx-..."
+        ```
+      </Tab>
+
+      <Tab title="Fichier .env">
+        ```bash theme={null}
+        PERPLEXITY_API_KEY=pplx-...
+        ```
+      </Tab>
+    </Tabs>
+
+    N&#39;écrivez jamais la clé en dur dans les fichiers source : les agents Antigravity peuvent committer ou partager le code qu&#39;ils lisent, et la traiter comme une variable d&#39;environnement permet de la garder hors du dépôt.
+  </Step>
+
+  <Step title="Installez un SDK">
+    L&#39;Agent API est compatible avec l&#39;[API Responses d&#39;OpenAI](/fr/docs/agent-api/openai-compatibility) : le SDK OpenAI fonctionne donc tel quel. Le SDK natif Perplexity est également disponible et offre une syntaxe de preset plus claire.
+
+    <Tabs>
+      <Tab title="TypeScript / Node">
+        ```bash theme={null}
+        npm install openai
+        ```
+      </Tab>
+
+      <Tab title="Python">
+        ```bash theme={null}
+        pip install openai
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Dirigez le client vers Perplexity">
+    Définissez l&#39;URL de base sur `https://api.perplexity.ai/v1` et lisez l&#39;API key depuis l&#39;environnement.
+
+    <Tabs>
+      <Tab title="TypeScript / Node">
+        ```typescript theme={null}
+        import OpenAI from "openai";
+
+        const client = new OpenAI({
+          apiKey: process.env.PERPLEXITY_API_KEY,
+          baseURL: "https://api.perplexity.ai/v1",
+        });
+
+        const response = await client.responses.create({
+          input: "Summarize the top three AI infrastructure announcements this week with sources.",
+          preset: "low",
+        } as any);
+
+        console.log(response.output_text);
+        ```
+      </Tab>
+
+      <Tab title="Python">
+        ```python theme={null}
+        import os
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=os.environ.get("PERPLEXITY_API_KEY"),
+            base_url="https://api.perplexity.ai/v1",
+        )
+
+        response = client.responses.create(
+            input="Summarize the top three AI infrastructure announcements this week with sources.",
+            extra_body={"preset": "low"},
+        )
+
+        print(response.output_text)
+        ```
+      </Tab>
+    </Tabs>
+
+    Le SDK OpenAI envoie `client.responses.create(...)` vers `POST /v1/responses`, que Perplexity accepte comme alias de l&#39;endpoint canonique `POST /v1/agent`. Aucune autre configuration n&#39;est nécessaire.
+  </Step>
+</Steps>
+
+***
+
+<div id="using-it-from-inside-antigravity">
+  ## Utiliser le client depuis Antigravity
+</div>
+
+Une fois le client configuré, vous pouvez demander à l&#39;agent d&#39;Antigravity d&#39;utiliser le client Perplexity partout où votre application a besoin de réponses sourcées. Quelques prompts qui fonctionnent bien :
+
+* *« Ajoute un endpoint `/research` qui prend une chaîne `query` et renvoie la réponse de l&#39;Agent API de Perplexity avec ses citations. »*
+* *« Encapsule l&#39;appel à Perplexity dans une fonction utilitaire `researchTopic(topic: string)` et appelle-la depuis le widget d&#39;actualités du tableau de bord. »*
+* *« Écris une sous-commande CLI `pplx ask` qui diffuse une réponse de l&#39;Agent API de Perplexity vers stdout. »*
+
+Comme le SDK est le client OpenAI standard, l&#39;agent d&#39;Antigravity connaît déjà la structure de l&#39;appel — il vous suffit essentiellement de vérifier qu&#39;il utilise la bonne `baseURL` et qu&#39;il lit `PERPLEXITY_API_KEY` depuis l&#39;environnement.
+
+<Tip>
+  Si l&#39;agent d&#39;Antigravity génère du code pointant vers `https://api.openai.com/v1` ou omet complètement la `baseURL`, demandez-lui d&#39;« utiliser l&#39;URL de base de Perplexity `https://api.perplexity.ai/v1` » — il régénérera le client avec le bon endpoint.
+</Tip>
+
+***
+
+<div id="troubleshooting">
+  ## Dépannage
+</div>
+
+<AccordionGroup>
+  <Accordion title="L'URL de base doit être exactement https://api.perplexity.ai/v1">
+    Le SDK OpenAI ajoute lui-même `/responses` à l&#39;URL de base. N&#39;incluez **pas** `/agent` ni `/responses` dans l&#39;URL de base, et n&#39;omettez pas `/v1`.
+
+    | Correct                        | Incorrect                                    |
+    | ------------------------------ | -------------------------------------------- |
+    | `https://api.perplexity.ai/v1` | `https://api.perplexity.ai/v1/agent`         |
+    |                                | `https://api.perplexity.ai/v1/responses`     |
+    |                                | `https://api.perplexity.ai` (`/v1` manquant) |
+
+    Une URL de base incorrecte se traduit généralement par des erreurs 404 ou d&#39;authentification.
+  </Accordion>
+
+  <Accordion title="Puis-je remplacer le modèle d'agent intégré d'Antigravity par Perplexity ?">
+    Pas pour l&#39;instant. Antigravity ne propose aucun réglage de fournisseur personnalisé ni BYOK permettant de router son agent intégré à l&#39;éditeur via Perplexity. Utilisez plutôt l&#39;approche décrite dans ce guide : appeler la Perplexity Agent API depuis le code de votre application.
+
+    Si Antigravity prend en charge les fournisseurs personnalisés à l&#39;avenir, la configuration sera la suivante : URL de base `https://api.perplexity.ai/v1`, API key issue de `PERPLEXITY_API_KEY`, et un transport compatible OpenAI Responses.
+  </Accordion>
+
+  <Accordion title="L'API key n'est pas prise en compte">
+    Les sessions de terminal d&#39;Antigravity héritent des variables d&#39;environnement de l&#39;environnement depuis lequel Antigravity a été lancé. Si `echo $PERPLEXITY_API_KEY` ne renvoie rien dans le terminal intégré, définissez-la dans votre profil shell (`~/.zshrc`, `~/.bashrc`) puis relancez Antigravity, ou chargez-la depuis un fichier `.env` propre au projet à l&#39;aide d&#39;un outil comme `dotenv`.
+  </Accordion>
+
+  <Accordion title="Choisir un modèle ou un preset">
+    Les presets comme `low` sont préconfigurés pour les charges de travail de recherche courantes et constituent le point de départ le plus simple. Si vous avez besoin d&#39;un modèle tiers précis (Claude, GPT, Gemini, etc.), passez `model="anthropic/claude-sonnet-4-6"` (ou une autre valeur de la [liste des modèles de l&#39;Agent API](/fr/docs/agent-api/models)) au lieu de `preset`.
+  </Accordion>
+</AccordionGroup>
+
+***
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Démarrage rapide avec l'Agent API" icon="rocket" href="/fr/docs/agent-api/quickstart">
+    Développez avec l&#39;Agent API à l&#39;aide des SDK natifs ou compatibles OpenAI.
+  </Card>
+
+  <Card title="Compatibilité OpenAI" icon="plug" href="/fr/docs/agent-api/openai-compatibility">
+    Référence complète pour utiliser le SDK OpenAI avec Perplexity.
+  </Card>
+
+  <Card title="Presets de l'Agent API" icon="sparkles" href="/fr/docs/agent-api/presets">
+    Configurations prédéfinies comme `low` pour les charges de travail courantes.
+  </Card>
+
+  <Card title="Modèles de l'Agent API" icon="brain" href="/fr/docs/agent-api/models">
+    Liste complète des modèles Perplexity et tiers disponibles via l&#39;Agent API.
+  </Card>
+
+  <Card title="SDK Perplexity" icon="code" href="/fr/docs/sdk/overview">
+    SDK natif offrant une syntaxe de preset plus claire et un typage complet.
+  </Card>
+
+  <Card title="Console API" icon="key" href="https://console.perplexity.ai">
+    Générez et gérez vos API keys Perplexity.
+  </Card>
+</CardGroup>

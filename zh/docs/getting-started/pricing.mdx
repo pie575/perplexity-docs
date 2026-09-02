@@ -1,0 +1,290 @@
+---
+title: "定价"
+description: "了解 Perplexity API 的定价、模型费率、请求费用、账单设置以及速率限制参考。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+import PricingCalculator from "/snippets/zh/pricing-calculator.mdx";
+
+<Info>
+  本页介绍**定价信息**，帮助你了解 API 费用。
+
+  如需了解**账单设置**、付款方式和用量监控，请访问[管理部分](/zh/docs/getting-started/projects)。如需了解**速率限制**，请参阅[速率限制与用量层级](/zh/docs/admin/rate-limits-usage-tiers)页面。
+</Info>
+
+<div id="estimate-your-cost">
+  ## 估算费用
+</div>
+
+<PricingCalculator />
+
+<div id="router-api-pricing">
+  ## Router API 定价
+</div>
+
+Router API 的用量按各模型公布的费率以 token 计费，不收取任何按请求计算的费用。每个模型都有各自的输入和输出费率；缓存读取按该模型的折扣缓存读取费率计费，推理 token 按输出费率计费。无论请求实际由哪种方式提供服务，都始终按所请求模型的费率计费。
+
+完整的各模型费率表 (包括缓存写入费率和长上下文定价) 请参见 [Router Models &amp; Pricing](/zh/docs/router/models)。
+
+<div id="agent-api-pricing">
+  ## Agent API 定价
+</div>
+
+Agent API 可访问 OpenAI、Anthropic、Google、xAI、Z.AI、Moonshot AI、NVIDIA 等提供商的第三方模型，采用**透明的按 token 计费方式**，直接沿用提供商原价，不加价。
+
+<div id="model-pricing">
+  ### 模型定价
+</div>
+
+Agent API 的定价因提供商和模型而异，每个提供商均提供多个不同价位的模型。
+
+<Card title="查看完整的第三方模型定价" icon="table" href="/zh/docs/agent-api/models">
+  在 [Agent API 模型页面](/zh/docs/agent-api/models) 查看来自 OpenAI、Anthropic、Google、xAI、Z.AI、Moonshot AI 和 NVIDIA 的所有可用模型的完整定价明细，包括缓存费率和提供商文档链接。
+</Card>
+
+<div id="tool-pricing">
+  ### 工具定价
+</div>
+
+在 Agent API 中使用工具时：
+
+| 工具                   |      价格      | 说明                                                                                                                                  |
+| -------------------- | :----------: | ----------------------------------------------------------------------------------------------------------------------------------- |
+| **`web_search`**     | 每次调用 $0.0025 | 执行网页搜索以获取最新信息                                                                                                                       |
+| **`fetch_url`**      | 每次调用 $0.0005 | 抓取并提取指定 URL 的内容                                                                                                                     |
+| **`people_search`**  |  每次调用 $0.005 | 查找专业人士、员工及人物信息。每 1,000 次工具调用 $5                                                                                                     |
+| **`finance_search`** |  每次调用 $0.005 | 获取金融数据与市场信息。每 1,000 次工具调用 $5                                                                                                        |
+| **`sandbox`**        |  每个会话 $0.03  | 在 Agent API 请求期间执行代码的隔离容器。计费时，一个会话最多涵盖 20 分钟的活跃使用时间——这是计费窗口，而非运行时长上限。从 sandbox 内部发起的 SDK 搜索查询按每次请求 $0.0025 计费 (与 `web_search` 相同) 。 |
+
+<Note>
+  多数工具按调用次数计费。`sandbox` 按容器会话计费——每个容器对应 20 分钟的计费窗口，而非运行时长上限——此外还需为从容器内部发起的 SDK 搜索查询付费。工具费用与模型 token 费用分开计算。
+</Note>
+
+<div id="search-api-pricing">
+  ## Search API 定价
+</div>
+
+| API            | 每 1K 次请求价格 | 说明              |
+| -------------- | :--------: | --------------- |
+| **Search API** |    $5.00   | 原始网页搜索结果，支持高级过滤 |
+
+<Note>
+  **计费单位：** Search API 按每次成功的 `POST /search` 请求计费，而不是按请求中的每个查询计费。一次请求即使包含最多五个查询组成的数组，也只算作一个计费单位。无效请求、被限流的请求以及上游故障不计费。成功的响应即使未返回任何结果，同样计费。不会产生额外的 token 费用。
+</Note>
+
+<div id="sonar-api-pricing">
+  ## Sonar API 定价
+</div>
+
+<SonarDeprecationNotice />
+
+<Info>
+  **每次查询的总成本** = token 成本 + 请求费用 (请求费用随搜索上下文大小而变化，仅适用于 Sonar、Sonar Pro 和 Sonar Reasoning Pro 模型)
+</Info>
+
+<Tabs>
+  <Tab title="Token 定价">
+    <div id="token-pricing">
+      ## Token 定价
+    </div>
+
+    **Token 定价**根据请求和响应中的 token 数量计算。
+
+    | 模型                      | 输入 Token ($/1M)  | 输出 Token ($/1M)  | 引用 Token ($/1M)  | 搜索查询 ($/1K)  | 推理 Token ($/1M)  |
+    | ----------------------- | :--------------: | :--------------: | :--------------: | :----------: | :--------------: |
+    | **Sonar**               |        $1        |        $1        |         -        |       -      |         -        |
+    | **Sonar Pro**           |        $3        |        $15       |         -        |       -      |         -        |
+    | **Sonar Reasoning Pro** |        $2        |        $8        |         -        |       -      |         -        |
+    | **Sonar Deep Research** |        $2        |        $8        |        $2        |      $5      |        $3        |
+  </Tab>
+
+  <Tab title="请求定价">
+    <div id="request-pricing-by-search-context-size">
+      ## 按搜索上下文大小计费的请求定价
+    </div>
+
+    **搜索上下文**决定检索多少网络信息。上下文越大 = 结果越全面。下表列出各模型每 **1000 次请求**的请求费用。
+
+    | 模型                      | 低上下文大小 | 中等上下文大小 | 高上下文大小 |
+    | ----------------------- | :----: | :-----: | :----: |
+    | **Sonar**               |   $5   |    $8   |   $12  |
+    | **Sonar Pro**           |   $6   |   $10   |   $14  |
+    | **Sonar Reasoning Pro** |   $6   |   $10   |   $14  |
+
+    <Note>
+      * **low**： (默认) 最快、最便宜
+      * **Medium**：成本与质量兼顾
+      * **High**：搜索深度最大，最适合研究场景
+
+      [进一步了解搜索上下文 →](https://docs.perplexity.ai/docs/sonar/filters#context-size-control)
+    </Note>
+  </Tab>
+
+  <Tab title="Pro Search 定价">
+    <div id="pro-search-pricing-pro-search-for-sonar-pro">
+      ## Pro Search 定价 (适用于 Sonar Pro 的 Pro Search)
+    </div>
+
+    **Pro Search** 通过自动化工具调用和多步推理增强 Sonar Pro。启用后，模型可执行多次网页搜索并抓取 URL 内容，以回答复杂查询。[点击此处进一步了解 Pro Search](/zh/docs/sonar/pro-search/quickstart)。
+
+    <Info>
+      Pro Search 需要设置 `stream: true`，并通过 `web_search_options` 中的 `search_type` 参数启用。
+    </Info>
+
+    <div id="search-type-options">
+      ### 搜索类型选项
+    </div>
+
+    | 搜索类型       | 说明                    |   请求费用 (每 1K)   |
+    | ---------- | --------------------- | :-------------: |
+    | **`fast`** |  (默认) 标准 Sonar Pro 行为 |  $6 / $10 / $14 |
+    | **`pro`**  | 针对复杂查询的多步工具调用         | $14 / $18 / $22 |
+    | **`auto`** | 根据查询复杂度自动分类           |     因分类结果而异     |
+
+    <Note>
+      请求费用随搜索上下文大小 (Low / Medium / High) 而变化。Token 定价与标准 Sonar Pro 相同 (输入 $3/1M，输出 $15/1M) 。
+    </Note>
+  </Tab>
+</Tabs>
+
+<div id="embeddings-api-pricing">
+  ## Embeddings API 定价
+</div>
+
+生成高质量的文本嵌入，可用于语义搜索、检索增强生成 (RAG) 及其他机器学习应用。
+
+<div id="standard-embeddings">
+  ### 标准嵌入
+</div>
+
+| 模型                   |  维度  | 价格 ($/100 万 token)  |
+| -------------------- | :--: | :-----------------: |
+| `pplx-embed-v1-0.6b` | 1024 |        $0.004       |
+| `pplx-embed-v1-4b`   | 2560 |        $0.03        |
+
+<div id="contextualized-embeddings">
+  ### 上下文化嵌入
+</div>
+
+| 模型                           |  维度  | 价格 ($/100 万 token)  |
+| ---------------------------- | :--: | :-----------------: |
+| `pplx-embed-context-v1-0.6b` | 1024 |        $0.008       |
+| `pplx-embed-context-v1-4b`   | 2560 |        $0.05        |
+
+<Card title="查看 Embeddings API 文档" icon="cube" href="/zh/docs/embeddings/quickstart">
+  了解如何使用 Embeddings API 实现语义搜索、RAG 等场景。
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Token 与费用术语表">
+    <div id="input-tokens">
+      ### 输入 token
+    </div>
+
+    你发送给 API 的提示或消息中包含的 token 数量，包括：
+
+    * 你的问题或指令
+    * 你提供的任何上下文或示例
+    * 系统消息与格式内容
+
+    **示例：** “What is the weather in New York?” = ~8 个输入 token
+
+    <div id="output-tokens">
+      ### 输出 token
+    </div>
+
+    API 响应中的 token 数量，包括：
+
+    * 生成的答案或内容
+    * 任何解释或补充上下文
+    * 搜索结果与引用
+
+    **示例：** “The weather in New York is currently sunny with a temperature of 72°F.” = ~15 个输出 token
+
+    <div id="citation-tokens">
+      ### 引用 token
+    </div>
+
+    专门用于在响应中生成搜索结果和引用的 token，仅适用于 **Sonar Deep Research** 模型。
+
+    **示例：** 包含来源链接、引用编号和文献信息
+
+    <div id="search-context-size-vs-context-window">
+      ### 搜索上下文大小与上下文窗口
+    </div>
+
+    **搜索上下文大小**与**上下文窗口***并不*是一回事。
+
+    * **搜索上下文大小**：搜索过程中检索的网页信息量 (影响请求计费)
+    * **上下文窗口**：模型在单次请求中可处理的最大 token 数 (影响 token 限制)
+
+    <div id="search-queries">
+      ### 搜索查询
+    </div>
+
+    **Sonar Deep Research** 在处理查询期间发起的独立搜索次数，与你最初提交的用户查询分开计算。
+
+    * 模型会自动判断需要执行多少次搜索
+    * 你无法控制搜索查询的确切次数
+    * `reasoning_effort` 参数会影响实际执行的搜索次数
+    * 仅适用于 **Sonar Deep Research** 模型
+
+    <div id="reasoning-tokens">
+      ### 推理 token
+    </div>
+
+    用于逐步逻辑推理和问题求解的 token，仅适用于 **Sonar Deep Research** 模型。
+
+    **示例：** 将复杂的数学问题拆解为带解释的连续步骤
+
+    <Info>
+      **Token 计算：** 在英文文本中，1 个 token ≈ 4 个字符。确切数量会因语言和内容复杂度而有所不同。
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+<div id="cost-examples">
+  ## 成本示例
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 网页搜索" icon="calculator">
+    **`openai/gpt-5.2`** • 500 输入 + 200 输出 token • 1 次网页搜索
+
+    | 项目           | 成本            |
+    | ------------ | ------------- |
+    | 输入 token     | $0.000875     |
+    | 输出 token     | $0.0028       |
+    | `web_search` | $0.0025       |
+    | **总计**       | **$0.006175** |
+  </Card>
+
+  <Card title="Agent API 研究类 preset" icon="chart-area-line">
+    **`low` preset 的典型运行** • 2,000 输入 + 1,000 输出 token • 1 次网页搜索 + 1 次抓取
+
+    | 项目           | 成本         |
+    | ------------ | ---------- |
+    | 模型输入 token   | $0.001     |
+    | 模型输出 token   | $0.003     |
+    | `web_search` | $0.0025    |
+    | `fetch_url`  | $0.0005    |
+    | **总计**       | **$0.007** |
+  </Card>
+</CardGroup>
+
+实际的 preset 成本会因所选模型、token 用量和工具调用次数而异。若已完成的响应中包含 `usage.cost.total_cost`，该字段会给出本次请求计算出的成本。
+
+<div id="purchase-options">
+  ## 购买方式
+</div>
+
+<CardGroup cols={2}>
+  <Card title="AWS Marketplace 上的 Perplexity API 平台" icon="aws" href="/zh/docs/resources/aws-marketplace" arrow="True">
+    通过 AWS Marketplace 购买 API 额度，支持合并计费与企业采购流程。
+  </Card>
+
+  <Card title="联系销售团队" icon="file-pencil" iconType="solid" href="https://perplexity.typeform.com/to/m3WnMaG6">
+    填写企业咨询表单，与我们洽谈定制定价、专属支持以及面向团队和组织的企业级功能。
+  </Card>
+</CardGroup>

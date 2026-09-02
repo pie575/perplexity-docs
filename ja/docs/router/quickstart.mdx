@@ -1,0 +1,436 @@
+---
+title: "Perplexity Router API"
+sidebarTitle: "クイックスタート"
+description: "Perplexity API キーひとつで、OpenAI Chat Completions、OpenAI Responses、Anthropic Messages の各 API を通じてオープンウェイトモデルに統一的にアクセスできます。"
+---
+
+<Note>
+  Router API はプライベートプレビュー中です。利用をご希望の場合は [api@perplexity.ai](mailto:api@perplexity.ai) までメールでお問い合わせください。
+</Note>
+
+<div id="overview">
+  ## 概要
+</div>
+
+Router API は、単一の API と API キー で、Perplexity がホストするオープンウェイトモデルに統一的にアクセスできる仕組みを提供します。OpenAI Chat Completions、OpenAI Responses、または Anthropic Messages の形式でリクエストを送信し、[カタログ](/ja/docs/router/models)から任意の model を選択するだけで、プラットフォームが各リクエストを正常なデプロイメントへ自動的にルーティングします。プロバイダーごとのアカウントや SDK、フェイルオーバーロジックを自前で用意する必要はありません。
+
+カタログ内のすべての model は、その model の提供元に関係なく、サポートされている任意のスキーマから呼び出せます。そのため Router は、既存の OpenAI または Anthropic 連携をそのまま置き換えられます。変更が必要なのはベース URL と API キー だけです。
+
+独自のプロンプトやツールで model に直接アクセスしたい場合は Router API を使用してください。引用が組み込まれた、ウェブに基づく回答が必要な場合は [Agent API](/ja/docs/agent-api/quickstart) を使用してください。
+
+ベース URL は `https://api.perplexity.ai/router/v1` で、既存の Perplexity API キー をそのまま利用できます。
+
+<div id="installation">
+  ## インストール
+</div>
+
+Router API は OpenAI の Chat Completions 形式および Responses 形式に加え、Anthropic の Messages 形式にも対応しています。そのため、どちらのプロバイダーの公式 SDK でも利用できます。ご自身の実装に合うものをインストールしてください (両方インストールしても構いません) 。
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install openai       # OpenAI の Chat Completions 形式および Responses 形式
+  pip install anthropic    # Anthropic の Messages 形式
+  ```
+
+  ```bash Typescript theme={null}
+  npm install openai              # OpenAI の Chat Completions 形式および Responses 形式
+  npm install @anthropic-ai/sdk   # Anthropic の Messages 形式
+  ```
+</CodeGroup>
+
+<div id="authentication">
+  ## 認証
+</div>
+
+API キー を環境変数に設定します:
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+</Tabs>
+
+リクエストの認証には `Authorization: Bearer` ヘッダーを使用します。SDK を利用する場合は、`api_key` パラメータの値から自動的に設定されます。
+
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
+
+OpenAI SDK のベース URL を Router に向け、[カタログ](/ja/docs/router/models)にある任意の model id を指定します。model id は `creator/model-name` 形式のスラッグなので、プロバイダーの切り替えは1行の変更だけで済みます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  response = client.chat.completions.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+  )
+
+  print(response.choices[0].message.content)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const response = await client.chat.completions.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Explain the CAP theorem in two sentences." }
+      ]
+  });
+
+  console.log(response.choices[0].message.content);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/chat/completions' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="レスポンス">
+  ```json theme={null}
+  {
+    "id": "chatcmpl-Xr7aQ2mVb9L4tW8pDcEfGh1JkNs0y",
+    "object": "chat.completion",
+    "created": 1753747200,
+    "model": "perplexity/kimi-k3",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The CAP theorem states that a distributed system can guarantee at most two of three properties: consistency, availability, and partition tolerance. Since network partitions are unavoidable in practice, designers must choose between consistency and availability when a partition occurs.",
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 18,
+      "completion_tokens": 52,
+      "total_tokens": 70,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  }
+  ```
+</Accordion>
+
+レスポンスには、リクエストで指定した model id がそのまま返されます。リクエストがどのように処理されたかによらず、課金は常にその model の[公開料金](/ja/docs/router/models)が適用されます。
+
+<div id="openai-responses">
+  ## OpenAI Responses
+</div>
+
+インテグレーションで OpenAI Responses 形式を使用している場合は、同じ Router のベース URL を指定して `client.responses.create()` を呼び出します。Router の Responses エンドポイントはステートレスなので、リクエストごとに会話全体を `input` に含めてください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  response = client.responses.create(
+      model="perplexity/kimi-k3",
+      input="Explain the CAP theorem in two sentences.",
+      max_output_tokens=1024
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const response = await client.responses.create({
+      model: "perplexity/kimi-k3",
+      input: "Explain the CAP theorem in two sentences.",
+      max_output_tokens: 1024
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/responses' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "input": "Explain the CAP theorem in two sentences.",
+      "max_output_tokens": 1024
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="streaming-chat-completions">
+  ## ストリーミングチャット補完
+</div>
+
+`stream: true` を設定すると、トークンがServer-Sent Events として順次送信されます。ストリーミングレスポンスでトークンの使用量を取得するには、あわせて `stream_options: {"include_usage": true}` を設定します。この場合、使用量は `data: [DONE]` の直前の最終チャンクに含まれます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  stream = client.chat.completions.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Write a haiku about network latency."}
+      ],
+      stream=True,
+      stream_options={"include_usage": True}
+  )
+
+  for chunk in stream:
+      if chunk.choices and chunk.choices[0].delta.content:
+          print(chunk.choices[0].delta.content, end="")
+      if chunk.usage:
+          print(f"\n\nTokens used: {chunk.usage.total_tokens}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const stream = await client.chat.completions.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Write a haiku about network latency." }
+      ],
+      stream: true,
+      stream_options: { include_usage: true }
+  });
+
+  for await (const chunk of stream) {
+      if (chunk.choices[0]?.delta?.content) {
+          process.stdout.write(chunk.choices[0].delta.content);
+      }
+      if (chunk.usage) {
+          console.log(`\n\nTokens used: ${chunk.usage.total_tokens}`);
+      }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -N -X POST 'https://api.perplexity.ai/router/v1/chat/completions' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Write a haiku about network latency."}
+      ],
+      "stream": true,
+      "stream_options": {"include_usage": true}
+    }'
+  ```
+</CodeGroup>
+
+<div id="anthropic-messages">
+  ## Anthropic Messages
+</div>
+
+同じモデル群は `/router/v1/messages` でAnthropic Messages形式でも利用でき、Anthropic SDK向けに書かれたコードはベース URLを変更するだけで動作します。
+
+<Info>
+  Anthropic SDKはベース URLの末尾に `/v1/messages` を付加するため、`https://api.perplexity.ai/router` (`/v1` なし) を指定してください。OpenAI SDKは `/chat/completions` を付加するため、`https://api.perplexity.ai/router/v1` を指定します。
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from anthropic import Anthropic
+  import os
+
+  client = Anthropic(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router"
+  )
+
+  message = client.messages.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+  )
+
+  print(message.content[0].text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Anthropic from '@anthropic-ai/sdk';
+
+  const client = new Anthropic({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router"
+  });
+
+  const message = await client.messages.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Explain the CAP theorem in two sentences." }
+      ]
+  });
+
+  console.log(message.content[0].text);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/messages' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="discovering-models">
+  ## モデルの検出
+</div>
+
+現在のカタログはいつでも一覧取得できます。レスポンスは OpenAI 互換で、model id 順にソートされ、各 model の基本 トークン 価格 (100万 トークン あたりの米ドル) が含まれます。
+
+```bash theme={null}
+curl 'https://api.perplexity.ai/router/v1/models' \
+  -H "Authorization: Bearer $PERPLEXITY_API_KEY" | jq
+```
+
+<Accordion title="レスポンス">
+  ```json theme={null}
+  {
+    "object": "list",
+    "data": [
+      {
+        "id": "perplexity/deepseek-v4-flash-0731",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 0.13,
+          "output": 0.26,
+          "cache_read": 0.028,
+          "unit": "usd_per_1m_tokens"
+        }
+      },
+      {
+        "id": "perplexity/glm-5.2",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 1.4,
+          "output": 4.4,
+          "cache_read": 0.14,
+          "unit": "usd_per_1m_tokens"
+        }
+      },
+      {
+        "id": "perplexity/kimi-k3",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 3,
+          "output": 15,
+          "cache_read": 0.3,
+          "unit": "usd_per_1m_tokens"
+        }
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+料金を含む全モデルの一覧は、[モデルページ](/ja/docs/router/models)を参照してください。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="モデルと料金" icon="brain" href="/ja/docs/router/models">
+    トークン単位の料金を含むモデルカタログ。
+  </Card>
+
+  <Card title="ルーティングと信頼性" icon="arrows-shuffle" href="/ja/docs/router/routing-and-reliability">
+    リクエストのルーティング方法と、プロバイダーで障害が発生した場合の挙動。
+  </Card>
+
+  <Card title="Chat Completions リファレンス" icon="code" href="/ja/api-reference/gateway-chat-completions-post">
+    リクエストとレスポンスの完全なスキーマ。
+  </Card>
+
+  <Card title="Responses リファレンス" icon="code" href="/ja/api-reference/gateway-responses-post">
+    OpenAI Responses 互換エンドポイントのスキーマ。
+  </Card>
+
+  <Card title="Messages リファレンス" icon="code" href="/ja/api-reference/gateway-messages-post">
+    Anthropic 互換エンドポイントのスキーマ。
+  </Card>
+</CardGroup>
+
+お困りですか？サポートは[コミュニティ](https://community.perplexity.ai)をご覧ください。

@@ -1,0 +1,158 @@
+---
+title: "Perplexity con CAMEL-AI"
+description: "Usa la Search API de Perplexity como herramienta dentro de sistemas multiagente de CAMEL-AI."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+El `SearchToolkit` de CAMEL-AI incluye un método `search_perplexity` que encapsula la [Search API de Perplexity](/es/docs/search/quickstart) como una herramienta nativa de CAMEL. La herramienta devuelve resultados web ordenados por relevancia —título, URL, fragmento y fecha—, de modo que el `ChatAgent` que la invoca puede fundamentar sus respuestas en fuentes actualizadas y citables.
+
+<Info>
+  **CAMEL-AI** es un framework de código abierto para crear sistemas multiagente comunicativos. Más información en [camel-ai.org](https://www.camel-ai.org).
+</Info>
+
+<div id="installation">
+  ## Instalación
+</div>
+
+```bash theme={null}
+pip install camel-ai
+```
+
+<div id="api-key-setup">
+  ## Configuración de la API key
+</div>
+
+Define tu API key de Perplexity como variable de entorno:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="Obtener API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Genera tu API key desde el panel de control de Perplexity.
+</Card>
+
+<div id="quick-start">
+  ## Inicio rápido
+</div>
+
+Registra `search_perplexity` como herramienta en un `ChatAgent`:
+
+```python theme={null}
+from camel.agents import ChatAgent
+from camel.toolkits import FunctionTool, SearchToolkit
+
+agent = ChatAgent(
+    system_message=(
+        "You are a helpful assistant that can use the Perplexity "
+        "search engine to answer questions."
+    ),
+    tools=[FunctionTool(SearchToolkit().search_perplexity)],
+)
+
+response = agent.step(
+    input_message="What are the latest developments in multi-agent AI systems?",
+    response_format=None,
+)
+print(response.msgs[0].content)
+```
+
+La herramienta llama internamente a `POST https://api.perplexity.ai/search` y devuelve la respuesta sin procesar de la API para que el agente pueda elegir qué resultados citar.
+
+<div id="configuration">
+  ## Configuración
+</div>
+
+Todos los parámetros de la Search API se admiten directamente en `search_perplexity`:
+
+```python theme={null}
+from camel.toolkits import SearchToolkit
+
+toolkit = SearchToolkit()
+
+results = toolkit.search_perplexity(
+    query="AI safety research",
+    max_results=5,
+    max_tokens_per_page=512,
+    country="US",
+    search_recency_filter="week",                         # hour | day | week | month | year
+    search_domain_filter=["arxiv.org", "-medium.com"],   # anteponer '-' para excluir
+    search_language_filter=["en"],
+)
+```
+
+También puedes pasar una lista de consultas para realizar búsquedas por lotes, o usar `extra_params` para enviar cualquier campo adicional de la Search API que todavía no sea un argumento de primer nivel:
+
+```python theme={null}
+results = toolkit.search_perplexity(
+    query=["NVIDIA earnings", "AMD earnings"],
+    max_results=3,
+    extra_params={
+        "search_after_date_filter": "1/1/2026",
+        "search_before_date_filter": "5/1/2026",
+    },
+)
+```
+
+<div id="response-shape">
+  ## Forma de la respuesta
+</div>
+
+`search_perplexity` devuelve la respuesta sin procesar de la Search API de Perplexity como un `Dict[str, Any]`. Si la llamada tiene éxito, incluye una lista `results` junto con `id` y `server_time`:
+
+```python theme={null}
+{
+    "id": "...",
+    "server_time": "...",
+    "results": [
+        {
+            "title": "...",
+            "url": "...",
+            "snippet": "...",
+            "date": "...",          # puede estar presente
+            "last_updated": "...",  # puede estar presente
+        },
+        # ...
+    ],
+}
+```
+
+En caso de fallo, la respuesta es un diccionario con una clave `error` que describe el problema (API key ausente, error HTTP o excepción en la solicitud).
+
+<div id="links-resources">
+  ## Enlaces y recursos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Documentación de CAMEL-AI" icon="book" href="https://docs.camel-ai.org">
+    Crea sistemas multiagente con CAMEL-AI.
+  </Card>
+
+  <Card title="Código fuente de la herramienta" icon="brand-github" href="https://github.com/camel-ai/camel/blob/master/camel/toolkits/search_toolkit.py">
+    Implementación de SearchToolkit.search&#95;perplexity.
+  </Card>
+
+  <Card title="Inicio rápido de Search API" icon="search" href="/es/docs/search/quickstart">
+    Más información sobre la Search API de Perplexity en la que se basa.
+  </Card>
+
+  <Card title="Script de ejemplo" icon="code" href="https://github.com/camel-ai/camel/blob/master/examples/toolkits/search_toolkit.py">
+    Ejemplo completo de CAMEL con la búsqueda de Perplexity.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Soporte
+</div>
+
+¿Necesitas ayuda con la integración?
+
+* Consulta la [documentación de CAMEL-AI](https://docs.camel-ai.org)
+* Revisa nuestras [preguntas frecuentes](/es/docs/resources/faq)

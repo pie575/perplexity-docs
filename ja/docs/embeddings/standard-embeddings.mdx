@@ -1,0 +1,261 @@
+---
+title: "標準埋め込み"
+description: "独立したテキスト、検索クエリ、単一の文に対する埋め込みを生成します。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+各テキストがそれ自体で完結している独立した埋め込み処理 (クエリ、ドキュメント、セマンティック検索) には、標準の埋め込みを使用してください。
+
+<div id="models">
+  ## モデル
+</div>
+
+|          モデル         |  次元数 | コンテキスト長 | MRL |     量子化     | 価格 ($/100万トークン)  |
+| :------------------: | :--: | :-----: | :-: | :---------: | :--------------: |
+| `pplx-embed-v1-0.6b` | 1024 |   32K   |  あり | INT8/BINARY |      $0.004      |
+|  `pplx-embed-v1-4b`  | 2560 |   32K   |  あり | INT8/BINARY |       $0.03      |
+
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
+
+テキストのリストに対して埋め込みを生成します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.embeddings.create(
+      input=[
+          "Scientists explore the universe driven by curiosity.",
+          "Curiosity compels us to seek explanations, not just observations.",
+          "Historical discoveries began with curious questions.",
+          "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+          "Philosophy examines the nature of curiosity."
+      ],
+      model="pplx-embed-v1-4b"
+  )
+
+  for emb in response.data:
+      print(f"Index {emb.index}: {emb.embedding}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.embeddings.create({
+      input: [
+          "Scientists explore the universe driven by curiosity.",
+          "Curiosity compels us to seek explanations, not just observations.",
+          "Historical discoveries began with curious questions.",
+          "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+          "Philosophy examines the nature of curiosity."
+      ],
+      model: "pplx-embed-v1-4b"
+  });
+
+  for (const emb of response.data!) {
+      console.log(`Index ${emb.index}: ${emb.embedding!}`);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/v1/embeddings' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "input": [
+        "Scientists explore the universe driven by curiosity.",
+        "Curiosity compels us to seek explanations, not just observations.",
+        "Historical discoveries began with curious questions.",
+        "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+        "Philosophy examines the nature of curiosity."
+      ],
+      "model": "pplx-embed-v1-4b"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="レスポンス">
+  ```json theme={null}
+  {
+    "object": "list",
+    "data": [
+      {
+        "object": "embedding",
+        "index": 0,
+        "embedding": "/* base64エンコードされた符号付きint8の値 */"
+      },
+      {
+        "object": "embedding",
+        "index": 1,
+        "embedding": "/* base64エンコードされた符号付きint8の値 */"
+      },
+      {
+        "object": "embedding",
+        "index": 2,
+        "embedding": "/* base64エンコードされた符号付きint8の値 */"
+      },
+      {
+        "object": "embedding",
+        "index": 3,
+        "embedding": "/* base64エンコードされた符号付きint8の値 */"
+      },
+      {
+        "object": "embedding",
+        "index": 4,
+        "embedding": "/* base64エンコードされた符号付きint8の値 */"
+      }
+    ],
+    "model": "pplx-embed-v1-4b",
+    "usage": {
+      "prompt_tokens": 42,
+      "total_tokens": 42,
+      "cost": {
+        "input_cost": 0.0000013,
+        "total_cost": 0.0000013,
+        "currency": "USD"
+      }
+    }
+  }
+  ```
+</Accordion>
+
+<div id="semantic-search-example">
+  ## セマンティック検索の例
+</div>
+
+シンプルなセマンティック検索システムを構築します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string):
+      """base64エンコードされたint8の埋め込みをデコードする。"""
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a, b):
+      return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+  # 1. ドキュメントを埋め込みに変換する
+  documents = [
+      "Python is a versatile programming language",
+      "Machine learning automates analytical model building",
+      "The Eiffel Tower is located in Paris, France"
+  ]
+
+  doc_response = client.embeddings.create(input=documents, model="pplx-embed-v1-4b")
+  doc_embeddings = [decode_embedding(emb.embedding) for emb in doc_response.data]
+
+  # 2. 検索クエリを埋め込みに変換する
+  query = "What programming languages are good for data science?"
+  query_response = client.embeddings.create(input=[query], model="pplx-embed-v1-4b")
+  query_embedding = decode_embedding(query_response.data[0].embedding)
+
+  # 3. 最も類似度の高いドキュメントを探す
+  scores = [
+      (i, cosine_similarity(query_embedding, doc_emb))
+      for i, doc_emb in enumerate(doc_embeddings)
+  ]
+  ranked = sorted(scores, key=lambda x: x[1], reverse=True)
+
+  print("Search results:")
+  for idx, score in ranked:
+      print(f"  {score:.4f}: {documents[idx]}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dotProduct = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dotProduct += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // 1. ドキュメントを埋め込みに変換する
+  const documents = [
+      "Python is a versatile programming language",
+      "Machine learning automates analytical model building",
+      "The Eiffel Tower is located in Paris, France"
+  ];
+
+  const docResponse = await client.embeddings.create({
+      input: documents,
+      model: "pplx-embed-v1-4b"
+  });
+  const docEmbeddings = docResponse.data!.map(emb => decodeEmbedding(emb.embedding!));
+
+  // 2. 検索クエリを埋め込みに変換する
+  const query = "What programming languages are good for data science?";
+  const queryResponse = await client.embeddings.create({
+      input: [query],
+      model: "pplx-embed-v1-4b"
+  });
+  const queryEmbedding = decodeEmbedding(queryResponse.data![0].embedding!);
+
+  // 3. 最も類似度の高いドキュメントを探す
+  const scores = docEmbeddings.map((docEmb, i) => ({
+      index: i,
+      score: cosineSimilarity(queryEmbedding, docEmb)
+  }));
+  const ranked = scores.sort((a, b) => b.score - a.score);
+
+  console.log("Search results:");
+  for (const { index, score } of ranked) {
+      console.log(`  ${score.toFixed(4)}: ${documents[index]}`);
+  }
+  ```
+</CodeGroup>
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+| パラメータ             | 型                      |  必須 |     デフォルト     | 説明                                                                                            |
+| ----------------- | ---------------------- | :-: | :-----------: | --------------------------------------------------------------------------------------------- |
+| `input`           | string | array[string] |  はい |       -       | 埋め込み対象のテキスト。1リクエストあたり最大512件。各入力は32Kトークン以内である必要があります。合計トークン数は120,000以内である必要があります。空文字列は指定できません。 |
+| `model`           | string                 |  はい |       -       | モデル識別子: `pplx-embed-v1-0.6b` または `pplx-embed-v1-4b`                                           |
+| `dimensions`      | integer                | いいえ |       フル      | Matryoshka次元数 (0.6bは128〜1024、4bは128〜2560)                                                     |
+| `encoding_format` | string                 | いいえ | `base64_int8` | 出力エンコーディング: `base64_int8` (符号付きint8) または `base64_binary` (ビットパック)                             |
+
+<Warning>
+  **入力の上限:** 各テキストは32Kトークン以内である必要があります。この上限を超えるリクエストは拒否されます。1リクエスト内のすべての入力の合計も120,000トークン以内である必要があります。
+</Warning>
+
+<div id="related-resources">
+  ## 関連リソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="コンテキスト化された埋め込み" icon="file-lines" href="/ja/docs/embeddings/contextualized-embeddings">
+    コンテキストを共有するチャンク向けの、ドキュメント全体を考慮した埋め込み。
+  </Card>
+
+  <Card title="ベストプラクティス" icon="star" href="/ja/docs/embeddings/best-practices">
+    バッチ処理、キャッシュ、RAG パターン。
+  </Card>
+</CardGroup>

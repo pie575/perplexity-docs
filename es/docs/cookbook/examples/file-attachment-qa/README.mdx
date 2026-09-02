@@ -1,0 +1,264 @@
+---
+title: "Preguntas y respuestas sobre documentos"
+description: "Carga documentos y formula preguntas sobre ellos mediante la Agent API: extracción de texto, enriquecimiento con búsqueda web, preguntas y respuestas de varios turnos y extracción con salida estructurada"
+---
+
+<div id="document-qa">
+  # Preguntas y respuestas sobre documentos
+</div>
+
+Carga un documento y formula preguntas sobre él con la Agent API. Este ejemplo muestra cómo leer el contenido de un documento, combinarlo con búsqueda web para obtener respuestas más completas y crear una sesión de preguntas y respuestas de varios turnos sobre dicho contenido.
+
+<div id="features">
+  ## Funcionalidades
+</div>
+
+* Cargar documentos (texto, CSV, JSON, markdown) y pasar el contenido a la Agent API
+* Hacer preguntas fundamentadas en el contenido del documento
+* Opcionalmente, combinar con `web_search` para enriquecer el contexto
+* Conversaciones de varios turnos para profundizar en secciones concretas
+* Extracción de salida estructurada a partir del contenido del documento
+
+<Info>
+  Pasa el contenido del documento directamente en el parámetro `input` de la Agent API. Para formatos basados en texto, lee el archivo e inclúyelo en el prompt. Combínalo con `web_search` para enriquecer el contexto más allá del documento.
+</Info>
+
+<div id="installation">
+  ## Instalación
+</div>
+
+```bash theme={null}
+pip install perplexityai
+```
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## Uso
+</div>
+
+Guarda el código completo que aparece a continuación en `doc_qa.py` y ejecútalo:
+
+```bash theme={null}
+python doc_qa.py report.txt "What are the key findings in this report?"
+```
+
+Para el modo interactivo:
+
+```bash theme={null}
+python doc_qa.py report.txt --interactive
+```
+
+<div id="full-code">
+  ## Código completo
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import sys
+  import json
+  import argparse
+  from pathlib import Path
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  MAX_CONTENT_CHARS = 50000  # Trunca los archivos muy grandes para no exceder los límites de tokens
+
+
+  def read_document(file_path: str) -> str:
+      """Read a document file and return its text content."""
+      path = Path(file_path)
+      content = path.read_text(errors="replace")
+      if len(content) > MAX_CONTENT_CHARS:
+          content = content[:MAX_CONTENT_CHARS] + "\n\n[... truncated ...]"
+      return content
+
+
+  def ask_about_document(
+      file_path: str,
+      question: str,
+      use_web_search: bool = False,
+      conversation_history: list = None,
+  ) -> dict:
+      """Ask a question about a document's content."""
+      doc_content = read_document(file_path)
+      filename = Path(file_path).name
+
+      # Construye la entrada con el contenido del documento y la pregunta
+      full_input = (
+          f"Document: {filename}\n"
+          f"{'='*60}\n"
+          f"{doc_content}\n"
+          f"{'='*60}\n\n"
+          f"Question: {question}"
+      )
+
+      # Incluye el historial de la conversación para conversaciones de varios turnos
+      if conversation_history:
+          messages = conversation_history + [{"role": "user", "content": full_input}]
+          response = client.responses.create(
+              model="openai/gpt-5.4",
+              input=messages,
+              tools=[{"type": "web_search"}] if use_web_search else [],
+              instructions="Answer questions based on the provided document content. Be specific and cite sections when possible.",
+          )
+      else:
+          response = client.responses.create(
+              model="openai/gpt-5.4",
+              input=full_input,
+              tools=[{"type": "web_search"}] if use_web_search else [],
+              instructions="Answer questions based on the provided document content. Be specific and cite sections when possible.",
+          )
+
+      usage = response.usage
+      return {
+          "answer": response.output_text,
+          "model": response.model,
+          "tokens": {
+              "input": usage.input_tokens if usage else 0,
+              "output": usage.output_tokens if usage else 0,
+          },
+      }
+
+
+  def extract_structured_data(file_path: str, schema_name: str, schema: dict) -> dict:
+      """Extract structured data from a document using a JSON schema."""
+      doc_content = read_document(file_path)
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=f"Extract the requested structured data from this document:\n\n{doc_content}",
+          response_format={
+              "type": "json_schema",
+              "json_schema": {"name": schema_name, "schema": schema},
+          },
+      )
+
+      return json.loads(response.output_text)
+
+
+  def interactive_session(file_path: str, use_web_search: bool = False):
+      """Run an interactive Q&A session over a document."""
+      print(f"Document loaded: {file_path}")
+      print(f"Web search: {'enabled' if use_web_search else 'disabled'}")
+      print("Type 'quit' to exit.\n")
+
+      history = []
+
+      while True:
+          question = input("Question: ").strip()
+          if question.lower() in ("quit", "exit", "q"):
+              break
+          if not question:
+              continue
+
+          result = ask_about_document(file_path, question, use_web_search, history)
+          print(f"\nAnswer:\n{result['answer']}\n")
+          print(f"({result['tokens']['input']}+{result['tokens']['output']} tokens)\n")
+
+          # Agrega al historial de la conversación para conversaciones de varios turnos
+          history.append({"role": "user", "content": question})
+          history.append({"role": "assistant", "content": result["answer"]})
+
+
+  def main():
+      parser = argparse.ArgumentParser(description="Document Q&A")
+      parser.add_argument("file", help="Path to the document file")
+      parser.add_argument("question", nargs="?", help="Question to ask")
+      parser.add_argument("--interactive", action="store_true", help="Interactive mode")
+      parser.add_argument("--web-search", action="store_true", help="Enable web search")
+      args = parser.parse_args()
+
+      if not Path(args.file).exists():
+          print(f"Error: File not found: {args.file}", file=sys.stderr)
+          sys.exit(1)
+
+      if args.interactive:
+          interactive_session(args.file, args.web_search)
+      elif args.question:
+          result = ask_about_document(args.file, args.question, args.web_search)
+          print(result["answer"])
+      else:
+          print("Error: Provide a question or use --interactive.", file=sys.stderr)
+          sys.exit(1)
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## Ejemplo de salida
+</div>
+
+```bash theme={null}
+python doc_qa.py quarterly_report.txt "What was the total revenue for Q3?"
+```
+
+```
+Según el informe trimestral, los ingresos totales del tercer trimestre fueron de
+4200 millones de dólares, lo que supone un aumento interanual del 15 %. El informe
+atribuye este crecimiento principalmente a la división de servicios en la nube, que creció
+un 28 % respecto al mismo periodo del año anterior (véase la sección 3, «Aspectos financieros destacados»).
+```
+
+Con enriquecimiento mediante búsqueda web:
+
+```bash theme={null}
+python doc_qa.py quarterly_report.txt "How does this compare to industry benchmarks?" --web-search
+```
+
+```
+Según el informe, los ingresos del T3 fueron de 4200 millones de dólares
+(del documento). En comparación, el crecimiento medio de los ingresos del
+sector para las empresas centradas en la nube en el T3 de 2025 fue de
+aproximadamente el 12 % interanual (de la búsqueda web: análisis sectorial
+de Bloomberg). Esto sitúa a la empresa unos 3 puntos porcentuales por
+encima de la referencia del sector.
+```
+
+<div id="structured-data-extraction-from-documents">
+  ## Extracción de datos estructurados de documentos
+</div>
+
+Extrae campos específicos de un documento a una estructura JSON tipada:
+
+```python theme={null}
+# Extraer métricas clave de un informe financiero
+schema = {
+    "type": "object",
+    "properties": {
+        "company_name": {"type": "string"},
+        "quarter": {"type": "string"},
+        "total_revenue": {"type": "string"},
+        "net_income": {"type": "string"},
+        "revenue_growth_yoy": {"type": "string"},
+        "key_highlights": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["company_name", "quarter", "total_revenue", "net_income", "revenue_growth_yoy", "key_highlights"],
+    "additionalProperties": false,
+}
+
+data = extract_structured_data("quarterly_report.txt", "financial_summary", schema)
+print(json.dumps(data, indent=2))
+```
+
+<Tip>
+  Combina el contenido de los documentos con salidas estructuradas para crear pipelines de procesamiento de documentos fiables. El esquema JSON garantiza una salida consistente sin importar las variaciones de formato del documento.
+</Tip>
+
+<Warning>
+  Los documentos muy extensos se truncan para no superar los límites de tokens. En el caso de archivos grandes, conviene dividirlos en secciones y procesar cada una por separado.
+</Warning>
+
+<div id="limitations">
+  ## Limitaciones
+</div>
+
+* Los documentos muy grandes se truncan. El límite predeterminado es de 50.000 caracteres (~12.500 tokens).
+* Los formatos basados en texto (.txt, .csv, .md, .json) son los que mejor funcionan. En el caso de los PDF, usa una biblioteca como `pdfplumber` o `PyPDF2` para extraer primero el texto.
+* El historial de conversación en sesiones de varios turnos no vuelve a leer el archivo: el contenido del documento se incluye en el primer mensaje.

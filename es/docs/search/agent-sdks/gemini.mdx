@@ -1,0 +1,395 @@
+---
+title: "Usar la Search API con el SDK de Google Gemini"
+sidebarTitle: "Gemini"
+description: "Registra la Search API de Perplexity como herramienta de función dentro del SDK google-genai de Google y ejecuta el bucle de llamadas a herramientas con los modelos Gemini."
+---
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+Esta guía muestra cómo exponer la [Search API](/es/docs/search/quickstart) de Perplexity a Gemini como una herramienta de función mediante el SDK `google-genai` de Google. El modelo emite una parte `functionCall` con `name` y `args`, tú ejecutas la herramienta (en este caso, llamas a `client.search.create`) y devuelves el resultado como una parte `functionResponse`. El bucle continúa hasta que el modelo devuelve una respuesta de texto final.
+
+<Info>
+  El SDK de Python puede ejecutar el bucle de llamadas a herramientas de forma **automática** si pasas un invocable de Python directamente a `tools=[...]`: el SDK inspecciona la firma e invoca tu función. Esta página usa el bucle **manual** para que el patrón coincida con las páginas de integración de [Anthropic](/es/docs/search/agent-sdks/anthropic) y [OpenAI](/es/docs/search/agent-sdks/openai), y para que mantengas el control explícito sobre la llamada. La variante con bucle automático se muestra en [Notas](#notes).
+</Info>
+
+<div id="prerequisites">
+  ## Requisitos previos
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install google-genai perplexityai
+  export GEMINI_API_KEY="your_gemini_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+
+  ```bash Typescript theme={null}
+  npm install @google/genai @perplexity-ai/perplexity_ai
+  export GEMINI_API_KEY="your_gemini_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+</CodeGroup>
+
+<div id="tool-definition">
+  ## Definición de la herramienta
+</div>
+
+Gemini acepta un `Tool` que contiene uno o más objetos `FunctionDeclaration`. Cada declaración recibe un `name`, una `description` y un esquema JSON para los parámetros. La descripción que aparece a continuación se ajustó para la Search API de Perplexity; consérvala tal cual: esa redacción es la que genera consultas breves y de buena calidad, con estilo de palabras clave.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from google.genai import types
+
+  WEB_SEARCH_TOOL_DESCRIPTION = """\
+  Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline."""
+
+  QUERIES_PARAM_DESCRIPTION = (
+      "An array of keyword-based search queries. Each query should be short, "
+      "as longer queries may reduce performance. Do not provide more than three "
+      "queries to maintain efficiency."
+  )
+
+  WEB_SEARCH_FUNCTION = types.FunctionDeclaration(
+      name="web_search",
+      description=WEB_SEARCH_TOOL_DESCRIPTION,
+      parameters_json_schema={
+          "type": "object",
+          "properties": {
+              "queries": {
+                  "type": "array",
+                  "description": QUERIES_PARAM_DESCRIPTION,
+                  "items": {"type": "string"},
+                  "minItems": 1,
+                  "maxItems": 3,
+              },
+          },
+          "required": ["queries"],
+      },
+  )
+
+  WEB_SEARCH_TOOL = types.Tool(function_declarations=[WEB_SEARCH_FUNCTION])
+  ```
+
+  ```typescript Typescript theme={null}
+  import { Type } from "@google/genai";
+  import type { FunctionDeclaration, Tool } from "@google/genai";
+
+  const WEB_SEARCH_TOOL_DESCRIPTION = `Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline.`;
+
+  const QUERIES_PARAM_DESCRIPTION =
+    "An array of keyword-based search queries. Each query should be short, " +
+    "as longer queries may reduce performance. Do not provide more than three " +
+    "queries to maintain efficiency.";
+
+  const WEB_SEARCH_FUNCTION: FunctionDeclaration = {
+    name: "web_search",
+    description: WEB_SEARCH_TOOL_DESCRIPTION,
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        queries: {
+          type: "array",
+          description: QUERIES_PARAM_DESCRIPTION,
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 3,
+        },
+      },
+      required: ["queries"],
+    },
+  };
+
+  const WEB_SEARCH_TOOL: Tool = {
+    functionDeclarations: [WEB_SEARCH_FUNCTION],
+  };
+  ```
+</CodeGroup>
+
+<div id="tool-handler">
+  ## Manejador de la herramienta
+</div>
+
+El manejador es una envoltura ligera sobre `client.search.create`. La Search API acepta de forma nativa un array de consultas (hasta cinco), por lo que el array que emite Gemini se puede pasar tal cual.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  perplexity = Perplexity()
+
+  def run_web_search(queries: list[str]) -> str:
+      """Llama a Perplexity Search y formatea los resultados para el modelo."""
+      response = perplexity.search.create(query=queries, max_results=5)
+
+      lines = []
+      for result in response.results:
+          snippet = (result.snippet or "").strip().replace("\n", " ")
+          if len(snippet) > 400:
+              snippet = snippet[:400] + "…"
+          lines.append(f"- {result.title}\n  {result.url}\n  {snippet}")
+      return "\n\n".join(lines) if lines else "No results."
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const perplexity = new Perplexity();
+
+  async function runWebSearch(queries: string[]): Promise<string> {
+    const response = await perplexity.search.create({
+      query: queries,
+      max_results: 5,
+    });
+
+    const lines = response.results.map((r) => {
+      const snippet = (r.snippet ?? "").trim().replace(/\n/g, " ");
+      const trimmed = snippet.length > 400 ? `${snippet.slice(0, 400)}…` : snippet;
+      return `- ${r.title}\n  ${r.url}\n  ${trimmed}`;
+    });
+    return lines.length ? lines.join("\n\n") : "No results.";
+  }
+  ```
+</CodeGroup>
+
+<div id="tool-call-loop">
+  ## Bucle de llamadas a herramientas
+</div>
+
+Desactiva el bucle automático con `AutomaticFunctionCallingConfig(disable=True)` (Python); el SDK de JS, de por sí, no ejecuta bucles automáticos en las APIs principales. Luego recorre `response.function_calls`, ejecuta cada llamada y envía al modelo un array `Content` de seguimiento que contenga las partes `function_call` originales y las partes `function_response` correspondientes.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from google import genai
+  from google.genai import types
+
+  gemini = genai.Client()
+
+  def chat_with_search(user_prompt: str, model: str = "gemini-2.5-flash") -> str:
+      contents: list[types.Content] = [
+          types.Content(
+              role="user",
+              parts=[types.Part.from_text(text=user_prompt)],
+          ),
+      ]
+
+      config = types.GenerateContentConfig(
+          tools=[WEB_SEARCH_TOOL],
+          automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+      )
+
+      while True:
+          response = gemini.models.generate_content(
+              model=model,
+              contents=contents,
+              config=config,
+          )
+
+          function_calls = response.function_calls or []
+
+          if not function_calls:
+              return response.text
+
+          # Conserva las partes function_call del asistente.
+          contents.append(response.candidates[0].content)
+
+          # Ejecuta cada llamada a función y empareja los resultados por nombre (Gemini asocia
+          # function_response → function_call por posición dentro del turno).
+          response_parts: list[types.Part] = []
+          for call in function_calls:
+              if call.name == "web_search":
+                  queries = call.args.get("queries", [])
+                  output = run_web_search(queries)
+                  result = {"result": output}
+              else:
+                  result = {"error": f"unknown tool: {call.name}"}
+              response_parts.append(
+                  types.Part.from_function_response(name=call.name, response=result)
+              )
+
+          contents.append(types.Content(role="user", parts=response_parts))
+
+
+  if __name__ == "__main__":
+      answer = chat_with_search(
+          "What were the major AI infrastructure announcements this week?"
+      )
+      print(answer)
+  ```
+
+  ```typescript Typescript theme={null}
+  import { GoogleGenAI, type Content, type Part } from "@google/genai";
+
+  const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  async function chatWithSearch(
+    userPrompt: string,
+    model = "gemini-2.5-flash",
+  ): Promise<string> {
+    const contents: Content[] = [
+      { role: "user", parts: [{ text: userPrompt }] },
+    ];
+
+    while (true) {
+      const response = await gemini.models.generateContent({
+        model,
+        contents,
+        config: { tools: [WEB_SEARCH_TOOL] },
+      });
+
+      const functionCalls = response.functionCalls ?? [];
+
+      if (functionCalls.length === 0) {
+        return response.text ?? "";
+      }
+
+      // Conserva las partes function_call del asistente.
+      const candidate = response.candidates?.[0];
+      if (candidate?.content) {
+        contents.push(candidate.content);
+      }
+
+      const responseParts: Part[] = [];
+      for (const call of functionCalls) {
+        let result: Record<string, unknown>;
+        if (call.name === "web_search") {
+          const queries = (call.args?.queries as string[]) ?? [];
+          result = { result: await runWebSearch(queries) };
+        } else {
+          result = { error: `unknown tool: ${call.name}` };
+        }
+        responseParts.push({
+          functionResponse: { name: call.name!, response: result },
+        });
+      }
+
+      contents.push({ role: "user", parts: responseParts });
+    }
+  }
+
+  (async () => {
+    const answer = await chatWithSearch(
+      "What were the major AI infrastructure announcements this week?",
+    );
+    console.log(answer);
+  })();
+  ```
+</CodeGroup>
+
+<div id="streaming">
+  ## Streaming
+</div>
+
+Para el streaming, usa `generate_content_stream` (Python) o `generateContentStream` (TypeScript). Una misma parte `functionCall` puede quedar repartida entre varios fragmentos del stream, así que acumula las partes antes de invocar tu manejador. Por lo demás, la estructura del bucle es idéntica a la de la versión sin streaming.
+
+<CodeGroup>
+  ```python Python theme={null}
+  for chunk in gemini.models.generate_content_stream(
+      model="gemini-2.5-flash",
+      contents=contents,
+      config=config,
+  ):
+      if chunk.text:
+          print(chunk.text, end="", flush=True)
+      # Acumula las partes de llamada a función entre fragmentos antes de ejecutarlas.
+  ```
+
+  ```typescript Typescript theme={null}
+  const stream = await gemini.models.generateContentStream({
+    model: "gemini-2.5-flash",
+    contents,
+    config: { tools: [WEB_SEARCH_TOOL] },
+  });
+
+  for await (const chunk of stream) {
+    if (chunk.text) process.stdout.write(chunk.text);
+    // Acumula las partes de llamada a función entre fragmentos antes de ejecutarlas.
+  }
+  ```
+</CodeGroup>
+
+<div id="notes">
+  ## Notas
+</div>
+
+* **Bucle automático (solo Python).** El SDK de Python puede ejecutar el bucle de llamadas a herramientas por ti. Pasa directamente un invocable de Python y el SDK examinará su firma, lo invocará y devolverá el resultado al modelo: sin bucle manual ni gestión de `Content`.
+
+  ```python theme={null}
+  def web_search(queries: list[str]) -> str:
+      """<pega aquí, textualmente, WEB_SEARCH_TOOL_DESCRIPTION como docstring>"""
+      return run_web_search(queries)
+
+  response = gemini.models.generate_content(
+      model="gemini-2.5-flash",
+      contents="What were the major AI infrastructure announcements this week?",
+      config=types.GenerateContentConfig(tools=[web_search]),
+  )
+  print(response.text)
+  ```
+
+  La profundidad del bucle automático está limitada a 10 de forma predeterminada; auméntala con `AutomaticFunctionCallingConfig(maximum_remote_calls=N)` para cadenas de investigación largas. El modo automático es cómodo, pero sacrifica visibilidad a cambio de concisión: los errores se manifiestan como excepciones y no como contenido de resultado de herramienta del que el modelo pueda recuperarse.
+* **Llamadas en paralelo.** Gemini puede emitir varias partes `function_call` en una sola respuesta. Crea una parte `function_response` por cada llamada (emparejada por `name` y por la posición de la llamada dentro del turno) e inclúyelas todas en un único `Content` de seguimiento.
+* **Empareja `function_call` y `function_response`.** Ambos turnos deben estar presentes en la siguiente llamada a `generate_content`: el modelo necesita ver su propia parte `function_call` junto con tu parte `function_response`. Si omites cualquiera de las dos, se producen errores de tipo &quot;missing function response&quot;.
+* **Dominios y fechas.** Pasa `search_domain_filter`, `country` y otros parámetros de la Search API dentro de `run_web_search` si quieres fijar restricciones de recuperación. Consulta la [guía de inicio rápido de la Search API](/es/docs/search/quickstart) para ver la lista completa de parámetros.
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Uso con el SDK de Anthropic" icon="code" href="/es/docs/search/agent-sdks/anthropic">
+    Integra la Search API en la Messages API de Anthropic.
+  </Card>
+
+  <Card title="Uso con el SDK de OpenAI" icon="code" href="/es/docs/search/agent-sdks/openai">
+    Integra la Search API en la Responses API de OpenAI.
+  </Card>
+
+  <Card title="Inicio rápido de la Search API" icon="rocket" href="/es/docs/search/quickstart">
+    Referencia completa de los parámetros de la Search API.
+  </Card>
+
+  <Card title="Buenas prácticas de búsqueda" icon="lightbulb" href="/es/docs/search/best-practices">
+    Patrones para cargas de trabajo de búsqueda en producción.
+  </Card>
+</CardGroup>

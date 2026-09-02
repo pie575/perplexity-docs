@@ -1,0 +1,450 @@
+---
+title: "コネクタ"
+description: "API グループのマネージドコネクタを Agent API リクエストで使用します。"
+---
+
+<Note>
+  **プレビュー:** コネクタはプレビュー版です。対応サービスや動作は変更される場合があります。
+</Note>
+
+<div id="overview">
+  ## 概要
+</div>
+
+コネクタは、API グループが [API ポータル](https://console.perplexity.ai/group/connectors)で接続済みのサービスを、マネージド統合として利用できるようにするものです。
+[MCP](/ja/docs/agent-api/tools/mcp) と同じツール呼び出しの仕組みを使用しますが、リクエストごとにサーバー URL やアクセス token を指定する必要はありません。
+代わりに、接続済みの統合をコネクタ ID で指定します。
+一部のコネクタでは、その認証情報を [sandbox](/ja/docs/agent-api/tools/sandbox) コマンドからも利用できます。
+これにより、エージェントは 1 回の実行でサービスへのアクセスとコード変更、その他のローカル作業をまとめて行えます。
+
+<div id="available-connectors">
+  ## 利用可能なコネクタ
+</div>
+
+現在提供しているコネクタは次のとおりです。
+
+| サービス         | コネクタ ID                 |
+| ------------ | ----------------------- |
+| GitHub       | `connector_github`      |
+| Slack        | `connector_slack`       |
+| Google Drive | `connector_googledrive` |
+| Datadog      | `connector_datadog`     |
+
+<Note>
+  必要なコネクタが見つかりませんか？ [api@perplexity.ai](mailto:api@perplexity.ai) までメールでリクエストしてください。それまでの間は、任意のリモート [MCP サーバー](/ja/docs/agent-api/tools/mcp) を Agent API のリクエストに接続できます。
+</Note>
+
+<div id="add-a-connector">
+  ## コネクタを追加する
+</div>
+
+1. [API ポータルの Connectors](https://console.perplexity.ai/group/connectors) を開きます。
+2. サポート対象のサービスを API グループに接続できるのは、API グループの管理者のみです。
+3. サービスカードからコネクタ ID をコピーします。
+4. Agent API リクエストに `connector` エントリーを追加します。
+
+<Note>
+  コネクタツールは、デフォルトで遅延検出 (deferred discovery) を使用します。
+  ツールを検出して利用できるよう、[`max_steps`](/ja/docs/agent-api/building-agents/define-the-run#customize-the-loop-max-steps) には十分に大きな値を設定してください。
+</Note>
+
+次のリクエストでは、接続済みの Slack ワークスペースを使用して、AI に関する最近のメッセージを要約します。
+`connector_slack` は、API ポータルからコピーしたコネクタ ID に置き換えてください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Find and summarize recent messages about AI in my Slack workspace.",
+      max_steps=6,
+      tools=[
+          {
+              "type": "connector",
+              "id": "connector_slack",
+              "server_label": "slack",
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Find and summarize recent messages about AI in my Slack workspace.',
+    max_steps: 6,
+    tools: [
+      {
+        type: 'connector',
+        id: 'connector_slack',
+        server_label: 'slack',
+      },
+    ],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Find and summarize recent messages about AI in my Slack workspace.",
+      "max_steps": 6,
+      "tools": [
+        {
+          "type": "connector",
+          "id": "connector_slack",
+          "server_label": "slack"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+レスポンスの `output` 配列には、コネクタのツール、モデルによるそのカタログの検索、各ツール呼び出し、そして最終メッセージが並びます。
+コネクタはデフォルトで遅延 (deferred) 扱いとなるため、モデルはツールを呼び出す前にカタログを検索します (`tool_search_output`) 。
+
+<Accordion title="レスポンス出力（一部省略）">
+  ```json theme={null}
+  [
+    {
+      "type": "mcp_list_tools",
+      "id": "mcpl_4826e99b-cae4-4c44-a613-d205823c2bc0",
+      "connector_id": "connector_slack",
+      "server_label": "slack",
+      "tools": [
+        {
+          "name": "slack_search_public",
+          "description": "Searches for messages, files in public Slack channels ...",
+          "input_schema": {
+            "type": "object",
+            "properties": { "query": { "type": "string" } },
+            "required": ["query"]
+          }
+        },
+        {
+          "name": "slack_send_message",
+          "description": "Sends a message to a Slack channel or user ...",
+          "input_schema": {
+            "type": "object",
+            "properties": { "channel_id": { "type": "string" }, "message": { "type": "string" } },
+            "required": ["channel_id", "message"]
+          }
+        }
+      ]
+    },
+    {
+      "type": "tool_search_output",
+      "id": "tso_call_opbSkWX14DwhfWlPdAE9wfH0",
+      "call_id": null,
+      "status": "completed",
+      "execution": "server",
+      "arguments": "{\"paths\":[\"slack\"],\"queries\":[\"search\",\"messages\"]}",
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "slack",
+          "tools": [
+            { "type": "function", "name": "slack_search_public", "description": "..." }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "mcp_call",
+      "id": "call_DUjlg6jMJoU92GMfrmD8SVcS",
+      "connector_id": "connector_slack",
+      "server_label": "slack",
+      "name": "slack_search_public",
+      "arguments": "{\"query\":\"AI\",\"content_types\":\"messages\",\"sort\":\"timestamp\", ...}",
+      "output": "{\"results\": ...}",
+      "error": null
+    },
+    {
+      "type": "message",
+      "id": "msg_...",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        { "type": "output_text", "text": "Here is a summary of recent messages about AI ...", "annotations": [] }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+<div id="deferred-tool-discovery">
+  ## ツールの遅延検出
+</div>
+
+コネクタは多数のツールを公開できるため、すべてのスキーマを事前に読み込むと token を無駄に消費してしまいます。
+そこでコネクタのツールは遅延的に検出されます。model はコネクタの名前空間を受け取り、その中を検索して必要なスキーマだけを読み込み、呼び出します。これらはすべて自動的に行われます。
+利用者は `tools` にコネクタを追加するだけです。
+
+`mcp_list_tools` 項目には引き続き全カタログが記録されます。遅延検出が制御するのは model のコンテキストに入る内容であって、レスポンスに報告される内容ではありません。
+
+<div id="connector-parameters">
+  ## コネクタのパラメータ
+</div>
+
+| フィールド                | 型      | 必須  | 説明                                            |
+| -------------------- | ------ | --- | --------------------------------------------- |
+| `type`               | string | はい  | `"connector"` を指定します。                         |
+| `id`                 | string | はい  | API ポータル からコピーしたコネクタ ID。                   |
+| `server_label`       | string | はい  | リクエスト内でのみ有効なコネクタのラベル。                        |
+| `server_description` | string | いいえ | コネクタの名前空間に関するモデル向けの説明。                       |
+| `allowed_tools`      | array  | いいえ | 完全一致名による許可リスト。省略するか空にすると、利用可能なすべてのツールが公開されます。 |
+
+<div id="use-connectors-in-the-sandbox">
+  ## sandbox でコネクタを使用する
+</div>
+
+一部のコネクタは、認証情報を sandbox 内のコマンドから利用できるようにします。
+GitHub はその代表例です。
+
+<div id="github-connector">
+  ### GitHub コネクタ
+</div>
+
+GitHub コネクタを使うと、接続済みの GitHub アカウントに紐づく GitHub ツールを model から利用できます。
+タスクで `git` や `gh` の CLI が必要な場合は、[Sandbox](/ja/docs/agent-api/tools/sandbox) と組み合わせてください。
+
+両方のツールを有効にすると、エージェントはプライベートリポジトリのクローン、コードの調査と変更、変更のコミット、ブランチのプッシュ、プルリクエストの作成・更新を実行できます。
+その際、sandbox 内で `git` と `gh` の CLI を、コネクタから取得した GitHub の認証情報を使って実行します。
+エージェントがアクセスできるリポジトリと実行できる操作は、接続済みの GitHub アカウントに許可されている範囲に限られます。
+
+<Info>
+  sandbox が有効で `allowed_tools` を指定していない場合、GitHub は CLI 経由で実行されます。このとき、レスポンスに `mcp_list_tools` や `mcp_call` の項目は含まれず、エラーは `git` または `gh` の出力として現れます。`mcp_call` 項目を伴う通常のコネクタとして使いたい場合は、`allowed_tools` を設定するか、sandbox を省略してください。
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  stream = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.",
+      max_steps=12,
+      stream=True,
+      tools=[
+          {"type": "sandbox"},
+          {
+              "type": "connector",
+              "id": "connector_github",
+              "server_label": "github",
+          },
+      ],
+  )
+
+  for event in stream:
+      print(event)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const stream = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.',
+    max_steps: 12,
+    stream: true,
+    tools: [
+      { type: 'sandbox' },
+      {
+        type: 'connector',
+        id: 'connector_github',
+        server_label: 'github',
+      },
+    ],
+  });
+
+  for await (const event of stream) {
+    console.log(event);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -N --no-buffer --fail-with-body https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -H "Accept: text/event-stream" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.",
+      "max_steps": 12,
+      "stream": true,
+      "tools": [
+        { "type": "sandbox" },
+        {
+          "type": "connector",
+          "id": "connector_github",
+          "server_label": "github"
+        }
+      ]
+    }' \
+    | awk '/^data: / { sub(/^data: /, ""); sub(/\r$/, ""); if ($0 != "[DONE]") print }' \
+    | jq --unbuffered .
+  ```
+</CodeGroup>
+
+<div id="connectors-and-mcp">
+  ## コネクタと MCP
+</div>
+
+コネクタと MCP サーバーはどちらも、Agent API から外部ツールを呼び出すための仕組みです。
+統合が API グループ向けにすでに管理されている場合はコネクタを使用してください。
+独自のリモートサーバーに接続し、その URL と認証情報をリクエストで指定する必要がある場合は [MCP](/ja/docs/agent-api/tools/mcp) を使用してください。
+
+|              | コネクタ                                                                                          | MCP サーバー                               |
+| ------------ | --------------------------------------------------------------------------------------------- | -------------------------------------- |
+| セットアップ       | API ポータル で一度だけ接続します。                                                                        | リクエストごとにリモートの `server_url` を指定します。     |
+| 認証           | API グループ用に構成された接続を使用します。                                                                    | リクエストごとの認証情報をリモートサーバーに渡します。            |
+| Sandbox との連携 | 一部のマネージドコネクタは、その認証情報を Sandbox コマンドから利用できるようにします。たとえば、GitHub コネクタを `git` や `gh` と組み合わせて使用できます。 | MCP サーバーの認証情報は Sandbox コマンドからは利用できません。 |
+| 適した用途        | GitHub など、サポートされているマネージド統合。                                                                   | 自社または第三者のリモート MCP サーバー。                |
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+コネクタのツール呼び出しは、`error` フィールドを持つ `mcp_call` アイテムとして失敗することがあります。
+この場合でもリクエスト自体は失敗しません。実行は継続され、エラーはインバンドで model に渡されるため、model は引き続き応答を返します。ただし、そのコネクタは使用できません。
+
+主に対処が必要なのは `AUTH_REQUIRED` です。これはコネクタの認可が失効した、または管理者によって取り消されたことを示します。
+リクエストは引き続き動作します。再接続するまで、そのコネクタが model から利用できなくなるだけであり、再接続は後から行えます。
+
+例:
+
+```json theme={null}
+{
+  "type": "mcp_call",
+  "id": "call_h2rK8I109IvZC038Wcuudzhc",
+  "connector_id": "connector_slack",
+  "server_label": "slack",
+  "name": "slack_search_public",
+  "arguments": "{\"query\":\"AI\",\"content_types\":\"messages\", ...}",
+  "error": "AUTH_REQUIRED"
+}
+```
+
+リクエスト自体は成功するため、この状況は見落としがちです。
+ハーネス側で検知してログや通知に送り、運用担当者が[APIポータル](https://console.perplexity.ai/group/connectors)でコネクタを再接続できるようにしてください。
+
+ハーネスでは `error` の値に応じて処理を分岐できます。
+
+| 値                          | 意味                           | 推奨される対応                              |
+| -------------------------- | ---------------------------- | ------------------------------------ |
+| `AUTH_REQUIRED`            | コネクタの認可が失効した、または取り消されています。  | 管理者にAPIポータルでの再接続を依頼してください。           |
+| `INVALID_ARGUMENTS`        | modelがツールを呼び出した際の引数が拒否されました。 | 回復可能です。エラーはmodelに返され、引数を修正して再試行できます。 |
+| `POLICY_DENIED`            | ポリシーによってツール呼び出しがブロックされました。   | 再試行しないでください。この呼び出しは許可されていません。        |
+| `CONNECTOR_UNAVAILABLE`    | コネクタサービスに到達できませんでした。        | 一時的な事象です。時間をおいて再試行してください。            |
+| `CONNECTOR_INTERNAL_ERROR` | コネクタが利用できないレスポンスを返しました。     | 一時的な事象です。時間をおいて再試行してください。            |
+| `TOOL_ERROR`               | それ以外の理由でツールが失敗しました。          | ツールの失敗として扱ってください。                    |
+
+`error` フィールドは自由形式の文字列であるため、上記以外の値はすべてツールの失敗として扱ってください。
+接続されていないコネクタはツールを一切列挙せず (`"tools": []`) 、エラーも返さないため、ツール一覧が空になっていないかも併せて確認してください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  CONNECTORS_URL = "https://console.perplexity.ai/group/connectors"
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Find and summarize recent messages about AI in my Slack workspace.",
+      max_steps=6,
+      tools=[
+          {
+              "type": "connector",
+              "id": "connector_slack",
+              "server_label": "slack",
+          }
+      ],
+  )
+
+  for item in response.output:
+      if getattr(item, "type", None) != "mcp_call" or not getattr(item, "error", None):
+          continue
+      if item.error == "AUTH_REQUIRED":
+          print(f"Ask an administrator to reconnect the {item.server_label} connector at {CONNECTORS_URL}")
+      else:
+          raise RuntimeError(f"Connector tool {item.name} failed: {item.error}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const CONNECTORS_URL = 'https://console.perplexity.ai/group/connectors';
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Find and summarize recent messages about AI in my Slack workspace.',
+    max_steps: 6,
+    tools: [
+      {
+        type: 'connector',
+        id: 'connector_slack',
+        server_label: 'slack',
+      },
+    ],
+  });
+
+  for (const item of response.output) {
+    if (item.type !== 'mcp_call' || !item.error) continue;
+    if (item.error === 'AUTH_REQUIRED') {
+      console.log(`Ask an administrator to reconnect the ${item.server_label} connector at ${CONNECTORS_URL}`);
+    } else {
+      throw new Error(`Connector tool ${item.name} failed: ${item.error}`);
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Find and summarize recent messages about AI in my Slack workspace.",
+      "max_steps": 6,
+      "tools": [
+        { "type": "connector", "id": "connector_slack", "server_label": "slack" }
+      ]
+    }' \
+    | jq '.output[] | select(.type == "mcp_call" and .error != null) | {connector_id, server_label, name, error}'
+  ```
+</CodeGroup>
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="MCP" icon="plug" href="/ja/docs/agent-api/tools/mcp">
+    自分で管理するリモート MCP サーバーに接続します。
+  </Card>
+
+  <Card title="Sandbox" icon="box" href="/ja/docs/agent-api/tools/sandbox">
+    コードを実行し、`git` と `gh` で GitHub コネクタを利用します。
+  </Card>
+</CardGroup>

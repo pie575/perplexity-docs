@@ -1,0 +1,195 @@
+---
+title: "Perplexity con Mastra"
+description: "Usa la Agent API y la Search API de Perplexity en tus agentes y herramientas de Mastra."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+[Mastra](https://mastra.ai) es un framework de TypeScript de código abierto para crear agentes y flujos de trabajo de IA. Integra la [Agent API](/es/docs/agent-api/quickstart) de Perplexity en un `Agent` de Mastra mediante el proveedor Open Responses, o expón la Search API como una herramienta compatible con Mastra.
+
+<Info>
+  **Mastra** ofrece una interfaz `Agent` unificada, un enrutador de modelos y un sistema de herramientas/MCP para orquestar flujos de trabajo con LLM. Más información en [mastra.ai](https://mastra.ai).
+</Info>
+
+El ecosistema de Mastra ofrece dos integraciones con Perplexity:
+
+* **Agent API** — Ejecuta la [Agent API](/es/docs/agent-api/quickstart) dentro de un `Agent` de Mastra mediante el proveedor Open Responses.
+* **Herramienta Perplexity Search** — Expón la [Search API](/es/docs/search/quickstart) como una herramienta de Mastra para obtener resultados web ordenados por relevancia.
+
+<div id="api-key-setup">
+  ## Configuración de la API key
+</div>
+
+Ambas integraciones leen tu API key de Perplexity desde el entorno:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+La herramienta Search también acepta `PPLX_API_KEY` como alternativa.
+
+<Card title="Obtener API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Genera tu API key desde el panel de control de Perplexity.
+</Card>
+
+<div id="agent-api">
+  ## Agent API
+</div>
+
+<Warning>
+  Los proveedores de enrutamiento de modelos `perplexity` y `perplexity-agent` integrados en Mastra apuntan a Sonar Chat Completions, que ahora es la [Agent API](/es/docs/agent-api/quickstart): más modelos, herramientas y presets respaldados por investigación. Accede a ella mediante [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses) como se muestra a continuación, o consulta la [guía de migración](/es/docs/agent-api/migrate-from-sonar/overview).
+</Warning>
+
+La [Agent API](/es/docs/agent-api/quickstart) utiliza el estándar [Open Responses](https://www.openresponses.org/), por lo que el proveedor `@ai-sdk/open-responses` se conecta a ella directamente. Apunta el proveedor al endpoint `/v1/responses` de Perplexity y luego pasa el id del modelo a tu `Agent` de Mastra:
+
+```bash theme={null}
+npm install @mastra/core @ai-sdk/open-responses
+```
+
+```ts theme={null}
+import { Agent } from "@mastra/core/agent";
+import { createOpenResponses } from "@ai-sdk/open-responses";
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const agent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: "Answer questions clearly and concisely.",
+  // Cualquier modelo del Agent API, p. ej. openai/gpt-5.6-luna (más rápido) u openai/gpt-5.6-sol (mayor calidad).
+  model: perplexity("openai/gpt-5.6-luna"),
+});
+
+const result = await agent.generate("Explain what the Perplexity Agent API is in two sentences.");
+console.log(result.text);
+```
+
+El agente admite tanto `agent.generate(...)` como `agent.stream(...)`. Consulta la [guía de inicio rápido de la Agent API](/es/docs/agent-api/quickstart) para ver la lista completa de modelos, las herramientas integradas y los presets. Para obtener respuestas fundamentadas en la web, añade la herramienta `web_search` (más abajo).
+
+<div id="web-grounded-answers">
+  ## Respuestas fundamentadas en la web
+</div>
+
+Añade la herramienta [`web_search`](/es/docs/agent-api/tools/web-search) para fundamentar las respuestas del agente en resultados en tiempo real de la búsqueda web de Perplexity. El proveedor `@ai-sdk/open-responses` envía un cuerpo de solicitud fijo y no expone las herramientas integradas de la Agent API como opciones de primer nivel, así que habilita `web_search` añadiéndolo al cuerpo en el hook `fetch` del proveedor: de este modo, todas las llamadas que el agente realice a través de este proveedor quedarán fundamentadas:
+
+```ts theme={null}
+import { Agent } from "@mastra/core/agent";
+import { createOpenResponses } from "@ai-sdk/open-responses";
+
+// El proveedor no expone las fuentes en el resultado, así que se capturan en el hook.
+let sources = [];
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  fetch: async (url, options) => {
+    const body = JSON.parse(options.body as string);
+    // Habilita la herramienta integrada web_search añadiéndola al cuerpo de la solicitud.
+    body.tools = [{ type: "web_search" }];
+    const response = await fetch(url, { ...options, body: JSON.stringify(body) });
+
+    // Las fuentes llegan como un elemento `search_results` independiente en el array `output` de la respuesta.
+    // (Se omite en streaming, donde el cuerpo es un flujo de eventos y no JSON.)
+    if (!body.stream) {
+      const raw = await response.clone().json();
+      sources = raw.output
+        .filter((item) => item.type === "search_results")
+        .flatMap((item) => item.results); // cada uno: { title, url, snippet, date, ... }
+    }
+
+    return response;
+  },
+});
+
+const agent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: "Answer questions with up-to-date information from the web.",
+  model: perplexity("openai/gpt-5.6-luna"),
+});
+
+const result = await agent.generate("What are the latest breakthroughs in fusion energy this year?");
+console.log(result.text);
+
+for (const source of sources) {
+  console.log(source.title, source.url);
+}
+```
+
+La respuesta se fundamenta del lado del servidor, pero `@ai-sdk/open-responses` no expone las fuentes en el resultado —`result.sources` está vacío—, por lo que el hook `fetch` lee directamente los elementos `search_results` sin procesar. Consulta [Lectura de fuentes desde la respuesta](/es/docs/agent-api/prompt-guide) para conocer la estructura completa de la respuesta.
+
+<div id="perplexity-search-tool">
+  ## Herramienta Perplexity Search
+</div>
+
+El paquete `@mastra/perplexity` expone la [Search API](/es/docs/search/quickstart) como una herramienta compatible con Mastra. Úsalo cuando necesites resultados web en bruto y ordenados por relevancia para alimentar a un agente.
+
+```bash theme={null}
+npm install @mastra/perplexity zod
+```
+
+```ts theme={null}
+import { createPerplexitySearchTool } from "@mastra/perplexity";
+
+const searchTool = createPerplexitySearchTool({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const results = await searchTool.execute({
+  context: {
+    query: "Latest advances in nuclear fusion",
+    maxResults: 5,
+    searchRecencyFilter: "month",
+  },
+});
+
+for (const result of results) {
+  console.log(result.title, result.url);
+}
+```
+
+El ID de la herramienta es `perplexity-search` y entre los parámetros de entrada admitidos se incluyen `query`, `maxResults`, `searchDomainFilter`, `searchRecencyFilter`, `searchAfterDateFilter` y `searchBeforeDateFilter`. Cada resultado incluye `title`, `url`, `snippet` y, opcionalmente, `date`.
+
+Para registrar varias herramientas de Perplexity a la vez, usa `createPerplexityTools(config?)`. Consulta la [referencia de la herramienta Perplexity de Mastra](https://mastra.ai/reference/tools/perplexity) para ver el esquema completo.
+
+<div id="links-resources">
+  ## Enlaces y recursos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Inicio rápido de Agent API" icon="bolt" href="/es/docs/agent-api/quickstart">
+    Desarrolla con los modelos, las herramientas y los presets de Agent API.
+  </Card>
+
+  <Card title="SDK de Perplexity" icon="code" href="/es/docs/sdk/overview">
+    Instala y configura el SDK oficial de Perplexity.
+  </Card>
+
+  <Card title="Herramienta Perplexity Search" icon="search" href="https://mastra.ai/reference/tools/perplexity">
+    Encapsula la Search API de Perplexity como una herramienta de Mastra.
+  </Card>
+
+  <Card title="Documentación de Mastra" icon="book" href="https://mastra.ai/docs">
+    Más información sobre agentes, herramientas y flujos de trabajo en Mastra.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Soporte
+</div>
+
+¿Necesitas ayuda con la integración?
+
+* Consulta la [documentación de Mastra](https://mastra.ai/docs)
+* Revisa nuestras [preguntas frecuentes](/es/docs/resources/faq)

@@ -1,0 +1,60 @@
+---
+title: "Agent API と Sonar のベンチマーク比較"
+sidebarTitle: "ベンチマーク"
+description: "Perplexity が実施している各種ベンチマークで Agent API の preset が Sonar と比べてどの程度の性能を示すか、また各 Sonar model の代わりにどの preset を使うべきかを解説します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+import MigrationBenchmarkChart from "/snippets/ja/migration-benchmark-chart.mdx";
+
+<SonarDeprecationNotice />
+
+当社が実施したベンチマークでは、Agent API の preset は Sonar よりも高い費用対品質を実現しており、preset の曲線はすべての Sonar model を上回っています。
+差が最も大きいのは BrowseComp や WideSearch のような難易度の高い多段階タスクで、最も強力な preset は Sonar の最高スコアの 2 倍以上を記録しています。
+
+<div id="what-we-measured">
+  ## 測定内容
+</div>
+
+Agent APIのpresetとSonarのmodelを同一のワークロードで、次の3つのベンチマークを用いて評価しました。
+
+* **[BrowseComp](https://arxiv.org/abs/2504.12516)** は、多数の検索を連鎖させる必要がある難問において、エージェントによるブラウジング能力を測定します。
+* **[DSQA (DeepSearchQA)](https://arxiv.org/abs/2601.20975)** は、ディープサーチ系の質問に対する回答品質を測定します。
+* **[WideSearch](https://arxiv.org/abs/2508.07999)** は、1回の実行で構造化された結果をどれだけ網羅的に収集・記入できるかを、行単位のF1スコアで評価します。
+
+Agent APIのpresetは、Sonarの最上位modelであるDeep Researchに匹敵する性能を、ごくわずかなコストで実現できます。
+
+<MigrationBenchmarkChart />
+
+<Info>
+  広く、かつ深く検索する必要があるリサーチエージェント向けに設計されたベンチマークについては、[WANDR](https://research.perplexity.ai/articles/wandr-benchmark-evaluating-research-agents-that-must-search-wide-and-deep)をご覧ください。
+</Info>
+
+<div id="which-preset-should-you-use">
+  ## どのpresetを使うべきか
+</div>
+
+結果はユースケースによって異なりますが、いずれのpresetも対応するSonar modelより品質面で上回ります。しかもdeep researchのティアでは、より低コストで実現できます。
+以下の対応表を出発点とし、実際のトラフィックで検証してください。
+
+| Sonar Chat Completions | Agent API preset | 最適な用途                       | 改善される点                                                                                 |
+| ---------------------- | ---------------- | --------------------------- | -------------------------------------------------------------------------------------- |
+| Sonar                  | `fast`           | 単一事実の調査、定義、簡単な要約。           | Sonarより高精度で、特にリサーチ型の多段階質問で改善が顕著です。                                                     |
+| Sonar Pro              | `low`            | 日常的なリサーチ、最新情報を用いた軽量な多段階の調査。 | 精度が大幅に向上し、Sonar Proでは到達できない本格的な多段階のエージェント型リサーチが可能になります。                                |
+| Sonar Reasoning Pro    | `medium`         | 多段階のブラウジングと多数のソースにわたる幅広い集約。 | 段階的な推論と、複数回の検索をまたいだ根拠の連鎖が格段に強化されます。                                                    |
+| Sonar Deep Research    | `high`           | 専門家レベルの推論と網羅的なソースカバレッジ。     | 要求の厳しい専門家レベルおよびdeep researchの作業で最も高精度なティアであり、多くの場合Sonar Deep Researchよりリクエスト単価を抑えられます。 |
+
+<Tip>
+  最先端のdeep researchには`xhigh` presetを使用してください。ラインナップ中で最高品質であり、当社が実施するベンチマーク全体で首位を占めています。
+</Tip>
+
+<CardGroup cols={2}>
+  <Card title="presetを詳しく見る" icon="sliders" href="/ja/docs/agent-api/presets" cta="presetを表示">
+    各presetが設定する内容と、個別の設定を上書きする方法を確認できます。
+  </Card>
+
+  <Card title="統合を移行する" icon="arrow-right-arrow-left" href="/ja/docs/agent-api/migrate-from-sonar/how-to" cta="移行ガイドを開く">
+    フィールドごとの手順に従って、Sonar統合をAgent APIへ移行しましょう。
+  </Card>
+</CardGroup>

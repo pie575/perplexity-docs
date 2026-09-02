@@ -1,0 +1,151 @@
+---
+title: "Wide Research"
+description: "wide-research preset を使って広範かつ詳細なリサーチタスクを実行し、根拠に基づく大規模なコレクションをバックグラウンドで構築します。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+`wide-research` は、出典に裏付けられた大規模なコレクションを構築するための preset です。「X に該当する企業をすべて洗い出し、それぞれに出典を付ける」といったタスクを与えると、条件に合致するエンティティを探し出し、それぞれについて裏付けとなる根拠を収集したうえで、結果をダウンロード可能なファイルに書き出します。
+
+これは、Perplexity の [WANDR ベンチマーク](https://research.perplexity.ai/articles/wandr-benchmark-evaluating-research-agents-that-must-search-wide-and-deep) (Wide ANd Deep Research) が測定対象とするタスク形態です。つまり、幅広い項目群を発見し (wide) 、すべての主張に出典を付けられるところまで一件ずつ深く調査する (deep) というものです。Agent API はまさにこうしたリサーチのために設計されており、Perplexity の検索オーケストレーションシステムは WANDR ベンチマークで首位に立っています。`wide-research` は、それと同じ構成を単一の preset にまとめたものです。
+
+<div id="quickstart">
+  ## クイックスタート
+</div>
+
+wide research の実行には数分かかるため、`background=true` を指定して送信し、完了するまで id でレスポンスをポーリングしたうえで、エージェントが生成したファイルをダウンロードします。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 1. バックグラウンドで送信
+  response = client.responses.create(
+      preset="wide-research",
+      background=True,
+      input=(
+          "Find at least 70 US-based companies with a CEO or CFO appointment first "
+          "announced between March 1 and April 30, 2026. For each, cite an authoritative "
+          "page that names the company and appointee and gives the role and date. Write "
+          "the results to results.jsonl, one JSON record per line with fields: "
+          "company, appointee, role, announcement_date, url."
+      ),
+  )
+
+  # 2. 実行が終了ステータスに達するまでポーリング
+  while response.status not in ("completed", "failed", "cancelled", "incomplete"):
+      time.sleep(5)
+      response = client.responses.retrieve(response.id)
+
+  # 3. 実行で生成されたすべてのファイルをダウンロード
+  for file in client.responses.files.list(response.id).data:
+      client.responses.files.content(
+          file_id=file.id, response_id=response.id
+      ).write_to_file(file.filename)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // 1. バックグラウンドで送信
+  let response = await client.responses.create({
+    preset: 'wide-research',
+    background: true,
+    input:
+      'Find at least 70 US-based companies with a CEO or CFO appointment first ' +
+      'announced between March 1 and April 30, 2026. For each, cite an authoritative ' +
+      'page that names the company and appointee and gives the role and date. Write ' +
+      'the results to results.jsonl, one JSON record per line with fields: ' +
+      'company, appointee, role, announcement_date, url.',
+  });
+
+  // 2. 実行が終了ステータスに達するまでポーリング
+  while (!['completed', 'failed', 'cancelled', 'incomplete'].includes(response.status)) {
+    await new Promise((r) => setTimeout(r, 5000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  // 3. 実行で生成されたファイルを一覧表示し、id ごとにダウンロード
+  const files = await client.responses.files.list(response.id);
+  for (const file of files.data) {
+    console.log(file.id, file.filename, file.bytes);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  # 1. バックグラウンドで送信 — レスポンス id を取得する
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "wide-research",
+      "background": true,
+      "input": "Find at least 70 US-based companies with a CEO or CFO appointment first announced between March 1 and April 30, 2026. For each, cite an authoritative page that names the company and appointee and gives the role and date. Write the results to results.jsonl, one JSON record per line with fields: company, appointee, role, announcement_date, url."
+    }'
+
+  # 2. ステータスが completed、failed、cancelled、incomplete のいずれかになるまで id でポーリング
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+
+  # 3. 実行で生成されたファイルを一覧表示してダウンロード
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files/$FILE_ID/content \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -o results.jsonl
+  ```
+</CodeGroup>
+
+<div id="how-it-works">
+  ## 仕組み
+</div>
+
+wide-research の実行は3つのパートで構成され、それぞれに対応する機能ページがあります。
+
+<Steps>
+  <Step title="バックグラウンドで送信する">
+    `preset="wide-research"` と `background=true` を設定し、タスクを `input` として渡します。送信呼び出しはレスポンスの `id` と `queued` ステータスを即座に返し、クライアントが切断されても実行はサーバー側で継続します。[バックグラウンドモード](/ja/docs/agent-api/background-mode)を参照してください。
+  </Step>
+
+  <Step title="完了までポーリングする">
+    `status` が終了状態 (`completed`、`failed`、`cancelled`、`incomplete`) になるまで、`id` を指定してレスポンスを取得します。実行をリアルタイムでストリーミングし、切断後に再接続することもできます。[バックグラウンドモード](/ja/docs/agent-api/background-mode#stream-and-reconnect)を参照してください。
+  </Step>
+
+  <Step title="結果をダウンロードする">
+    エージェントはコレクションを sandbox 内のファイルに書き出して配信するため、レスポンスの `output` に `share_file` 項目として現れます。レスポンスの `id` を指定して一覧表示・ダウンロードしてください。[ファイルの取り扱い](/ja/docs/agent-api/working-with-files)を参照してください。
+  </Step>
+</Steps>
+
+<Tip>
+  wide-research の品質は、タスクをどれだけ正確に指定できるかで決まります。具体的な目標 (「70社以上」など) 、明確な適格条件 (日付、地域、しきい値) 、レコードごとに必須とする出典、そして明示的な出力形式を指定してください。ファイル名を決め、1行あたりのフィールドを正確に列挙しましょう。構造化され出典が付いた出力は、検証も後続処理での利用も容易になります。
+</Tip>
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="バックグラウンドモード" icon="clock" href="/ja/docs/agent-api/background-mode">
+    長時間実行を送信し、ポーリング、ストリーミング、再接続を行います。
+  </Card>
+
+  <Card title="ファイルの取り扱い" icon="file" href="/ja/docs/agent-api/working-with-files">
+    実行が生成したファイルの一覧表示とダウンロードを行います。
+  </Card>
+
+  <Card title="Preset" icon="sliders" href="/ja/docs/agent-api/presets">
+    利用可能なすべての preset と、その設定内容を確認できます。
+  </Card>
+
+  <Card title="WANDR ベンチマーク" icon="chart-bar" href="https://research.perplexity.ai/articles/wandr-benchmark-evaluating-research-agents-that-must-search-wide-and-deep">
+    幅広く深い調査を評価する手法の研究を読む。
+  </Card>
+</CardGroup>

@@ -1,0 +1,395 @@
+---
+title: "在 Google Gemini SDK 中使用 Search API"
+sidebarTitle: "Gemini"
+description: "在 Google 的 google-genai SDK 中将 Perplexity 的 Search API 注册为函数工具，并使用 Gemini 模型运行工具调用循环。"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+本指南介绍如何通过 Google 的 `google-genai` SDK，将 Perplexity 的 [Search API](/zh/docs/search/quickstart) 以函数工具的形式提供给 Gemini 使用。模型会输出一个包含 `name` 和 `args` 的 `functionCall` 部分，你据此执行该工具 (本例中即调用 `client.search.create`) ，再将结果以 `functionResponse` 部分回传。如此循环，直到模型返回最终的文本响应。
+
+<Info>
+  如果直接将 Python 可调用对象传入 `tools=[...]`，Python SDK 可以**自动**运行工具调用循环——SDK 会解析函数签名并调用你的函数。本页采用**手动**循环，以便与 [Anthropic](/zh/docs/search/agent-sdks/anthropic) 和 [OpenAI](/zh/docs/search/agent-sdks/openai) 集成页面的写法保持一致，同时让你对调用保持显式控制。自动循环的写法参见[说明](#notes)。
+</Info>
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install google-genai perplexityai
+  export GEMINI_API_KEY="your_gemini_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+
+  ```bash Typescript theme={null}
+  npm install @google/genai @perplexity-ai/perplexity_ai
+  export GEMINI_API_KEY="your_gemini_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+</CodeGroup>
+
+<div id="tool-definition">
+  ## 工具定义
+</div>
+
+Gemini 接受包含一个或多个 `FunctionDeclaration` 对象的 `Tool`。每个声明需要提供 `name`、`description` 以及描述参数的 JSON Schema。下面的描述已针对 Perplexity 的 Search API 做过调优，请原样保留——正是这样的措辞才能生成简短、以关键词为主的高质量查询。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from google.genai import types
+
+  WEB_SEARCH_TOOL_DESCRIPTION = """\
+  Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline."""
+
+  QUERIES_PARAM_DESCRIPTION = (
+      "An array of keyword-based search queries. Each query should be short, "
+      "as longer queries may reduce performance. Do not provide more than three "
+      "queries to maintain efficiency."
+  )
+
+  WEB_SEARCH_FUNCTION = types.FunctionDeclaration(
+      name="web_search",
+      description=WEB_SEARCH_TOOL_DESCRIPTION,
+      parameters_json_schema={
+          "type": "object",
+          "properties": {
+              "queries": {
+                  "type": "array",
+                  "description": QUERIES_PARAM_DESCRIPTION,
+                  "items": {"type": "string"},
+                  "minItems": 1,
+                  "maxItems": 3,
+              },
+          },
+          "required": ["queries"],
+      },
+  )
+
+  WEB_SEARCH_TOOL = types.Tool(function_declarations=[WEB_SEARCH_FUNCTION])
+  ```
+
+  ```typescript Typescript theme={null}
+  import { Type } from "@google/genai";
+  import type { FunctionDeclaration, Tool } from "@google/genai";
+
+  const WEB_SEARCH_TOOL_DESCRIPTION = `Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline.`;
+
+  const QUERIES_PARAM_DESCRIPTION =
+    "An array of keyword-based search queries. Each query should be short, " +
+    "as longer queries may reduce performance. Do not provide more than three " +
+    "queries to maintain efficiency.";
+
+  const WEB_SEARCH_FUNCTION: FunctionDeclaration = {
+    name: "web_search",
+    description: WEB_SEARCH_TOOL_DESCRIPTION,
+    parametersJsonSchema: {
+      type: "object",
+      properties: {
+        queries: {
+          type: "array",
+          description: QUERIES_PARAM_DESCRIPTION,
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 3,
+        },
+      },
+      required: ["queries"],
+    },
+  };
+
+  const WEB_SEARCH_TOOL: Tool = {
+    functionDeclarations: [WEB_SEARCH_FUNCTION],
+  };
+  ```
+</CodeGroup>
+
+<div id="tool-handler">
+  ## 工具处理函数
+</div>
+
+该处理函数只是对 `client.search.create` 的一层薄封装。Search API 本身就支持传入查询数组 (最多五个) ，因此 Gemini 生成的数组可以直接透传。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  perplexity = Perplexity()
+
+  def run_web_search(queries: list[str]) -> str:
+      """调用 Perplexity Search，并将结果格式化后提供给模型。"""
+      response = perplexity.search.create(query=queries, max_results=5)
+
+      lines = []
+      for result in response.results:
+          snippet = (result.snippet or "").strip().replace("\n", " ")
+          if len(snippet) > 400:
+              snippet = snippet[:400] + "…"
+          lines.append(f"- {result.title}\n  {result.url}\n  {snippet}")
+      return "\n\n".join(lines) if lines else "No results."
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const perplexity = new Perplexity();
+
+  async function runWebSearch(queries: string[]): Promise<string> {
+    const response = await perplexity.search.create({
+      query: queries,
+      max_results: 5,
+    });
+
+    const lines = response.results.map((r) => {
+      const snippet = (r.snippet ?? "").trim().replace(/\n/g, " ");
+      const trimmed = snippet.length > 400 ? `${snippet.slice(0, 400)}…` : snippet;
+      return `- ${r.title}\n  ${r.url}\n  ${trimmed}`;
+    });
+    return lines.length ? lines.join("\n\n") : "No results.";
+  }
+  ```
+</CodeGroup>
+
+<div id="tool-call-loop">
+  ## 工具调用循环
+</div>
+
+使用 `AutomaticFunctionCallingConfig(disable=True)` (Python) 禁用自动循环——JS SDK 的核心 API 本身就不会自动循环。随后遍历 `response.function_calls`，逐个执行调用，再向模型发送一个后续的 `Content` 数组，其中包含原始的 `function_call` 部分及与之对应的 `function_response` 部分。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from google import genai
+  from google.genai import types
+
+  gemini = genai.Client()
+
+  def chat_with_search(user_prompt: str, model: str = "gemini-2.5-flash") -> str:
+      contents: list[types.Content] = [
+          types.Content(
+              role="user",
+              parts=[types.Part.from_text(text=user_prompt)],
+          ),
+      ]
+
+      config = types.GenerateContentConfig(
+          tools=[WEB_SEARCH_TOOL],
+          automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+      )
+
+      while True:
+          response = gemini.models.generate_content(
+              model=model,
+              contents=contents,
+              config=config,
+          )
+
+          function_calls = response.function_calls or []
+
+          if not function_calls:
+              return response.text
+
+          # 保留助手的 function_call 部分。
+          contents.append(response.candidates[0].content)
+
+          # 执行每个函数调用，并按名称配对结果（Gemini 在同一轮次内
+          # 按位置匹配 function_response → function_call）。
+          response_parts: list[types.Part] = []
+          for call in function_calls:
+              if call.name == "web_search":
+                  queries = call.args.get("queries", [])
+                  output = run_web_search(queries)
+                  result = {"result": output}
+              else:
+                  result = {"error": f"unknown tool: {call.name}"}
+              response_parts.append(
+                  types.Part.from_function_response(name=call.name, response=result)
+              )
+
+          contents.append(types.Content(role="user", parts=response_parts))
+
+
+  if __name__ == "__main__":
+      answer = chat_with_search(
+          "What were the major AI infrastructure announcements this week?"
+      )
+      print(answer)
+  ```
+
+  ```typescript Typescript theme={null}
+  import { GoogleGenAI, type Content, type Part } from "@google/genai";
+
+  const gemini = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+
+  async function chatWithSearch(
+    userPrompt: string,
+    model = "gemini-2.5-flash",
+  ): Promise<string> {
+    const contents: Content[] = [
+      { role: "user", parts: [{ text: userPrompt }] },
+    ];
+
+    while (true) {
+      const response = await gemini.models.generateContent({
+        model,
+        contents,
+        config: { tools: [WEB_SEARCH_TOOL] },
+      });
+
+      const functionCalls = response.functionCalls ?? [];
+
+      if (functionCalls.length === 0) {
+        return response.text ?? "";
+      }
+
+      // 保留助手的 function_call 部分。
+      const candidate = response.candidates?.[0];
+      if (candidate?.content) {
+        contents.push(candidate.content);
+      }
+
+      const responseParts: Part[] = [];
+      for (const call of functionCalls) {
+        let result: Record<string, unknown>;
+        if (call.name === "web_search") {
+          const queries = (call.args?.queries as string[]) ?? [];
+          result = { result: await runWebSearch(queries) };
+        } else {
+          result = { error: `unknown tool: ${call.name}` };
+        }
+        responseParts.push({
+          functionResponse: { name: call.name!, response: result },
+        });
+      }
+
+      contents.push({ role: "user", parts: responseParts });
+    }
+  }
+
+  (async () => {
+    const answer = await chatWithSearch(
+      "What were the major AI infrastructure announcements this week?",
+    );
+    console.log(answer);
+  })();
+  ```
+</CodeGroup>
+
+<div id="streaming">
+  ## 流式输出
+</div>
+
+流式输出请使用 `generate_content_stream` (Python) 或 `generateContentStream` (TypeScript) 。单个 `functionCall` 部分可能被拆分到多个流式数据块中，因此需要先累积这些 部分，再调用你的处理函数。除此之外，循环结构与非流式版本完全一致。
+
+<CodeGroup>
+  ```python Python theme={null}
+  for chunk in gemini.models.generate_content_stream(
+      model="gemini-2.5-flash",
+      contents=contents,
+      config=config,
+  ):
+      if chunk.text:
+          print(chunk.text, end="", flush=True)
+      # 执行前先跨数据块累积函数调用 部分。
+  ```
+
+  ```typescript Typescript theme={null}
+  const stream = await gemini.models.generateContentStream({
+    model: "gemini-2.5-flash",
+    contents,
+    config: { tools: [WEB_SEARCH_TOOL] },
+  });
+
+  for await (const chunk of stream) {
+    if (chunk.text) process.stdout.write(chunk.text);
+    // 执行前先跨数据块累积函数调用 部分。
+  }
+  ```
+</CodeGroup>
+
+<div id="notes">
+  ## 说明
+</div>
+
+* **自动循环 (仅限 Python) 。** Python SDK 可以替你运行工具调用循环。直接传入一个 Python 可调用对象，SDK 会自省其签名、调用它，并把结果回传给模型 —— 无需手动循环，也无需自行拼装 `Content`。
+
+  ```python theme={null}
+  def web_search(queries: list[str]) -> str:
+      """<在此逐字粘贴 WEB_SEARCH_TOOL_DESCRIPTION 作为文档字符串>"""
+      return run_web_search(queries)
+
+  response = gemini.models.generate_content(
+      model="gemini-2.5-flash",
+      contents="What were the major AI infrastructure announcements this week?",
+      config=types.GenerateContentConfig(tools=[web_search]),
+  )
+  print(response.text)
+  ```
+
+  自动循环的深度默认上限为 10 —— 对于较长的研究链路，可通过 `AutomaticFunctionCallingConfig(maximum_remote_calls=N)` 调高该上限。自动模式虽然方便，但代价是牺牲可见性换取简洁：错误会以异常形式抛出，而不是以模型可据以自行恢复的工具结果内容呈现。
+* **并行调用。** Gemini 可能在单次响应中输出多个 `function_call` 部分。请为每个调用构建一个对应的 `function_response` 部分 (按 `name` 以及该调用在本轮中的位置进行匹配) ，并将它们全部放入同一个后续 `Content` 中。
+* **成对提供 `function_call` 与 `function_response`。** 两轮内容都必须出现在下一次 `generate_content` 调用中 —— 模型需要同时看到自己的 `function_call` 部分和你的 `function_response` 部分。缺少任何一方都会导致 “missing function response” 错误。
+* **域名与日期。** 如果需要固定的检索约束，可在 `run_web_search` 内部传入 `search_domain_filter`、`country` 等 Search API 参数。完整参数列表请参阅 [Search API 快速入门](/zh/docs/search/quickstart)。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="搭配 Anthropic SDK 使用" icon="code" href="/zh/docs/search/agent-sdks/anthropic">
+    将 Search API 接入 Anthropic Messages API。
+  </Card>
+
+  <Card title="搭配 OpenAI SDK 使用" icon="code" href="/zh/docs/search/agent-sdks/openai">
+    将 Search API 接入 OpenAI Responses API。
+  </Card>
+
+  <Card title="Search API 快速入门" icon="rocket" href="/zh/docs/search/quickstart">
+    完整的 Search API 参数参考。
+  </Card>
+
+  <Card title="搜索最佳实践" icon="lightbulb" href="/zh/docs/search/best-practices">
+    生产环境搜索负载的常用模式。
+  </Card>
+</CardGroup>

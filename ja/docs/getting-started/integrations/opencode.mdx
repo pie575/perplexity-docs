@@ -1,0 +1,222 @@
+---
+title: "Perplexity と OpenCode"
+description: "OpenCode AI コーディングエージェント内で Perplexity Agent API を利用 — エンドポイントは 1 つ、あらゆるフロンティア モデルに、API キーも 1 つだけ。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[OpenCode](https://opencode.ai) は、ターミナル、IDE、デスクトップで動作するオープンソースのAIコーディングエージェントです。Perplexity の **Agent API** は OpenAI Responses API と互換性があり、OpenAI、Anthropic、Google、xAI、Perplexity のフロンティアモデルを単一のエンドポイントから利用できます。
+
+OpenCode を Agent API に接続すれば、プロバイダーごとに別々のアカウントを管理しなくても、任意のフロンティアモデルをコーディングエージェントやリサーチ用サブエージェントに差し替えられます。
+
+<Info>
+  **OpenCode** はマルチエージェントのオーケストレーションに対応しており、コーディング用に `primary` エージェント、特定用途向けに `subagent` エージェントを設定できます。詳細は [opencode.ai](https://opencode.ai) をご覧ください。
+</Info>
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+Agent API は OpenAI Responses API を実装しているため、OpenCode では [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses) を Perplexity の `/v1/responses` エンドポイントに向けたカスタムプロバイダーとして設定します。
+
+<Steps>
+  <Step title="OpenCode をインストールする">
+    お使いのプラットフォーム (macOS、Linux、Windows) 向けの [OpenCode インストールガイド](https://opencode.ai/docs)に従ってください。
+  </Step>
+
+  <Step title="Perplexity API キーを取得する">
+    <Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+      API ポータルから Perplexity API キーを発行します。
+    </Card>
+
+    シェルでエクスポートします。
+
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="pplx-..."
+    ```
+  </Step>
+
+  <Step title="OpenCode を設定する">
+    `opencode.json` (または `~/.config/opencode/config.json`) に Perplexity Agent API をプロバイダーとして追加します。設定内容は以下を参照してください。
+  </Step>
+
+  <Step title="動作を確認する">
+    `/models` を実行し、Perplexity の Agent モデルがセレクターに表示されることを確認します。
+  </Step>
+</Steps>
+
+<div id="provider-configuration">
+  ## プロバイダーの設定
+</div>
+
+`@ai-sdk/open-responses` プロバイダーは、OpenAI Responses API を実装したサーバー向けに作られています。これはまさに Agent API が使う方言そのものです。`url` を Perplexity の `/v1/responses` エンドポイントに向け、ピッカーに表示したい モデルを宣言してください。
+
+<Warning>
+  **Responses API** 対応のプロバイダーを使用してください。`@ai-sdk/open-responses` (ここで示しているもの) か、`.responses()` の モデルが同じルートを呼び出す `@ai-sdk/openai` です。`@ai-sdk/openai-compatible` は使用**しないで**ください。こちらは Chat Completions (`/v1/chat/completions`) を対象としており、Agent API では有効なルートではないため 404 が返ります。
+</Warning>
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "perplexity-agent": {
+      "npm": "@ai-sdk/open-responses",
+      "name": "Perplexity Agent API",
+      "options": {
+        "name": "perplexity-agent",
+        "url": "https://api.perplexity.ai/v1/responses",
+        "apiKey": "{env:PERPLEXITY_API_KEY}",
+        "headers": {
+          "X-Pplx-Integration": "opencode/1.0"
+        }
+      },
+      "models": {
+        "openai/gpt-5.6-sol": { "name": "GPT-5.6 Sol" },
+        "openai/gpt-5.6-terra": { "name": "GPT-5.6 Terra" },
+        "openai/gpt-5.6-luna": { "name": "GPT-5.6 Luna" },
+        "anthropic/claude-opus-4-8": { "name": "Claude Opus 4.8" },
+        "anthropic/claude-sonnet-5": { "name": "Claude Sonnet 5" },
+        "anthropic/claude-haiku-4-5": { "name": "Claude Haiku 4.5" },
+        "google/gemini-3.1-pro-preview": { "name": "Gemini 3.1 Pro" },
+        "xai/grok-4.5": { "name": "Grok 4.5" },
+        "perplexity/kimi-k2.7-code": { "name": "Kimi K2.7 Code" }
+      }
+    }
+  }
+}
+```
+
+以上です — API キー 1つ、エンドポイント1つで、あらゆるフロンティア モデルを利用できます。
+
+<div id="available-models">
+  ## 利用可能なモデル
+</div>
+
+Agent API は複数のプロバイダーのモデルにルーティングします。正式な一覧は [モデルページ](/ja/docs/agent-api/models) を参照してください。コーディング作業で特に役立つ識別子は次のとおりです。
+
+| モデル ID                          | 最適な用途                    |
+| ------------------------------- | ------------------------ |
+| `openai/gpt-5.6-sol`            | 高度な推論、長期的なコーディングタスク      |
+| `openai/gpt-5.6-terra`          | 汎用コーディングエージェント           |
+| `openai/gpt-5.6-luna`           | 高速・低コストなコーディング補完         |
+| `anthropic/claude-opus-4-8`     | 最高品質のコードレビューとアーキテクチャ設計   |
+| `anthropic/claude-sonnet-5`     | コーディングとツール利用のバランス型       |
+| `anthropic/claude-haiku-4-5`    | 高速・低コストな編集               |
+| `google/gemini-3.1-pro-preview` | 長いコンテキストのリファクタリング        |
+| `xai/grok-4.5`                  | 低レイテンシーの編集               |
+| `perplexity/kimi-k2.7-code`     | コーディングおよびエージェント型ワークフロー専用 |
+
+<div id="use-as-a-primary-coding-model">
+  ## メインのコーディングモデルとして使用する
+</div>
+
+`opencode.json` で任意の Agent API モデルをデフォルトに設定します:
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "perplexity-agent/anthropic/claude-opus-4-8"
+}
+```
+
+OpenCode では各 モデルを `<providerId>/<modelId>` の形式で指定するため、完全な識別子は `perplexity-agent/anthropic/claude-opus-4-8` となります。
+
+<div id="multi-agent-setup">
+  ## マルチエージェント構成
+</div>
+
+複数の OpenCode エージェントに、それぞれ異なる Agent API の モデルを割り当てられます — すべて 1 つの Perplexity キーだけで完結します。次の例では、メインのコーダーが軽量な読み取り専用のサブエージェントに処理を委譲します:
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "perplexity-agent/anthropic/claude-opus-4-8",
+  "agent": {
+    "coder": {
+      "description": "Primary coding agent",
+      "mode": "primary",
+      "model": "perplexity-agent/anthropic/claude-opus-4-8",
+      "temperature": 0.2,
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "researcher": {
+      "description": "Read-only subagent for lookups and summarization",
+      "mode": "subagent",
+      "model": "perplexity-agent/openai/gpt-5.6-sol",
+      "temperature": 0.4,
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+`coder` はファイルシステム (write、edit、bash) を担当し、読み取り専用の `researcher` は分析と要約のために別のモデル上で動作します。どちらの `model` も、任意の [Agent API モデル](/ja/docs/agent-api/models)に差し替えられます。
+
+構成が正しく設定されているか確認します:
+
+```
+/agents   # coder と researcher が表示されるはず
+/models   # Perplexity Agent の モデルが含まれるはず
+```
+
+<div id="why-the-agent-api">
+  ## Agent API を選ぶ理由
+</div>
+
+Agent API は、エージェントループのために設計されています。
+
+* **1つのキーであらゆるモデルを** — 個別のアカウントを管理することなく、OpenAI、Anthropic、Google、xAI、Perplexity を切り替えられます。
+* **OpenAI Responses 互換** — `/v1/responses` に対応する OpenCode のプロバイダースロットであれば、そのまま組み込めます。
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API クイックスタート" icon="bolt" href="/ja/docs/agent-api/quickstart">
+    最初の Agent API リクエストを送信します。
+  </Card>
+
+  <Card title="Agent API のモデル" icon="sparkles" href="/ja/docs/agent-api/models">
+    価格情報を含む全モデルのカタログ。
+  </Card>
+
+  <Card title="Perplexity SDK" icon="code" href="/ja/docs/sdk/overview">
+    Agent API を直接呼び出して、preset やツールを活用し、細かく制御できます。
+  </Card>
+
+  <Card title="OpenAI 互換性" icon="plug" href="/ja/docs/agent-api/openai-compatibility">
+    任意の OpenAI SDK から Agent API を利用します。
+  </Card>
+
+  <Card title="OpenCode プロバイダー" icon="book" href="https://opencode.ai/docs/providers/">
+    OpenCode のカスタムプロバイダーリファレンス。
+  </Card>
+
+  <Card title="OpenCode ドキュメント" icon="book-open" href="https://opencode.ai/docs">
+    OpenCode の公式ドキュメント。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+統合でお困りですか？
+
+* [OpenCode ドキュメント](https://opencode.ai/docs)を参照する
+* [FAQ](/ja/docs/resources/faq)を確認する

@@ -1,0 +1,151 @@
+---
+title: "Memoria de conversación persistente"
+description: "Memoria de conversación a largo plazo con almacenamiento vectorial de LanceDB y la Sonar API de Perplexity"
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="persistent-chat-memory-with-perplexity-sonar-api">
+  # Memoria de conversación persistente con la Sonar API de Perplexity
+</div>
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+Esta implementación muestra cómo preservar la memoria de conversación a largo plazo con el almacenamiento vectorial de LlamaIndex y la Sonar API de Perplexity. Mantiene el contexto entre llamadas a la API mediante recuperación y resumen inteligentes.
+
+<div id="key-features">
+  ## Características principales
+</div>
+
+* **Retención de contexto en varios turnos**: recuerda las consultas y respuestas anteriores
+* **Búsqueda semántica**: encuentra el historial de conversación relevante mediante embeddings vectoriales
+* **Integración con Perplexity**: aprovecha el modelo Sonar-pro para obtener respuestas precisas
+* **Almacenamiento con LanceDB**: historial de conversación persistente mediante una base de datos vectorial columnar
+
+<div id="implementation-details">
+  ## Detalles de implementación
+</div>
+
+<div id="core-components">
+  ### Componentes principales
+</div>
+
+```python theme={null}
+# Inicialización de la memoria
+vector_store = LanceDBVectorStore(uri="./lancedb", table_name="chat_history")
+storage_context = StorageContext.from_defaults(vector_store=vector_store)
+index = VectorStoreIndex([], storage_context=storage_context)
+```
+
+<div id="conversation-flow">
+  ### Flujo de conversación
+</div>
+
+1. Almacena las consultas del usuario como embeddings vectoriales
+2. Recupera las 3 interacciones anteriores más relevantes
+3. Genera solicitudes a la Sonar API con el historial contextual
+4. Guarda las respuestas para conversaciones futuras
+
+<div id="api-integration">
+  ### Integración con la API
+</div>
+
+```python theme={null}
+# Llamada a la Sonar API con el contexto de la conversación
+messages = [
+    {"role": "system", "content": f"Context: {context_nodes}"},
+    {"role": "user", "content": user_query}
+]
+response = sonar_client.chat.completions.create(
+    model="sonar-pro",
+    messages=messages
+)
+```
+
+<div id="setup">
+  ## Configuración
+</div>
+
+<div id="requirements">
+  ### Requisitos
+</div>
+
+```bash theme={null}
+llama-index-core>=0.10.0
+llama-index-vector-stores-lancedb>=0.1.0
+lancedb>=0.4.0
+openai>=1.12.0
+python-dotenv>=0.19.0
+```
+
+<div id="configuration">
+  ### Configuración
+</div>
+
+1. Configura la API key:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key-here"
+```
+
+<div id="usage">
+  ## Uso
+</div>
+
+<div id="basic-conversation">
+  ### Conversación básica
+</div>
+
+```python theme={null}
+from chat_with_persistence import initialize_chat_session, chat_with_persistence
+
+index = initialize_chat_session()
+print(chat_with_persistence("Current weather in London?", index))
+print(chat_with_persistence("How does this compare to yesterday?", index))
+```
+
+<div id="expected-output">
+  ### Resultado esperado
+</div>
+
+```text theme={null}
+Consulta inicial: informe meteorológico detallado de Londres
+Seguimiento: análisis comparativo con el contexto almacenado
+```
+
+<div id="try-it-out-yourself">
+  ### **¡Pruébalo tú mismo!**
+</div>
+
+```bash theme={null}
+python3 scripts/example_usage.py
+```
+
+<div id="persistence-verification">
+  ## Verificación de la persistencia
+</div>
+
+```
+import lancedb
+db = lancedb.connect("./lancedb")
+table = db.open_table("chat_history")
+print(table.to_pandas()[["text", "metadata"]])
+```
+
+Esta implementación resuelve desafíos clave en las conversaciones con LLM:
+
+* Mantiene una precisión contextual del 93 % a lo largo de más de 10 turnos
+* Reduce las alucinaciones en un 67 % gracias al anclaje contextual
+* Permite conversaciones de una hora dentro de una ventana de 4096 tokens
+
+<div id="learn-more">
+  ## Más información
+</div>
+
+Para más contexto sobre los enfoques de gestión de memoria, consulta la [Guía de gestión de memoria](../README) principal.
+
+Para ver la documentación completa, consulta la [Guía de memoria de LlamaIndex](https://docs.llamaindex.ai/en/stable/module_guides/deploying/agents/memory/) y la [documentación de Perplexity API](https://docs.perplexity.ai/).

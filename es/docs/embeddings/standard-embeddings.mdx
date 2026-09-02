@@ -1,0 +1,261 @@
+---
+title: "Embeddings estándar"
+description: "Genera embeddings para textos independientes, consultas de búsqueda y oraciones sueltas."
+---
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+Usa los embeddings estándar para generar embeddings de textos independientes (consultas, documentos y búsqueda semántica), donde cada texto es autónomo.
+
+<div id="models">
+  ## Modelos
+</div>
+
+|        Modelo        | Dimensiones | Contexto | MRL | Cuantización | Precio ($/1M tokens) |
+| :------------------: | :---------: | :------: | :-: | :----------: | :------------------: |
+| `pplx-embed-v1-0.6b` |     1024    |    32K   |  Sí |  INT8/BINARY |        $0.004        |
+|  `pplx-embed-v1-4b`  |     2560    |    32K   |  Sí |  INT8/BINARY |         $0.03        |
+
+<div id="basic-usage">
+  ## Uso básico
+</div>
+
+Genera embeddings para una lista de textos:
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.embeddings.create(
+      input=[
+          "Scientists explore the universe driven by curiosity.",
+          "Curiosity compels us to seek explanations, not just observations.",
+          "Historical discoveries began with curious questions.",
+          "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+          "Philosophy examines the nature of curiosity."
+      ],
+      model="pplx-embed-v1-4b"
+  )
+
+  for emb in response.data:
+      print(f"Index {emb.index}: {emb.embedding}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.embeddings.create({
+      input: [
+          "Scientists explore the universe driven by curiosity.",
+          "Curiosity compels us to seek explanations, not just observations.",
+          "Historical discoveries began with curious questions.",
+          "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+          "Philosophy examines the nature of curiosity."
+      ],
+      model: "pplx-embed-v1-4b"
+  });
+
+  for (const emb of response.data!) {
+      console.log(`Index ${emb.index}: ${emb.embedding!}`);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/v1/embeddings' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "input": [
+        "Scientists explore the universe driven by curiosity.",
+        "Curiosity compels us to seek explanations, not just observations.",
+        "Historical discoveries began with curious questions.",
+        "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+        "Philosophy examines the nature of curiosity."
+      ],
+      "model": "pplx-embed-v1-4b"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Respuesta">
+  ```json theme={null}
+  {
+    "object": "list",
+    "data": [
+      {
+        "object": "embedding",
+        "index": 0,
+        "embedding": "/* valores int8 con signo codificados en base64 */"
+      },
+      {
+        "object": "embedding",
+        "index": 1,
+        "embedding": "/* valores int8 con signo codificados en base64 */"
+      },
+      {
+        "object": "embedding",
+        "index": 2,
+        "embedding": "/* valores int8 con signo codificados en base64 */"
+      },
+      {
+        "object": "embedding",
+        "index": 3,
+        "embedding": "/* valores int8 con signo codificados en base64 */"
+      },
+      {
+        "object": "embedding",
+        "index": 4,
+        "embedding": "/* valores int8 con signo codificados en base64 */"
+      }
+    ],
+    "model": "pplx-embed-v1-4b",
+    "usage": {
+      "prompt_tokens": 42,
+      "total_tokens": 42,
+      "cost": {
+        "input_cost": 0.0000013,
+        "total_cost": 0.0000013,
+        "currency": "USD"
+      }
+    }
+  }
+  ```
+</Accordion>
+
+<div id="semantic-search-example">
+  ## Ejemplo de búsqueda semántica
+</div>
+
+Crea un sistema sencillo de búsqueda semántica:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string):
+      """Decodifica un embedding int8 codificado en base64."""
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a, b):
+      return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+  # 1. Genera los embeddings de tus documentos
+  documents = [
+      "Python is a versatile programming language",
+      "Machine learning automates analytical model building",
+      "The Eiffel Tower is located in Paris, France"
+  ]
+
+  doc_response = client.embeddings.create(input=documents, model="pplx-embed-v1-4b")
+  doc_embeddings = [decode_embedding(emb.embedding) for emb in doc_response.data]
+
+  # 2. Genera el embedding de una consulta de búsqueda
+  query = "What programming languages are good for data science?"
+  query_response = client.embeddings.create(input=[query], model="pplx-embed-v1-4b")
+  query_embedding = decode_embedding(query_response.data[0].embedding)
+
+  # 3. Encuentra los documentos más similares
+  scores = [
+      (i, cosine_similarity(query_embedding, doc_emb))
+      for i, doc_emb in enumerate(doc_embeddings)
+  ]
+  ranked = sorted(scores, key=lambda x: x[1], reverse=True)
+
+  print("Search results:")
+  for idx, score in ranked:
+      print(f"  {score:.4f}: {documents[idx]}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dotProduct = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dotProduct += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // 1. Genera los embeddings de tus documentos
+  const documents = [
+      "Python is a versatile programming language",
+      "Machine learning automates analytical model building",
+      "The Eiffel Tower is located in Paris, France"
+  ];
+
+  const docResponse = await client.embeddings.create({
+      input: documents,
+      model: "pplx-embed-v1-4b"
+  });
+  const docEmbeddings = docResponse.data!.map(emb => decodeEmbedding(emb.embedding!));
+
+  // 2. Genera el embedding de una consulta de búsqueda
+  const query = "What programming languages are good for data science?";
+  const queryResponse = await client.embeddings.create({
+      input: [query],
+      model: "pplx-embed-v1-4b"
+  });
+  const queryEmbedding = decodeEmbedding(queryResponse.data![0].embedding!);
+
+  // 3. Encuentra los documentos más similares
+  const scores = docEmbeddings.map((docEmb, i) => ({
+      index: i,
+      score: cosineSimilarity(queryEmbedding, docEmb)
+  }));
+  const ranked = scores.sort((a, b) => b.score - a.score);
+
+  console.log("Search results:");
+  for (const { index, score } of ranked) {
+      console.log(`  ${score.toFixed(4)}: ${documents[index]}`);
+  }
+  ```
+</CodeGroup>
+
+<div id="parameters">
+  ## Parámetros
+</div>
+
+| Parámetro         | Tipo                   | Obligatorio | Predeterminado | Descripción                                                                                                                                                                                   |
+| ----------------- | ---------------------- | :---------: | :------------: | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `input`           | string | array[string] |      Sí     |        -       | Texto(s) que se van a incrustar. Máximo 512 textos por solicitud. Cada entrada no debe superar los 32K tokens. El total de tokens no debe superar los 120.000. No se permiten cadenas vacías. |
+| `model`           | string                 |      Sí     |        -       | Identificador del modelo: `pplx-embed-v1-0.6b` o `pplx-embed-v1-4b`                                                                                                                            |
+| `dimensions`      | integer                |      No     |    Completa    | Dimensión Matryoshka (128-1024 para 0.6b, 128-2560 para 4b)                                                                                                                                   |
+| `encoding_format` | string                 |      No     |  `base64_int8` | Codificación de salida: `base64_int8` (int8 con signo) o `base64_binary` (bits empaquetados)                                                                                                  |
+
+<Warning>
+  **Límites de entrada:** Cada texto no debe superar los 32K tokens. Las solicitudes que excedan este límite serán rechazadas. El conjunto de entradas de una misma solicitud no debe superar los 120.000 tokens en total.
+</Warning>
+
+<div id="related-resources">
+  ## Recursos relacionados
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Embeddings contextualizados" icon="file-lines" href="/es/docs/embeddings/contextualized-embeddings">
+    Embeddings que tienen en cuenta el documento para fragmentos que comparten contexto.
+  </Card>
+
+  <Card title="Buenas prácticas" icon="star" href="/es/docs/embeddings/best-practices">
+    Procesamiento por lotes, almacenamiento en caché y patrones de RAG.
+  </Card>
+</CardGroup>

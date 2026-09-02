@@ -1,0 +1,656 @@
+---
+title: "结构化输出提取"
+description: "结合 JSON Schema 使用 response_format，从 Agent API 获取类型化、经 Schema 校验的 JSON 响应，适用于数据提取、数据管道和结构化研究"
+---
+
+本指南介绍如何通过 `response_format` 参数配合 JSON Schema，从 Agent API 中提取结构化、类型化的 JSON。你将掌握商品数据提取、研究结论、对比表格以及构建可靠数据管道的实用模式——并且输出始终符合 Schema 定义。
+
+<Info>
+  Agent API 会在生成阶段强制校验你的 JSON Schema，因此响应始终符合指定结构。完整参数说明请参见 [输出控制](/zh/docs/agent-api/output-control)。
+</Info>
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+安装 Perplexity SDK：
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+如果你还没有 API key：
+
+<Card title="获取你的 Perplexity API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="点击这里" href="https://perplexity.ai/account/api">
+  在 API Portal 中打开 **API Keys** 标签页，生成一个新的 key。
+</Card>
+
+然后将 API key 导出为环境变量：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-structured-outputs-work">
+  ## 结构化输出的工作原理
+</div>
+
+当你传入 `response_format` 并将 `type` 设为 `"json_schema"` 时，Agent API 会约束模型的输出，使其严格匹配你的 schema。`output_text` 中返回的是一个合法的 JSON 字符串，可以直接解析。
+
+schema 格式遵循 [JSON Schema](https://json-schema.org/)，但有几项 Perplexity API 特有的限制：
+
+* **不支持递归 schema。** schema 不能引用自身。
+* **不支持无约束的对象。** 避免使用 `additionalProperties: true`，或未定义属性的裸 `object` 类型。
+* **必须为 schema 命名。** 每个 schema 都需要一个 `name` 字段用于标识。
+
+<div id="basic-extracting-a-single-entity">
+  ## 基础：提取单个实体
+</div>
+
+以联网搜索为依据，提取单个主题的结构化数据。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What is the current market cap, CEO, and founding year of NVIDIA?",
+      tools=[{"type": "web_search"}],
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "company_profile",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "company_name": {"type": "string"},
+                      "ticker": {"type": "string"},
+                      "ceo": {"type": "string"},
+                      "founded_year": {"type": "integer"},
+                      "market_cap_usd": {"type": "string"},
+                      "sector": {"type": "string"},
+                      "headquarters": {"type": "string"},
+                  },
+                  "required": ["company_name", "ticker", "ceo", "founded_year", "market_cap_usd", "sector", "headquarters"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  company = json.loads(response.output_text)
+  print(f"{company['company_name']} ({company['ticker']})")
+  print(f"  CEO: {company['ceo']}")
+  print(f"  Founded: {company['founded_year']}")
+  print(f"  Market Cap: {company['market_cap_usd']}")
+  print(f"  Sector: {company['sector']}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What is the current market cap, CEO, and founding year of NVIDIA?",
+      tools: [{ type: "web_search" }],
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "company_profile",
+              schema: {
+                  type: "object",
+                  properties: {
+                      company_name: { type: "string" },
+                      ticker: { type: "string" },
+                      ceo: { type: "string" },
+                      founded_year: { type: "integer" },
+                      market_cap_usd: { type: "string" },
+                      sector: { type: "string" },
+                      headquarters: { type: "string" },
+                  },
+                  required: ["company_name", "ticker", "ceo", "founded_year", "market_cap_usd", "sector", "headquarters"],
+              },
+          },
+      },
+  });
+
+  const company = JSON.parse(response.output_text);
+  console.log(`${company.company_name} (${company.ticker})`);
+  console.log(`  CEO: ${company.ceo}`);
+  console.log(`  Founded: ${company.founded_year}`);
+  console.log(`  Market Cap: ${company.market_cap_usd}`);
+  console.log(`  Sector: ${company.sector}`);
+  ```
+</CodeGroup>
+
+<div id="extracting-lists-product-comparisons">
+  ## 提取列表：产品对比
+</div>
+
+通过一次查询提取多个条目的结构化对比结果。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Compare the top 3 electric vehicles under $40,000 available in the US in 2026",
+      tools=[{"type": "web_search"}],
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "ev_comparison",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "vehicles": {
+                          "type": "array",
+                          "items": {
+                              "type": "object",
+                              "properties": {
+                                  "make": {"type": "string"},
+                                  "model": {"type": "string"},
+                                  "year": {"type": "integer"},
+                                  "starting_price_usd": {"type": "integer"},
+                                  "range_miles": {"type": "integer"},
+                                  "battery_kwh": {"type": "number"},
+                                  "pros": {"type": "array", "items": {"type": "string"}},
+                                  "cons": {"type": "array", "items": {"type": "string"}},
+                              },
+                              "required": ["make", "model", "year", "starting_price_usd", "range_miles", "battery_kwh", "pros", "cons"],
+                              "additionalProperties": false,
+                          },
+                      },
+                      "comparison_date": {"type": "string"},
+                  },
+                  "required": ["vehicles", "comparison_date"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  data = json.loads(response.output_text)
+  print(f"EV Comparison (as of {data['comparison_date']})\n")
+
+  for v in data["vehicles"]:
+      print(f"{v['year']} {v['make']} {v['model']}")
+      print(f"  Price: ${v['starting_price_usd']:,}")
+      print(f"  Range: {v['range_miles']} mi | Battery: {v['battery_kwh']} kWh")
+      print(f"  Pros: {', '.join(v['pros'])}")
+      print(f"  Cons: {', '.join(v['cons'])}")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "Compare the top 3 electric vehicles under $40,000 available in the US in 2026",
+      tools: [{ type: "web_search" }],
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "ev_comparison",
+              schema: {
+                  type: "object",
+                  properties: {
+                      vehicles: {
+                          type: "array",
+                          items: {
+                              type: "object",
+                              properties: {
+                                  make: { type: "string" },
+                                  model: { type: "string" },
+                                  year: { type: "integer" },
+                                  starting_price_usd: { type: "integer" },
+                                  range_miles: { type: "integer" },
+                                  battery_kwh: { type: "number" },
+                                  pros: { type: "array", items: { type: "string" } },
+                                  cons: { type: "array", items: { type: "string" } },
+                              },
+                              required: ["make", "model", "year", "starting_price_usd", "range_miles", "battery_kwh", "pros", "cons"],
+                          },
+                      },
+                      comparison_date: { type: "string" },
+                  },
+                  required: ["vehicles", "comparison_date"],
+              },
+          },
+      },
+  });
+
+  const data = JSON.parse(response.output_text);
+  console.log(`EV Comparison (as of ${data.comparison_date})\n`);
+
+  for (const v of data.vehicles) {
+      console.log(`${v.year} ${v.make} ${v.model}`);
+      console.log(`  Price: $${v.starting_price_usd.toLocaleString()}`);
+      console.log(`  Range: ${v.range_miles} mi | Battery: ${v.battery_kwh} kWh`);
+      console.log(`  Pros: ${v.pros.join(", ")}`);
+      console.log(`  Cons: ${v.cons.join(", ")}`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<div id="research-findings-extraction">
+  ## 研究发现提取
+</div>
+
+将基于搜索的研究结果解析为适合用于报告或数据库的结构化格式。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the most recent clinical trial results for GLP-1 receptor agonists in treating obesity?",
+      tools=[{"type": "web_search"}],
+      instructions="Provide findings from the most recent clinical trials. Include specific numbers and trial names where available.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "research_findings",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "topic": {"type": "string"},
+                      "findings": {
+                          "type": "array",
+                          "items": {
+                              "type": "object",
+                              "properties": {
+                                  "trial_name": {"type": "string"},
+                                  "drug": {"type": "string"},
+                                  "phase": {"type": "string"},
+                                  "key_result": {"type": "string"},
+                                  "sample_size": {"type": "string"},
+                                  "publication_year": {"type": "integer"},
+                              },
+                              "required": ["trial_name", "drug", "phase", "key_result", "sample_size", "publication_year"],
+                              "additionalProperties": false,
+                          },
+                      },
+                      "summary": {"type": "string"},
+                  },
+                  "required": ["topic", "findings", "summary"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  data = json.loads(response.output_text)
+  print(f"Topic: {data['topic']}\n")
+  print(f"Summary: {data['summary']}\n")
+
+  for finding in data["findings"]:
+      print(f"  {finding['trial_name']} ({finding['drug']}, Phase {finding['phase']})")
+      print(f"    Result: {finding['key_result']}")
+      print(f"    N={finding['sample_size']}, Published: {finding['publication_year']}")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the most recent clinical trial results for GLP-1 receptor agonists in treating obesity?",
+      tools: [{ type: "web_search" }],
+      instructions: "Provide findings from the most recent clinical trials. Include specific numbers and trial names where available.",
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "research_findings",
+              schema: {
+                  type: "object",
+                  properties: {
+                      topic: { type: "string" },
+                      findings: {
+                          type: "array",
+                          items: {
+                              type: "object",
+                              properties: {
+                                  trial_name: { type: "string" },
+                                  drug: { type: "string" },
+                                  phase: { type: "string" },
+                                  key_result: { type: "string" },
+                                  sample_size: { type: "string" },
+                                  publication_year: { type: "integer" },
+                              },
+                              required: ["trial_name", "drug", "phase", "key_result", "sample_size", "publication_year"],
+                          },
+                      },
+                      summary: { type: "string" },
+                  },
+                  required: ["topic", "findings", "summary"],
+              },
+          },
+      },
+  });
+
+  const data = JSON.parse(response.output_text);
+  console.log(`Topic: ${data.topic}\n`);
+  console.log(`Summary: ${data.summary}\n`);
+
+  for (const finding of data.findings) {
+      console.log(`  ${finding.trial_name} (${finding.drug}, Phase ${finding.phase})`);
+      console.log(`    Result: ${finding.key_result}`);
+      console.log(`    N=${finding.sample_size}, Published: ${finding.publication_year}`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<div id="building-a-data-pipeline">
+  ## 构建数据管道
+</div>
+
+将结构化输出提取串联成一条流水线，完成查询、提取和存储结构化数据。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import csv
+  import io
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  SCHEMA = {
+      "type": "json_schema",
+      "json_schema": {
+          "name": "startup_funding",
+          "schema": {
+              "type": "object",
+              "properties": {
+                  "companies": {
+                      "type": "array",
+                      "items": {
+                          "type": "object",
+                          "properties": {
+                              "name": {"type": "string"},
+                              "round": {"type": "string"},
+                              "amount_usd": {"type": "string"},
+                              "lead_investor": {"type": "string"},
+                              "sector": {"type": "string"},
+                              "date": {"type": "string"},
+                          },
+                          "required": ["name", "round", "amount_usd", "lead_investor", "sector", "date"],
+                          "additionalProperties": false,
+                      },
+                  },
+              },
+              "required": ["companies"],
+              "additionalProperties": false,
+          },
+      },
+  }
+
+
+  def extract_funding_rounds(sector: str) -> list[dict]:
+      """查询 API，返回指定行业的结构化融资数据。"""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=f"List the 5 largest startup funding rounds in {sector} from the past 3 months",
+          tools=[{"type": "web_search"}],
+          response_format=SCHEMA,
+      )
+      data = json.loads(response.output_text)
+      return data["companies"]
+
+
+  def pipeline(sectors: list[str]) -> str:
+      """对多个行业依次执行提取，并生成 CSV。"""
+      all_rows = []
+      for sector in sectors:
+          print(f"Extracting: {sector}...")
+          rows = extract_funding_rounds(sector)
+          for row in rows:
+              row["query_sector"] = sector
+              all_rows.append(row)
+
+      # 转换为 CSV
+      output = io.StringIO()
+      writer = csv.DictWriter(output, fieldnames=["query_sector", "name", "round", "amount_usd", "lead_investor", "sector", "date"])
+      writer.writeheader()
+      writer.writerows(all_rows)
+      return output.getvalue()
+
+
+  if __name__ == "__main__":
+      csv_output = pipeline(["AI infrastructure", "climate tech", "biotech"])
+      print(csv_output)
+  ```
+</CodeGroup>
+
+<div id="schema-design-constraints">
+  ## Schema 设计约束
+</div>
+
+<Warning>
+  Agent API 对 JSON Schema 强制施加以下约束：
+
+  * **`additionalProperties` 必须为 `false`。** Schema 中每个 `"type": "object"` 都必须包含 `"additionalProperties": false`，顶层 Schema 和所有嵌套对象均适用。
+  * **不支持递归 Schema。** Schema 不能通过 `$ref` 指向自身定义来引用自己。
+  * **不允许无约束的字典。** 避免使用不带 `properties` 的 `"type": "object"`，每个对象类型都必须显式定义属性。
+  * **所有属性都应为 `required`。** 虽然允许使用可选属性，但将所有属性设为必需可确保输出结构保持一致。
+  * **不允许用 `$ref` 引用外部 Schema。** 所有定义都必须内联。
+</Warning>
+
+<div id="patterns-that-work">
+  ### 行之有效的模式
+</div>
+
+```json theme={null}
+// ✅ 字段带类型的扁平对象
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "count": { "type": "integer" },
+    "tags": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["name", "count", "tags"]
+}
+
+// ✅ 由带类型对象组成的数组
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "key": { "type": "string" },
+      "value": { "type": "number" }
+    },
+    "required": ["key", "value"]
+  }
+}
+
+// ✅ 用枚举限定取值范围
+{
+  "type": "string",
+  "enum": ["low", "medium", "high"]
+}
+```
+
+<div id="patterns-to-avoid">
+  ### 应避免的模式
+</div>
+
+```json theme={null}
+// ❌ 递归 schema（自引用）
+{
+  "type": "object",
+  "properties": {
+    "children": { "$ref": "#" }
+  }
+}
+
+// ❌ 无约束的对象
+{
+  "type": "object",
+  "additionalProperties": true
+}
+
+// ❌ 未指定结构的 dict/map 类型
+{
+  "type": "object"
+}
+```
+
+<div id="combining-structured-output-with-function-calling">
+  ## 将结构化输出与函数调用结合使用
+</div>
+
+你可以在使用自定义工具的同时使用 `response_format`。模型会先调用你的函数，再按照你的 schema 格式化最终响应。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  tools = [
+      {"type": "web_search"},
+      {
+          "type": "function",
+          "name": "get_internal_price",
+          "description": "Look up the internal wholesale price for a product SKU.",
+          "parameters": {
+              "type": "object",
+              "properties": {
+                  "sku": {"type": "string", "description": "Product SKU"}
+              },
+              "required": ["sku"]
+          },
+      },
+  ]
+
+
+  def get_internal_price(sku: str) -> dict:
+      prices = {"SKU-A100": 8500, "SKU-H100": 25000, "SKU-4090": 1600}
+      return {"sku": sku, "wholesale_price_usd": prices.get(sku, 0)}
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      tools=tools,
+      input="Get the current retail price for the NVIDIA H100 GPU from the web, and also look up our internal wholesale price for SKU-H100. Compare them.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "price_comparison",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "product": {"type": "string"},
+                      "retail_price_usd": {"type": "string"},
+                      "wholesale_price_usd": {"type": "integer"},
+                      "margin_percent": {"type": "string"},
+                      "source": {"type": "string"},
+                  },
+                  "required": ["product", "retail_price_usd", "wholesale_price_usd", "margin_percent", "source"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  # 处理函数调用
+  while any(item.type == "function_call" for item in response.output):
+      next_input = [item.model_dump() for item in response.output]
+      for item in response.output:
+          if item.type == "function_call":
+              args = json.loads(item.arguments)
+              result = get_internal_price(**args)
+              next_input.append({
+                  "type": "function_call_output",
+                  "call_id": item.call_id,
+                  "output": json.dumps(result),
+              })
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          tools=tools,
+          input=next_input,
+          response_format={
+              "type": "json_schema",
+              "json_schema": {
+                  "name": "price_comparison",
+                  "schema": {
+                      "type": "object",
+                      "properties": {
+                          "product": {"type": "string"},
+                          "retail_price_usd": {"type": "string"},
+                          "wholesale_price_usd": {"type": "integer"},
+                          "margin_percent": {"type": "string"},
+                          "source": {"type": "string"},
+                      },
+                      "required": ["product", "retail_price_usd", "wholesale_price_usd", "margin_percent", "source"],
+                      "additionalProperties": false,
+                  },
+              },
+          },
+      )
+
+  data = json.loads(response.output_text)
+  print(f"Product: {data['product']}")
+  print(f"Retail: {data['retail_price_usd']} (from {data['source']})")
+  print(f"Wholesale: ${data['wholesale_price_usd']:,}")
+  print(f"Margin: {data['margin_percent']}")
+  ```
+</CodeGroup>
+
+<Tip>
+  将结构化输出与函数调用结合使用时，多轮循环的每一轮都要传入相同的 `response_format`。schema 只对最终的文本输出生效，不会作用于函数调用参数。
+</Tip>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="输出控制" icon="adjustments" href="/zh/docs/agent-api/output-control">
+    response&#95;format、流式传输与输出形态调整的完整参考。
+  </Card>
+
+  <Card title="函数调用" icon="code-circle" href="/zh/docs/cookbook/articles/function-calling-e2e/README">
+    将结构化输出与多轮函数调用结合使用。
+  </Card>
+
+  <Card title="Agent API 快速开始" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    几分钟内上手 Agent API。
+  </Card>
+
+  <Card title="Agent API 模型" icon="brain" href="/zh/docs/agent-api/models">
+    为结构化信息提取任务选择合适的模型。
+  </Card>
+</CardGroup>

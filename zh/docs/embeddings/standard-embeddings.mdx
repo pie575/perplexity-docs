@@ -1,0 +1,261 @@
+---
+title: "标准嵌入"
+description: "为独立文本、搜索查询和单个句子生成嵌入。"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+当每段文本都自成一体时，使用标准嵌入来独立生成文本嵌入 (查询、文档和语义搜索) 。
+
+<div id="models">
+  ## 模型
+</div>
+
+|          模型          |  维度  | 上下文 | MRL |      量化     | 价格 ($/100 万 token)  |
+| :------------------: | :--: | :-: | :-: | :---------: | :-----------------: |
+| `pplx-embed-v1-0.6b` | 1024 | 32K |  支持 | INT8/BINARY |        $0.004       |
+|  `pplx-embed-v1-4b`  | 2560 | 32K |  支持 | INT8/BINARY |        $0.03        |
+
+<div id="basic-usage">
+  ## 基本用法
+</div>
+
+为一组文本生成嵌入：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.embeddings.create(
+      input=[
+          "Scientists explore the universe driven by curiosity.",
+          "Curiosity compels us to seek explanations, not just observations.",
+          "Historical discoveries began with curious questions.",
+          "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+          "Philosophy examines the nature of curiosity."
+      ],
+      model="pplx-embed-v1-4b"
+  )
+
+  for emb in response.data:
+      print(f"Index {emb.index}: {emb.embedding}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.embeddings.create({
+      input: [
+          "Scientists explore the universe driven by curiosity.",
+          "Curiosity compels us to seek explanations, not just observations.",
+          "Historical discoveries began with curious questions.",
+          "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+          "Philosophy examines the nature of curiosity."
+      ],
+      model: "pplx-embed-v1-4b"
+  });
+
+  for (const emb of response.data!) {
+      console.log(`Index ${emb.index}: ${emb.embedding!}`);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/v1/embeddings' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "input": [
+        "Scientists explore the universe driven by curiosity.",
+        "Curiosity compels us to seek explanations, not just observations.",
+        "Historical discoveries began with curious questions.",
+        "The pursuit of knowledge distinguishes human curiosity from mere stimulus response.",
+        "Philosophy examines the nature of curiosity."
+      ],
+      "model": "pplx-embed-v1-4b"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "object": "list",
+    "data": [
+      {
+        "object": "embedding",
+        "index": 0,
+        "embedding": "/* base64 编码的有符号 int8 值 */"
+      },
+      {
+        "object": "embedding",
+        "index": 1,
+        "embedding": "/* base64 编码的有符号 int8 值 */"
+      },
+      {
+        "object": "embedding",
+        "index": 2,
+        "embedding": "/* base64 编码的有符号 int8 值 */"
+      },
+      {
+        "object": "embedding",
+        "index": 3,
+        "embedding": "/* base64 编码的有符号 int8 值 */"
+      },
+      {
+        "object": "embedding",
+        "index": 4,
+        "embedding": "/* base64 编码的有符号 int8 值 */"
+      }
+    ],
+    "model": "pplx-embed-v1-4b",
+    "usage": {
+      "prompt_tokens": 42,
+      "total_tokens": 42,
+      "cost": {
+        "input_cost": 0.0000013,
+        "total_cost": 0.0000013,
+        "currency": "USD"
+      }
+    }
+  }
+  ```
+</Accordion>
+
+<div id="semantic-search-example">
+  ## 语义搜索示例
+</div>
+
+构建一个简单的语义搜索系统：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string):
+      """解码经过 base64 编码的 int8 嵌入向量。"""
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a, b):
+      return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+  # 1. 对文档进行嵌入
+  documents = [
+      "Python is a versatile programming language",
+      "Machine learning automates analytical model building",
+      "The Eiffel Tower is located in Paris, France"
+  ]
+
+  doc_response = client.embeddings.create(input=documents, model="pplx-embed-v1-4b")
+  doc_embeddings = [decode_embedding(emb.embedding) for emb in doc_response.data]
+
+  # 2. 对搜索查询进行嵌入
+  query = "What programming languages are good for data science?"
+  query_response = client.embeddings.create(input=[query], model="pplx-embed-v1-4b")
+  query_embedding = decode_embedding(query_response.data[0].embedding)
+
+  # 3. 找出最相似的文档
+  scores = [
+      (i, cosine_similarity(query_embedding, doc_emb))
+      for i, doc_emb in enumerate(doc_embeddings)
+  ]
+  ranked = sorted(scores, key=lambda x: x[1], reverse=True)
+
+  print("Search results:")
+  for idx, score in ranked:
+      print(f"  {score:.4f}: {documents[idx]}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dotProduct = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dotProduct += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // 1. 对文档进行嵌入
+  const documents = [
+      "Python is a versatile programming language",
+      "Machine learning automates analytical model building",
+      "The Eiffel Tower is located in Paris, France"
+  ];
+
+  const docResponse = await client.embeddings.create({
+      input: documents,
+      model: "pplx-embed-v1-4b"
+  });
+  const docEmbeddings = docResponse.data!.map(emb => decodeEmbedding(emb.embedding!));
+
+  // 2. 对搜索查询进行嵌入
+  const query = "What programming languages are good for data science?";
+  const queryResponse = await client.embeddings.create({
+      input: [query],
+      model: "pplx-embed-v1-4b"
+  });
+  const queryEmbedding = decodeEmbedding(queryResponse.data![0].embedding!);
+
+  // 3. 找出最相似的文档
+  const scores = docEmbeddings.map((docEmb, i) => ({
+      index: i,
+      score: cosineSimilarity(queryEmbedding, docEmb)
+  }));
+  const ranked = scores.sort((a, b) => b.score - a.score);
+
+  console.log("Search results:");
+  for (const { index, score } of ranked) {
+      console.log(`  ${score.toFixed(4)}: ${documents[index]}`);
+  }
+  ```
+</CodeGroup>
+
+<div id="parameters">
+  ## 参数
+</div>
+
+| 参数                | 类型                     | 是否必需 |      默认值      | 说明                                                                     |
+| ----------------- | ---------------------- | :--: | :-----------: | ---------------------------------------------------------------------- |
+| `input`           | string | array[string] |   是  |       -       | 待嵌入的文本。每次请求最多 512 条文本。单条输入不得超过 32K token。token 总数不得超过 120,000。不允许空字符串。 |
+| `model`           | string                 |   是  |       -       | 模型标识符：`pplx-embed-v1-0.6b` 或 `pplx-embed-v1-4b`                        |
+| `dimensions`      | integer                |   否  |      完整维度     | Matryoshka 维度 (0.6b 为 128-1024，4b 为 128-2560)                          |
+| `encoding_format` | string                 |   否  | `base64_int8` | 输出编码：`base64_int8` (有符号 int8) 或 `base64_binary` (位打包)                  |
+
+<Warning>
+  **输入限制：** 单条文本不得超过 32K token，超出该限制的请求将被拒绝。单次请求中所有输入的 token 总数不得超过 120,000。
+</Warning>
+
+<div id="related-resources">
+  ## 相关资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="上下文化嵌入" icon="file-lines" href="/zh/docs/embeddings/contextualized-embeddings">
+    为共享同一上下文的文本块生成文档感知的嵌入。
+  </Card>
+
+  <Card title="最佳实践" icon="star" href="/zh/docs/embeddings/best-practices">
+    批量处理、缓存与 RAG 模式。
+  </Card>
+</CardGroup>

@@ -1,0 +1,95 @@
+---
+title: "结构化输出"
+description: "强制 model 返回代码可直接解析的 JSON，而不是还得靠提取的自由文本。"
+---
+
+默认情况下，一次运行结束后会返回一整段文本。当下游系统需要消费这一结果时，自由格式的文本很难处理——你最终只能编写脆弱的解析器。结构化输出让 model 返回符合你所定义 schema 的 JSON，可以直接反序列化使用。如需完整参考 (包括流式输出、后台运行、错误处理以及完整的 schema 示例) ，请参阅[输出控制](/zh/docs/agent-api/output-control)。
+
+<div id="structured-output">
+  ## 结构化输出
+</div>
+
+将 `response_format` 设置为带有 `name` 和 `schema` 的 `json_schema`。除非生成过程被中途截断，响应文本都会符合该 schema。下面的示例基于 Pydantic 模型构建 schema，并用它校验响应：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from typing import List, Optional
+  from pydantic import BaseModel
+  from perplexity import Perplexity
+
+  class CompanySummary(BaseModel):
+      name: str
+      sector: str
+      headquarters: str
+      key_products: Optional[List[str]] = None
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Summarize NVIDIA: sector, headquarters, and key products.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "company_summary",
+              "schema": {
+                  **CompanySummary.model_json_schema(),
+                  "required": list(CompanySummary.model_fields.keys()),
+                  "additionalProperties": False,
+              },
+          },
+      },
+  )
+
+  summary = CompanySummary.model_validate_json(response.output_text)
+  print(summary.name, summary.sector)
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Summarize NVIDIA: sector, headquarters, and key products.",
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "company_summary",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "sector": { "type": "string" },
+              "headquarters": { "type": "string" },
+              "key_products": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["name", "sector", "headquarters"]
+          }
+        }
+      }
+    }' | jq
+  ```
+</CodeGroup>
+
+<Tip>
+  在提示词中再次强调该 schema (例如&quot;以符合该 schema 的 JSON 对象返回数据&quot;) ，有助于提升遵循度。
+</Tip>
+
+<Warning>
+  避免在 JSON 中要求返回链接。model 在结构化输出中生成 URL 时，可能产生格式错误或凭空捏造的链接。请改为从响应 `output` 中的 `citations` 或 `search_results` 项中获取链接。
+</Warning>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="保留上下文" icon="link" href="/zh/docs/agent-api/building-agents/keep-context">
+    在多轮对话中延续状态。
+  </Card>
+
+  <Card title="输出控制" icon="sliders" href="/zh/docs/agent-api/output-control">
+    流式输出、后台运行、错误处理以及完整的结构化输出示例。
+  </Card>
+</CardGroup>

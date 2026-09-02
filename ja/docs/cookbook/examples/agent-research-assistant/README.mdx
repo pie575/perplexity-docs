@@ -1,0 +1,367 @@
+---
+title: "エージェントリサーチアシスタント"
+description: "Perplexity の Agent API と medium プリセットを利用して、多段階のウェブリサーチを行い、構造化レポートを生成する CLI ツール"
+---
+
+<div id="agent-research-assistant">
+  # Agent Research Assistant
+</div>
+
+Perplexity の Agent API と `medium` プリセットを活用し、あらゆるトピックについて多段階で徹底的なウェブリサーチを行うコマンドラインツールです。セクション、出典、信頼度スコアを備えた構造化レポートを生成します。
+
+<div id="features">
+  ## 機能
+</div>
+
+* `medium` プリセットによる多段階のウェブリサーチ
+* `response_format` と `json_schema` を使用し、セクション・出典・信頼度スコアを含む構造化JSONを出力
+* model の選択が可能 (medium プリセットでは既定で `openai/gpt-5.2`)
+* トピックを受け取って整形済みレポートを出力する、シンプルなCLIインターフェース
+* URLと関連性の注釈付きの出典追跡
+* JSONまたはプレーンテキストでのレポートのエクスポート
+
+<div id="installation">
+  ## インストール
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai pydantic
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+<div id="api-key-setup">
+  ## API key の設定
+</div>
+
+Perplexity API key を環境変数に設定します。SDK が自動的に読み取ります。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```bash theme={null}
+# Python
+python research_assistant.py "Impact of microplastics on marine ecosystems"
+
+# TypeScript
+npx ts-node research_assistant.ts "Impact of microplastics on marine ecosystems"
+
+# デフォルトの model を上書きする
+python research_assistant.py "Quantum computing breakthroughs" --model openai/gpt-5.4
+
+# JSON 形式で書き出す
+python research_assistant.py "CRISPR gene therapy trials" --json > report.json
+```
+
+<div id="how-it-works">
+  ## 仕組み
+</div>
+
+1. CLI は調査トピックを入力として受け取ります。
+2. レポート形式の構造化 JSON スキーマを、Pydantic (Python) または TypeScript のインターフェースで定義します。
+3. ツールは `preset="medium"` を指定して Agent API を呼び出します。これにより model (`openai/gpt-5.2`) が設定され、`web_search` と `fetch_url` ツールが有効になり、最大 10 ステップの推論が可能になります。
+4. `json_schema` を指定した `response_format` パラメータによって、レポートスキーマに沿った構造化出力が強制されます。
+5. レスポンスをパースし、整形された調査レポートとして表示します。
+
+<Info>
+  `medium` プリセットは複雑で踏み込んだ分析に向けて最適化されています。`openai/gpt-5.2` を使用し、最大 10K token、10 ステップの推論に対応します。CLI に `--model` を渡せば model を上書きできます。
+</Info>
+
+<div id="full-code">
+  ## コード全文
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import argparse
+  from typing import List, Optional
+  from pydantic import BaseModel
+  from perplexity import Perplexity
+
+
+  class ReportSource(BaseModel):
+      title: str
+      url: str
+      relevance: str
+
+
+  class ReportSection(BaseModel):
+      heading: str
+      content: str
+      confidence: float
+      sources: List[ReportSource]
+
+
+  class ResearchReport(BaseModel):
+      title: str
+      summary: str
+      sections: List[ReportSection]
+      conclusion: str
+      overall_confidence: float
+      total_sources: int
+
+
+  def run_research(topic: str, model: Optional[str] = None) -> ResearchReport:
+      """Conduct deep research on a topic and return a structured report."""
+      client = Perplexity()
+
+      params = {
+          "preset": "medium",
+          "input": (
+              f"Conduct thorough research on the following topic and produce a "
+              f"detailed report with multiple sections, cited sources, and "
+              f"confidence scores for each section.\n\nTopic: {topic}"
+          ),
+          "response_format": {
+              "type": "json_schema",
+              "json_schema": {
+                  "name": "research_report",
+                  "schema": ResearchReport.model_json_schema(),
+              },
+          },
+      }
+
+      if model:
+          params["model"] = model
+
+      response = client.responses.create(**params)
+      return ResearchReport.model_validate_json(response.output_text)
+
+
+  def format_report(report: ResearchReport) -> str:
+      """Format a ResearchReport into human-readable text."""
+      lines = [f"{'=' * 60}", f"RESEARCH REPORT: {report.title}", f"{'=' * 60}", ""]
+      lines += [f"SUMMARY:", report.summary, ""]
+
+      for i, section in enumerate(report.sections, 1):
+          lines.append(f"--- Section {i}: {section.heading} ---")
+          lines.append(f"Confidence: {section.confidence:.0%}\n")
+          lines.append(section.content)
+          if section.sources:
+              lines.append("\nSources:")
+              for src in section.sources:
+                  lines.append(f"  - {src.title} ({src.relevance})")
+                  lines.append(f"    {src.url}")
+          lines.append("")
+
+      lines += [f"{'=' * 60}", "CONCLUSION:", report.conclusion, ""]
+      lines += [f"Overall Confidence: {report.overall_confidence:.0%}"]
+      lines += [f"Total Sources: {report.total_sources}", f"{'=' * 60}"]
+      return "\n".join(lines)
+
+
+  def main():
+      parser = argparse.ArgumentParser(description="Agent Research Assistant")
+      parser.add_argument("topic", help="The research topic")
+      parser.add_argument("--model", help="Override the default model", default=None)
+      parser.add_argument("--json", action="store_true", help="Output raw JSON")
+      args = parser.parse_args()
+
+      print(f"Researching: {args.topic}")
+      print("This may take a moment (deep research uses multi-step reasoning)...\n")
+
+      report = run_research(args.topic, model=args.model)
+
+      if args.json:
+          print(json.dumps(report.model_dump(), indent=2))
+      else:
+          print(format_report(report))
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  interface ReportSource {
+    title: string;
+    url: string;
+    relevance: string;
+  }
+
+  interface ReportSection {
+    heading: string;
+    content: string;
+    confidence: number;
+    sources: ReportSource[];
+  }
+
+  interface ResearchReport {
+    title: string;
+    summary: string;
+    sections: ReportSection[];
+    conclusion: string;
+    overall_confidence: number;
+    total_sources: number;
+  }
+
+  const reportSchema = {
+    type: "object" as const,
+    properties: {
+      title: { type: "string" },
+      summary: { type: "string" },
+      sections: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            heading: { type: "string" },
+            content: { type: "string" },
+            confidence: { type: "number" },
+            sources: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  url: { type: "string" },
+                  relevance: { type: "string" },
+                },
+                required: ["title", "url", "relevance"],
+              },
+            },
+          },
+          required: ["heading", "content", "confidence", "sources"],
+        },
+      },
+      conclusion: { type: "string" },
+      overall_confidence: { type: "number" },
+      total_sources: { type: "number" },
+    },
+    required: ["title", "summary", "sections", "conclusion", "overall_confidence", "total_sources"],
+  };
+
+  async function runResearch(topic: string, model?: string): Promise<ResearchReport> {
+    const client = new Perplexity();
+
+    const params: Record<string, unknown> = {
+      preset: "medium",
+      input:
+        `Conduct thorough research on the following topic and produce a ` +
+        `detailed report with multiple sections, cited sources, and ` +
+        `confidence scores for each section.\n\nTopic: ${topic}`,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "research_report", schema: reportSchema },
+      },
+    };
+
+    if (model) params.model = model;
+
+    const response = await client.responses.create(params as any);
+    return JSON.parse(response.output_text) as ResearchReport;
+  }
+
+  async function main() {
+    const topic = process.argv[2];
+    if (!topic) {
+      console.error("Usage: ts-node research_assistant.ts <topic> [--model <model>] [--json]");
+      process.exit(1);
+    }
+
+    const modelIdx = process.argv.indexOf("--model");
+    const model = modelIdx !== -1 ? process.argv[modelIdx + 1] : undefined;
+    const outputJson = process.argv.includes("--json");
+
+    console.log(`Researching: ${topic}`);
+    console.log("This may take a moment (deep research uses multi-step reasoning)...\n");
+
+    const report = await runResearch(topic, model);
+
+    if (outputJson) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(`RESEARCH REPORT: ${report.title}\n`);
+      console.log(`SUMMARY: ${report.summary}\n`);
+      report.sections.forEach((s, i) => {
+        console.log(`--- Section ${i + 1}: ${s.heading} (${(s.confidence * 100).toFixed(0)}%) ---`);
+        console.log(s.content);
+        s.sources.forEach((src) => console.log(`  - ${src.title}: ${src.url}`));
+        console.log();
+      });
+      console.log(`CONCLUSION: ${report.conclusion}`);
+      console.log(`Overall Confidence: ${(report.overall_confidence * 100).toFixed(0)}%`);
+    }
+  }
+
+  main();
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## 出力例
+</div>
+
+```bash theme={null}
+python research_assistant.py "Impact of microplastics on marine ecosystems"
+```
+
+```
+調査中: マイクロプラスチックが海洋生態系に与える影響
+少々お待ちください（ディープリサーチは多段階の推論を行います）...
+
+============================================================
+調査レポート: マイクロプラスチックが海洋生態系に与える影響
+============================================================
+
+要約:
+マイクロプラスチックは世界中の海洋環境に広く拡散した汚染物質となり、
+プランクトンから大型海洋哺乳類に至るまで幅広い生物に影響を及ぼしています。
+
+--- セクション 1: 発生源と分布 ---
+信頼度: 92%
+
+マイクロプラスチックは、大型のプラスチックごみの劣化、合成繊維、
+工業プロセス、化粧品などに由来します...
+
+出典:
+  - NOAA Marine Debris Program (高)
+    https://marinedebris.noaa.gov/...
+
+--- セクション 2: 海洋生物への生物学的影響 ---
+信頼度: 88%
+
+研究により、マイクロプラスチックが複数の栄養段階にわたって海洋生物に
+影響を与えることが示されています...
+
+出典:
+  - Environmental Science & Technology (高)
+    https://pubs.acs.org/...
+
+============================================================
+結論:
+マイクロプラスチックは海洋生態系にとって重大かつ拡大しつつある脅威です。
+
+総合信頼度: 89%
+出典総数: 12
+============================================================
+```
+
+<Tip>
+  より短時間で完了するリサーチタスクには、代わりに `low` プリセットの使用を検討してください。`openai/gpt-5.4` を最大3ステップの推論で使用するため、速度と網羅性のバランスに優れています。
+</Tip>
+
+<Warning>
+  新しい JSON スキーマを使用する最初のリクエストは、準備に10〜30秒かかる場合があります。同じスキーマを使用する2回目以降のリクエストでは、この遅延は発生しません。詳細は[構造化出力ガイド](/ja/docs/agent-api/output-control#structured-outputs)を参照してください。
+</Warning>
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+* ディープリサーチのリクエストは、多段階の推論とツール利用を伴うため、通常のリクエストよりも多くのtokenを消費し、コストも高くなります。
+* JSONスキーマによる構造化出力では、modelがスキーマに従う必要があります。スキーマが非常に複雑な場合、出力品質が低下することがあります。
+* 信頼度スコアはmodelが生成した推定値であり、絶対的な指標ではなく相対的な目安として扱ってください。
+* リサーチの品質は、対象トピックに関するウェブ上の出典の有無と質に左右されます。

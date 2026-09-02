@@ -1,0 +1,3907 @@
+{
+  "components": {
+    "schemas": {
+      "AdditionalToolsItemParam": {
+        "description": "Un elemento de entrada compatible con Codex que proporciona herramientas adicionales para la solicitud.",
+        "properties": {
+          "role": {
+            "description": "El rol al que Codex atribuye el prefijo de la herramienta (siempre `developer`).",
+            "type": "string"
+          },
+          "tools": {
+            "description": "Las herramientas que se fusionarán después del parámetro de herramientas de nivel superior.",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesToolParam"
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "additional_tools",
+            "description": "El tipo de elemento. Siempre es `additional_tools`.",
+            "enum": [
+              "additional_tools"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "tools"
+        ],
+        "title": "Additional tools item",
+        "type": "object"
+      },
+      "AllowedToolChoice": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/ToolChoiceValueEnum"
+          },
+          "tools": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FunctionToolChoice"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "allowed_tools",
+            "enum": [
+              "allowed_tools"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "tools",
+          "mode"
+        ],
+        "type": "object"
+      },
+      "AllowedToolsParam": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/ToolChoiceValueEnum"
+          },
+          "tools": {
+            "description": "La lista de herramientas permitidas para esta solicitud.",
+            "items": {
+              "$ref": "#/components/schemas/SpecificToolChoiceParam"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
+          },
+          "type": {
+            "default": "allowed_tools",
+            "description": "El tipo de selección de herramienta. Siempre es `allowed_tools`.",
+            "enum": [
+              "allowed_tools"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "tools"
+        ],
+        "type": "object"
+      },
+      "Annotation": {
+        "description": "Una anotación que se aplica a un fragmento de texto de salida.",
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/UrlCitationBody"
+          }
+        ]
+      },
+      "AssistantMessageItemParam": {
+        "properties": {
+          "content": {
+            "description": "El contenido del mensaje como un array de partes de contenido.",
+            "oneOf": [
+              {
+                "items": {
+                  "description": "Una parte del contenido de un mensaje del asistente, como texto o un rechazo.",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/OutputTextContentParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RefusalContentParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "description": "El contenido del mensaje como una sola cadena.",
+                "maxLength": 10485760,
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "description": "El ID único de este elemento de mensaje.",
+            "example": "msg_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "phase": {
+            "description": "Clasifica un mensaje `assistant` como comentario intermedio (`commentary`) o respuesta final (`final_answer`). Para modelos como `gpt-5.3-codex` y posteriores, al enviar solicitudes de seguimiento, conserva y vuelve a enviar phase en todos los mensajes del asistente. Omitirlo puede degradar el rendimiento. No se utiliza para mensajes de usuario.",
+            "enum": [
+              "commentary",
+              "final_answer"
+            ],
+            "type": "string",
+            "x-openresponses-added-in": "2026-04-24"
+          },
+          "role": {
+            "default": "assistant",
+            "description": "El rol del autor del mensaje. Siempre `assistant`.",
+            "enum": [
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "El estado del elemento de mensaje.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "message",
+            "description": "El tipo de elemento. Siempre `message`.",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "CreateResponseBody": {
+        "properties": {
+          "include": {
+            "items": {
+              "$ref": "#/components/schemas/IncludeEnum"
+            },
+            "type": "array"
+          },
+          "input": {
+            "description": "Contexto que se proporcionará al modelo en el ámbito de esta solicitud. Puede ser una cadena o un array de elementos de entrada. Si se proporciona una cadena, se interpreta como un mensaje de usuario.",
+            "oneOf": [
+              {
+                "maxLength": 10485760,
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ItemParam"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "instructions": {
+            "description": "Instrucciones adicionales para guiar al modelo en esta solicitud.",
+            "nullable": true,
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "description": "El número máximo de tokens que el modelo puede generar para esta respuesta.",
+            "minimum": 16,
+            "nullable": true,
+            "type": "integer"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/MetadataParam"
+          },
+          "model": {
+            "description": "El modelo que procesará la solicitud, como un ID `creator/model-name` del catálogo de Router.",
+            "type": "string"
+          },
+          "parallel_tool_calls": {
+            "description": "Indica si el modelo puede invocar varias herramientas en paralelo.",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "prompt_cache_key": {
+            "description": "Una clave para leer de la caché de prompts o escribir en ella.",
+            "maxLength": 64,
+            "nullable": true,
+            "type": "string"
+          },
+          "reasoning": {
+            "$ref": "#/components/schemas/ReasoningParam"
+          },
+          "safety_identifier": {
+            "description": "Un identificador estable utilizado para la supervisión de seguridad y la detección de abusos.",
+            "maxLength": 64,
+            "nullable": true,
+            "type": "string"
+          },
+          "service_tier": {
+            "$ref": "#/components/schemas/ServiceTierEnum"
+          },
+          "stream": {
+            "description": "Indica si se deben transmitir eventos de respuesta como eventos enviados por el servidor.",
+            "type": "boolean"
+          },
+          "temperature": {
+            "description": "Temperatura de muestreo que se utilizará, entre 0 y 2. Los valores más altos hacen que la salida sea más aleatoria.",
+            "nullable": true,
+            "type": "number"
+          },
+          "text": {
+            "$ref": "#/components/schemas/TextParam"
+          },
+          "tool_choice": {
+            "$ref": "#/components/schemas/ToolChoiceParam"
+          },
+          "tools": {
+            "description": "Una lista de herramientas que el modelo puede invocar mientras genera la respuesta.",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesToolParam"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "top_p": {
+            "description": "Parámetro de muestreo de núcleo, entre 0 y 1. El modelo considera solo los tokens con la mayor probabilidad acumulada.",
+            "nullable": true,
+            "type": "number"
+          },
+          "truncation": {
+            "$ref": "#/components/schemas/TruncationEnum"
+          }
+        },
+        "required": [
+          "model",
+          "input"
+        ],
+        "type": "object"
+      },
+      "CustomToolCall": {
+        "description": "Una llamada a una herramienta personalizada (de formato libre) generada por el modelo.",
+        "properties": {
+          "call_id": {
+            "description": "El ID único de la llamada a herramienta personalizada generada.",
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único del elemento de llamada a herramienta personalizada.",
+            "type": "string"
+          },
+          "input": {
+            "description": "La cadena de entrada sin procesar y de formato libre generada, que nunca se fuerza a través de JSON.",
+            "type": "string"
+          },
+          "name": {
+            "description": "El nombre de la herramienta personalizada invocada.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "El espacio de nombres asociado a la herramienta personalizada, si lo hubiera.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "custom_tool_call",
+            "description": "El tipo del elemento. Siempre `custom_tool_call`.",
+            "enum": [
+              "custom_tool_call"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "call_id",
+          "name",
+          "input",
+          "status"
+        ],
+        "title": "Custom tool call",
+        "type": "object"
+      },
+      "CustomToolCallItemParam": {
+        "description": "Una llamada a una herramienta personalizada (de formato libre) reproducida desde una respuesta anterior.",
+        "properties": {
+          "call_id": {
+            "description": "El ID único de la llamada a una herramienta personalizada generada por el modelo.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único de esta llamada a una herramienta personalizada.",
+            "example": "ctc_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "input": {
+            "description": "La cadena de entrada sin procesar de la herramienta de formato libre, reenviada literalmente.",
+            "type": "string"
+          },
+          "name": {
+            "description": "El nombre de la herramienta personalizada que se va a llamar.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "El espacio de nombres asociado a la herramienta personalizada, si existe.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "custom_tool_call",
+            "description": "El tipo de elemento. Siempre `custom_tool_call`.",
+            "enum": [
+              "custom_tool_call"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "type",
+          "name",
+          "input"
+        ],
+        "title": "Custom tool call",
+        "type": "object"
+      },
+      "CustomToolCallOutputItemParam": {
+        "description": "La salida de una llamada a una herramienta personalizada.",
+        "properties": {
+          "call_id": {
+            "description": "El ID único de la llamada a la herramienta personalizada generada por el modelo.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único de la salida de la llamada a la herramienta personalizada.",
+            "example": "ctco_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "output": {
+            "description": "Salida de texto o imagen de la llamada a la herramienta personalizada.",
+            "oneOf": [
+              {
+                "description": "Una salida de cadena de la llamada a la herramienta personalizada.",
+                "maxLength": 10485760,
+                "type": "string"
+              },
+              {
+                "description": "Un array de salidas de contenido (texto, imagen) para la llamada a la herramienta personalizada.",
+                "items": {
+                  "description": "Una parte del contenido de un mensaje, como texto o una imagen.",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputImageContentParamAutoParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "custom_tool_call_output",
+            "description": "El tipo de elemento. Siempre es `custom_tool_call_output`.",
+            "enum": [
+              "custom_tool_call_output"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "type",
+          "output"
+        ],
+        "title": "Custom tool call output",
+        "type": "object"
+      },
+      "CustomToolParam": {
+        "description": "Una herramienta personalizada de formato libre cuya entrada es una cadena sin procesar, restringida opcionalmente por una gramática.",
+        "properties": {
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "format": {
+            "additionalProperties": true,
+            "description": "La restricción del formato de entrada de formato libre ({\"type\":\"text\"} o {\"type\":\"grammar\",\"syntax\":...,\"definition\":...}), conservada como JSON sin procesar y reenviada literalmente.",
+            "nullable": true,
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
+          "type": {
+            "default": "custom",
+            "enum": [
+              "custom"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "Custom tool",
+        "type": "object"
+      },
+      "DeveloperMessageItemParam": {
+        "properties": {
+          "content": {
+            "description": "El contenido del mensaje como un array de partes de contenido.",
+            "oneOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "description": "El contenido del mensaje como una sola cadena.",
+                "maxLength": 10485760,
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "description": "El ID único de este elemento de mensaje.",
+            "example": "msg_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "default": "developer",
+            "description": "El rol del mensaje. Siempre `developer`.",
+            "enum": [
+              "developer"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "El estado del elemento de mensaje.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "message",
+            "description": "El tipo de elemento. Siempre `message`.",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "Error": {
+        "description": "Un error que se produjo al generar la respuesta.",
+        "properties": {
+          "code": {
+            "description": "Un código de error legible por máquina devuelto.",
+            "type": "string"
+          },
+          "message": {
+            "description": "Una descripción legible por humanos del error devuelto.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Error",
+        "type": "object"
+      },
+      "ErrorPayload": {
+        "description": "Una carga útil de error emitida para un evento de error de streaming.",
+        "properties": {
+          "code": {
+            "description": "El código de error emitido, si lo hubiera.",
+            "nullable": true,
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "description": "El valor del encabezado emitido.",
+              "type": "string"
+            },
+            "description": "Los encabezados de respuesta emitidos con el error, si los hubiera.",
+            "type": "object"
+          },
+          "message": {
+            "description": "El mensaje de error legible emitido.",
+            "type": "string"
+          },
+          "param": {
+            "description": "El nombre del parámetro asociado al error, si lo hubiera.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "description": "El tipo de error emitido.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "code",
+          "message",
+          "param"
+        ],
+        "title": "Error payload",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "description": "Un error devuelto antes de que comience el streaming.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorPayload"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "Error response",
+        "type": "object"
+      },
+      "ErrorStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se había emitido un error.",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorPayload"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "error",
+            "description": "El tipo de evento, siempre `error`.",
+            "enum": [
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "error"
+        ],
+        "title": "Error event",
+        "type": "object"
+      },
+      "FunctionCall": {
+        "description": "Una llamada a una herramienta de función generada por el modelo.",
+        "properties": {
+          "arguments": {
+            "description": "La cadena JSON de argumentos generada.",
+            "type": "string"
+          },
+          "call_id": {
+            "description": "El ID único de la llamada a la herramienta de función generada.",
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único del elemento de llamada a función.",
+            "type": "string"
+          },
+          "name": {
+            "description": "El nombre de la función invocada.",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "El espacio de nombres asociado a la herramienta de función, si lo hubiera.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "function_call",
+            "description": "El tipo del elemento. Siempre `function_call`.",
+            "enum": [
+              "function_call"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "call_id",
+          "name",
+          "arguments",
+          "status"
+        ],
+        "title": "Function call",
+        "type": "object"
+      },
+      "FunctionCallItemParam": {
+        "properties": {
+          "arguments": {
+            "description": "Los argumentos de la función como una cadena JSON.",
+            "type": "string"
+          },
+          "call_id": {
+            "description": "El ID único de la llamada a una herramienta de función generada por el modelo.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único de esta llamada a una herramienta de función.",
+            "example": "fc_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "El nombre de la función que se va a llamar.",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "El espacio de nombres asociado a la herramienta de función, si existe.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "function_call",
+            "description": "El tipo de elemento. Siempre `function_call`.",
+            "enum": [
+              "function_call"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "type",
+          "name",
+          "arguments"
+        ],
+        "type": "object"
+      },
+      "FunctionCallOutput": {
+        "description": "Una salida de llamada a herramienta de función devuelta por la herramienta.",
+        "properties": {
+          "call_id": {
+            "description": "El ID único de la llamada a herramienta de función generada por el modelo.",
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único de la salida de la llamada a herramienta de función. Se rellena cuando este elemento se devuelve a través de la API.",
+            "type": "string"
+          },
+          "output": {
+            "oneOf": [
+              {
+                "description": "Una cadena JSON con la salida de la llamada a herramienta de función.",
+                "type": "string"
+              },
+              {
+                "description": "Una matriz de contenidos de salida (imágenes, archivos, texto) para la llamada a herramienta de función.",
+                "items": {
+                  "description": "Una parte de contenido que compone un elemento de entrada o salida.",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputImageContent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputFileContent"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallOutputStatusEnum"
+          },
+          "type": {
+            "default": "function_call_output",
+            "description": "El tipo de salida de la llamada a herramienta de función. Siempre `function_call_output`.",
+            "enum": [
+              "function_call_output"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "call_id",
+          "output",
+          "status"
+        ],
+        "title": "Function call output",
+        "type": "object"
+      },
+      "FunctionCallOutputItemParam": {
+        "description": "La salida de una llamada a una herramienta de función.",
+        "properties": {
+          "call_id": {
+            "description": "El ID único de la llamada a una herramienta de función generada por el modelo.",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único de la salida de la llamada a una herramienta de función. Se rellena cuando este elemento se devuelve mediante la API.",
+            "example": "fc_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "output": {
+            "description": "Salida de texto, imagen o archivo de la llamada a una herramienta de función.",
+            "oneOf": [
+              {
+                "description": "Una cadena JSON con la salida de la llamada a una herramienta de función.",
+                "maxLength": 10485760,
+                "type": "string"
+              },
+              {
+                "description": "Un array de salidas de contenido (texto, imagen, archivo) para la llamada a una herramienta de función.",
+                "items": {
+                  "description": "Una parte del contenido del mensaje, como texto, una imagen o un archivo.",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputImageContentParamAutoParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "function_call_output",
+            "description": "El tipo de salida de la llamada a una herramienta de función. Siempre `function_call_output`.",
+            "enum": [
+              "function_call_output"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "type",
+          "output"
+        ],
+        "title": "Function tool call output",
+        "type": "object"
+      },
+      "FunctionCallOutputStatusEnum": {
+        "description": "Similar a `FunctionCallStatus`. Las tres opciones se permiten aquí por compatibilidad, pero, dado que en la práctica los desarrolladores proporcionarán estos elementos, solo debe usarse `completed`.",
+        "enum": [
+          "in_progress",
+          "completed",
+          "incomplete"
+        ],
+        "type": "string"
+      },
+      "FunctionCallStatus": {
+        "enum": [
+          "in_progress",
+          "completed",
+          "incomplete"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "completed": "Model has finished sampling this item.",
+          "in_progress": "Model is currently sampling this item.",
+          "incomplete": "Model was interrupted from sampling this item partway through. This can occur, for example, if the model encounters a stop token or exhausts its output_token budget."
+        }
+      },
+      "FunctionTool": {
+        "description": "Define una función en tu propio código que el modelo puede decidir invocar. Obtén más información sobre las [llamadas a funciones](https://platform.openai.com/docs/guides/function-calling).",
+        "properties": {
+          "description": {
+            "description": "Una descripción de la función. El modelo la usa para determinar si debe invocarla.",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "El nombre de la función que se va a invocar.",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": {},
+            "description": "Un objeto de esquema JSON que describe los parámetros de la función.",
+            "nullable": true,
+            "type": "object"
+          },
+          "strict": {
+            "description": "Indica si se debe aplicar una validación estricta de parámetros. El valor predeterminado es `true`.",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "type": {
+            "default": "function",
+            "description": "El tipo de herramienta de función. Siempre `function`.",
+            "enum": [
+              "function"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "description",
+          "parameters",
+          "strict"
+        ],
+        "title": "Function",
+        "type": "object"
+      },
+      "FunctionToolChoice": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "default": "function",
+            "enum": [
+              "function"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "FunctionToolParam": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "description": "El esquema JSON de los parámetros de la función, conservado como JSON sin procesar y reenviado literalmente.",
+            "nullable": true,
+            "type": "object"
+          },
+          "strict": {
+            "type": "boolean"
+          },
+          "type": {
+            "default": "function",
+            "enum": [
+              "function"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "description"
+        ],
+        "type": "object"
+      },
+      "ImageDetail": {
+        "enum": [
+          "low",
+          "high",
+          "auto"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Choose the detail level automatically.",
+          "high": "Allows the model to \"see\" a higher-resolution version of the image, usually increasing input token costs.",
+          "low": "Restricts the model to a lower-resolution version of the image."
+        }
+      },
+      "IncludeEnum": {
+        "description": "",
+        "enum": [
+          "reasoning.encrypted_content"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "reasoning.encrypted_content": "includes encrypted reasoning content so that it may be rehydrated on a subsequent request."
+        }
+      },
+      "IncompleteDetails": {
+        "description": "Detalles sobre por qué la respuesta quedó incompleta.",
+        "properties": {
+          "reason": {
+            "description": "El motivo por el que no se pudo completar la respuesta.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "Incomplete details",
+        "type": "object"
+      },
+      "InputFileContent": {
+        "description": "Una entrada de archivo para el modelo.",
+        "properties": {
+          "file_url": {
+            "description": "La URL del archivo que se enviará al modelo.",
+            "type": "string"
+          },
+          "filename": {
+            "description": "El nombre del archivo que se enviará al modelo.",
+            "type": "string"
+          },
+          "type": {
+            "default": "input_file",
+            "description": "El tipo de elemento de entrada. Siempre es `input_file`.",
+            "enum": [
+              "input_file"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Input file",
+        "type": "object"
+      },
+      "InputFileContentParam": {
+        "description": "Una entrada de archivo para el modelo.",
+        "properties": {
+          "file_data": {
+            "description": "Los datos del archivo codificados en base64 que se enviarán al modelo.",
+            "maxLength": 33554432,
+            "nullable": true,
+            "type": "string"
+          },
+          "file_url": {
+            "description": "La URL del archivo que se enviará al modelo.",
+            "nullable": true,
+            "type": "string"
+          },
+          "filename": {
+            "description": "El nombre del archivo que se enviará al modelo.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "input_file",
+            "description": "El tipo de elemento de entrada. Siempre `input_file`.",
+            "enum": [
+              "input_file"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Input file",
+        "type": "object"
+      },
+      "InputImageContent": {
+        "description": "Una entrada de imagen para el modelo. Obtén más información sobre las [entradas de imagen](/docs/guides/vision).",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ImageDetail"
+          },
+          "image_url": {
+            "description": "La URL de la imagen que se enviará al modelo. Una URL completa o una imagen codificada en base64 en una URL de datos.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "input_image",
+            "description": "El tipo de elemento de entrada. Siempre es `input_image`.",
+            "enum": [
+              "input_image"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "image_url",
+          "detail"
+        ],
+        "title": "Input image",
+        "type": "object"
+      },
+      "InputImageContentParamAutoParam": {
+        "description": "Una entrada de imagen para el modelo. Consulta la guía sobre [entradas de imagen](/docs/guides/vision)",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ImageDetail"
+          },
+          "image_url": {
+            "description": "La URL de la imagen que se enviará al modelo. Puede ser una URL completa o una imagen codificada en base64 en una URL de datos.",
+            "maxLength": 20971520,
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "input_image",
+            "description": "El tipo de elemento de entrada. Siempre `input_image`.",
+            "enum": [
+              "input_image"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Input image",
+        "type": "object"
+      },
+      "InputTextContent": {
+        "description": "Una entrada de texto para el modelo.",
+        "properties": {
+          "text": {
+            "description": "La entrada de texto para el modelo.",
+            "type": "string"
+          },
+          "type": {
+            "default": "input_text",
+            "description": "El tipo de elemento de entrada. Siempre es `input_text`.",
+            "enum": [
+              "input_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Input text",
+        "type": "object"
+      },
+      "InputTextContentParam": {
+        "description": "Una entrada de texto para el modelo.",
+        "properties": {
+          "text": {
+            "description": "La entrada de texto para el modelo.",
+            "maxLength": 10485760,
+            "type": "string"
+          },
+          "type": {
+            "default": "input_text",
+            "description": "El tipo de elemento de entrada. Siempre `input_text`.",
+            "enum": [
+              "input_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Input text",
+        "type": "object",
+        "x-unionDisplay": "section",
+        "x-unionTitle": "Content Type"
+      },
+      "InputTokensDetails": {
+        "description": "Un desglose del uso registrado de tokens de entrada.",
+        "properties": {
+          "cache_write_tokens": {
+            "description": "El número de tokens de entrada escritos en la caché de prompts. Solo está presente cuando se realizan escrituras en caché.",
+            "type": "integer"
+          },
+          "cached_tokens": {
+            "description": "El número de tokens de entrada atendidos desde la caché.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cached_tokens"
+        ],
+        "title": "Input tokens details",
+        "type": "object"
+      },
+      "InputVideoContent": {
+        "description": "Un bloque de contenido que representa una entrada de vídeo para el modelo.",
+        "properties": {
+          "type": {
+            "description": "El tipo de contenido de entrada. Siempre `input_video`.",
+            "enum": [
+              "input_video"
+            ],
+            "type": "string"
+          },
+          "video_url": {
+            "description": "Una cadena base64 o una URL remota que apunta a un archivo de vídeo.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "video_url"
+        ],
+        "type": "object"
+      },
+      "ItemField": {
+        "description": "Un elemento que representa un mensaje, una llamada a herramienta, una salida de herramienta, un razonamiento u otro elemento de respuesta.",
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Message"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCall"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCallOutput"
+          },
+          {
+            "$ref": "#/components/schemas/CustomToolCall"
+          },
+          {
+            "$ref": "#/components/schemas/ReasoningBody"
+          }
+        ]
+      },
+      "ItemParam": {
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AdditionalToolsItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/ReasoningItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/UserMessageItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/SystemMessageItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/DeveloperMessageItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/AssistantMessageItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCallItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCallOutputItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/CustomToolCallItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/CustomToolCallOutputItemParam"
+          }
+        ],
+        "x-unionDisplay": "section",
+        "x-unionTitle": "Input Item Types"
+      },
+      "ItemReferenceParam": {
+        "description": "Un identificador interno para hacer referencia a un elemento.",
+        "properties": {
+          "id": {
+            "description": "El ID del elemento al que se hace referencia.",
+            "type": "string"
+          },
+          "type": {
+            "default": "item_reference",
+            "description": "El tipo de elemento al que se hace referencia. Siempre `item_reference`.",
+            "enum": [
+              "item_reference"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "Item reference",
+        "type": "object"
+      },
+      "JsonObjectResponseFormat": {
+        "properties": {
+          "type": {
+            "default": "json_object",
+            "enum": [
+              "json_object"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "JsonSchemaResponseFormat": {
+        "properties": {
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "schema": {
+            "nullable": true
+          },
+          "strict": {
+            "type": "boolean"
+          },
+          "type": {
+            "default": "json_schema",
+            "enum": [
+              "json_schema"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "description",
+          "schema",
+          "strict"
+        ],
+        "type": "object"
+      },
+      "JsonSchemaResponseFormatParam": {
+        "properties": {
+          "description": {
+            "description": "Una descripción de la finalidad del formato de respuesta, que el modelo utiliza para\ndeterminar cómo responder en ese formato.",
+            "type": "string"
+          },
+          "name": {
+            "description": "El nombre del formato de respuesta. Solo puede contener a-z, A-Z, 0-9,\nsubrayados y guiones, y tener una longitud máxima de 64.",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "description": "El esquema del formato de respuesta, descrito como un objeto JSON Schema.",
+            "title": "JSON schema",
+            "type": "object"
+          },
+          "strict": {
+            "default": true,
+            "description": "Indica si se debe habilitar el cumplimiento estricto del esquema al generar la salida.\nSi se establece en true, el modelo siempre seguirá el esquema exacto definido\nen el campo `schema`. Solo se admite un subconjunto de JSON Schema cuando\n`strict` es `true`.",
+            "enum": [
+              true
+            ],
+            "nullable": true,
+            "type": "boolean"
+          },
+          "type": {
+            "description": "El tipo de formato de respuesta que se está definiendo. Siempre `json_schema`.",
+            "enum": [
+              "json_schema"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "schema"
+        ],
+        "type": "object"
+      },
+      "LogProb": {
+        "description": "La probabilidad logarítmica de un token.",
+        "properties": {
+          "bytes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "logprob": {
+            "type": "number"
+          },
+          "token": {
+            "type": "string"
+          },
+          "top_logprobs": {
+            "items": {
+              "$ref": "#/components/schemas/TopLogProb"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "token",
+          "logprob",
+          "bytes",
+          "top_logprobs"
+        ],
+        "title": "Log probability",
+        "type": "object"
+      },
+      "Message": {
+        "description": "Un mensaje dirigido al modelo o procedente de él.",
+        "properties": {
+          "content": {
+            "description": "El contenido del mensaje",
+            "items": {
+              "description": "Una parte de contenido que compone un elemento de entrada o salida.",
+              "discriminator": {
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/OutputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/TextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/SummaryTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/ReasoningTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/RefusalContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputImageContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputFileContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputVideoContent"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "El ID único del mensaje.",
+            "type": "string"
+          },
+          "phase": {
+            "description": "Etiqueta un mensaje de `assistant` como comentario intermedio (`commentary`) o respuesta final (`final_answer`). Para modelos como `gpt-5.3-codex` y posteriores, al enviar solicitudes de seguimiento, conserva y reenvía la fase en todos los mensajes de `assistant`. Omitirla puede degradar el rendimiento. No se usa en mensajes de usuario.",
+            "enum": [
+              "commentary",
+              "final_answer"
+            ],
+            "type": "string",
+            "x-openresponses-added-in": "2026-04-24"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MessageRole"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MessageStatus"
+          },
+          "type": {
+            "default": "message",
+            "description": "El tipo de mensaje. Siempre se establece en `message`.",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "status",
+          "role",
+          "content"
+        ],
+        "title": "Message",
+        "type": "object"
+      },
+      "MessageRole": {
+        "enum": [
+          "user",
+          "assistant",
+          "system",
+          "developer"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "assistant": "Model-generated content in the conversation.",
+          "developer": "Developer-supplied guidance that shapes the assistant’s behavior.",
+          "system": "System-level instructions that set global behavior.",
+          "user": "End‑user input in the conversation."
+        }
+      },
+      "MessageStatus": {
+        "enum": [
+          "in_progress",
+          "completed",
+          "incomplete"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "completed": "Model has finished sampling this item.",
+          "in_progress": "Model is currently sampling this item.",
+          "incomplete": "Model was interrupted from sampling this item partway through. This can occur, for example, if the model encounters a stop token or exhausts its output_token budget."
+        }
+      },
+      "MetadataParam": {
+        "additionalProperties": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "description": "Conjunto de 16 pares clave-valor que se pueden adjuntar a un objeto. Puede resultar útil para almacenar información adicional sobre el objeto en un formato estructurado y consultar objetos mediante la API o el panel.\n        Las claves son cadenas con una longitud máxima de 64 caracteres. Los valores son cadenas con una longitud máxima de 512 caracteres.",
+        "maxProperties": 16,
+        "type": "object"
+      },
+      "NamespaceToolParam": {
+        "description": "Un espacio de nombres que agrupa herramientas de función relacionadas.",
+        "properties": {
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "tools": {
+            "description": "Las herramientas de función agrupadas en este espacio de nombres.",
+            "items": {
+              "$ref": "#/components/schemas/FunctionToolParam"
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "namespace",
+            "enum": [
+              "namespace"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tools",
+          "type"
+        ],
+        "title": "Namespace tool",
+        "type": "object"
+      },
+      "OutputTextContent": {
+        "description": "Una salida de texto del modelo.",
+        "properties": {
+          "annotations": {
+            "description": "Las anotaciones del texto de salida.",
+            "items": {
+              "$ref": "#/components/schemas/Annotation"
+            },
+            "type": "array"
+          },
+          "logprobs": {
+            "items": {
+              "$ref": "#/components/schemas/LogProb"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "El texto de salida del modelo.",
+            "type": "string"
+          },
+          "type": {
+            "default": "output_text",
+            "description": "El tipo del texto de salida. Siempre es `output_text`.",
+            "enum": [
+              "output_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text",
+          "annotations"
+        ],
+        "title": "Output text",
+        "type": "object"
+      },
+      "OutputTextContentParam": {
+        "properties": {
+          "annotations": {
+            "description": "Citas asociadas al contenido de texto.",
+            "oneOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/UrlCitationParam"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "text": {
+            "description": "El contenido de texto.",
+            "maxLength": 10485760,
+            "type": "string"
+          },
+          "type": {
+            "default": "output_text",
+            "description": "El tipo de contenido. Siempre `output_text`.",
+            "enum": [
+              "output_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "OutputTokensDetails": {
+        "description": "Un desglose del uso registrado de tokens de salida.",
+        "properties": {
+          "reasoning_tokens": {
+            "description": "El número de tokens de salida atribuidos al razonamiento.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reasoning_tokens"
+        ],
+        "title": "Output tokens details",
+        "type": "object"
+      },
+      "Reasoning": {
+        "description": "La configuración y los metadatos de razonamiento usados para la respuesta.",
+        "properties": {
+          "effort": {
+            "description": "El esfuerzo de razonamiento solicitado para el modelo, si se especificó.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReasoningEffortEnum"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReasoningSummaryEnum"
+          }
+        },
+        "required": [
+          "effort",
+          "summary"
+        ],
+        "title": "Reasoning",
+        "type": "object"
+      },
+      "ReasoningBody": {
+        "description": "Un elemento de razonamiento generado por el modelo.",
+        "properties": {
+          "content": {
+            "description": "El contenido de razonamiento generado.",
+            "items": {
+              "description": "Una parte de contenido que compone un elemento de entrada o salida.",
+              "discriminator": {
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/OutputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/TextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/SummaryTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/ReasoningTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/RefusalContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputImageContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputFileContent"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "encrypted_content": {
+            "description": "El contenido de razonamiento cifrado generado.",
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único del elemento de razonamiento.",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MessageStatus"
+          },
+          "summary": {
+            "description": "El contenido del resumen de razonamiento generado.",
+            "items": {
+              "description": "Una parte de contenido que compone un elemento de entrada o salida.",
+              "discriminator": {
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/OutputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/TextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/SummaryTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/ReasoningTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/RefusalContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputImageContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputFileContent"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "reasoning",
+            "description": "El tipo del elemento. Siempre `reasoning`.",
+            "enum": [
+              "reasoning"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "summary"
+        ],
+        "title": "Reasoning item",
+        "type": "object"
+      },
+      "ReasoningEffortEnum": {
+        "enum": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "high": "Use a higher reasoning effort to improve answer quality.",
+          "low": "Use a lower reasoning effort for faster responses.",
+          "medium": "Use a balanced reasoning effort.",
+          "minimal": "Use the lowest non-zero reasoning effort.",
+          "none": "Restrict the model from performing any reasoning before emitting a final answer.",
+          "xhigh": "Use the maximum reasoning effort available."
+        }
+      },
+      "ReasoningItemParam": {
+        "properties": {
+          "content": {
+            "nullable": true
+          },
+          "encrypted_content": {
+            "description": "Una representación cifrada del contenido de razonamiento.",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "El ID único de este elemento de razonamiento.",
+            "example": "rs_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "summary": {
+            "description": "Contenido del resumen de razonamiento asociado a este elemento.",
+            "items": {
+              "$ref": "#/components/schemas/ReasoningSummaryContentParam"
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "reasoning",
+            "description": "El tipo de elemento. Siempre `reasoning`.",
+            "enum": [
+              "reasoning"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "ReasoningParam": {
+        "description": "**Solo para modelos gpt-5 y de la serie o** Opciones de configuración para los [modelos de razonamiento](https://platform.openai.com/docs/guides/reasoning).",
+        "properties": {
+          "effort": {
+            "description": "Controla el nivel de esfuerzo de razonamiento que debe aplicar el modelo. Un mayor esfuerzo puede aumentar la latencia y el costo.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReasoningEffortEnum"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReasoningSummaryEnum"
+          }
+        },
+        "type": "object"
+      },
+      "ReasoningSummaryContentParam": {
+        "properties": {
+          "text": {
+            "description": "El texto del resumen del razonamiento.",
+            "maxLength": 10485760,
+            "type": "string"
+          },
+          "type": {
+            "default": "summary_text",
+            "description": "El tipo de contenido. Siempre `summary_text`.",
+            "enum": [
+              "summary_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ReasoningSummaryEnum": {
+        "enum": [
+          "concise",
+          "detailed",
+          "auto"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Allow the model to decide when to summarize.",
+          "concise": "Emit concise summaries of reasoning content.",
+          "detailed": "Emit details summaries of reasoning content."
+        }
+      },
+      "ReasoningTextContent": {
+        "description": "Texto de razonamiento del modelo.",
+        "properties": {
+          "text": {
+            "description": "El texto de razonamiento del modelo.",
+            "type": "string"
+          },
+          "type": {
+            "default": "reasoning_text",
+            "description": "El tipo del texto de razonamiento. Siempre es `reasoning_text`.",
+            "enum": [
+              "reasoning_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Reasoning text",
+        "type": "object"
+      },
+      "RefusalContent": {
+        "description": "Una negativa del modelo.",
+        "properties": {
+          "refusal": {
+            "description": "La explicación de la negativa del modelo.",
+            "type": "string"
+          },
+          "type": {
+            "default": "refusal",
+            "description": "El tipo de negativa. Siempre es `refusal`.",
+            "enum": [
+              "refusal"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "refusal"
+        ],
+        "title": "Refusal",
+        "type": "object"
+      },
+      "RefusalContentParam": {
+        "properties": {
+          "refusal": {
+            "description": "El texto de rechazo.",
+            "maxLength": 10485760,
+            "type": "string"
+          },
+          "type": {
+            "default": "refusal",
+            "description": "El tipo de contenido. Siempre `refusal`.",
+            "enum": [
+              "refusal"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "refusal"
+        ],
+        "type": "object"
+      },
+      "ResponseCompletedStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que la respuesta se completó.",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.completed",
+            "description": "El tipo de evento, siempre `response.completed`.",
+            "enum": [
+              "response.completed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response completed event",
+        "type": "object"
+      },
+      "ResponseContentPartAddedStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadió una parte de contenido.",
+        "properties": {
+          "content_index": {
+            "description": "El índice de la parte de contenido añadida.",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "part": {
+            "description": "Una parte de contenido que compone un elemento de entrada o salida.",
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/OutputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/TextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/RefusalContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputFileContent"
+              }
+            ]
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.content_part.added",
+            "description": "El tipo de evento, siempre `response.content_part.added`.",
+            "enum": [
+              "response.content_part.added"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "part"
+        ],
+        "title": "Response content part added event",
+        "type": "object"
+      },
+      "ResponseContentPartDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se completó una parte de contenido.",
+        "properties": {
+          "content_index": {
+            "description": "El índice de la parte de contenido completada.",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "part": {
+            "description": "Una parte de contenido que compone un elemento de entrada o salida.",
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/OutputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/TextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/RefusalContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputFileContent"
+              }
+            ]
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.content_part.done",
+            "description": "El tipo de evento, siempre `response.content_part.done`.",
+            "enum": [
+              "response.content_part.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "part"
+        ],
+        "title": "Response content part done event",
+        "type": "object"
+      },
+      "ResponseCreatedStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se creó la respuesta.",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.created",
+            "description": "El tipo de evento, siempre `response.created`.",
+            "enum": [
+              "response.created"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response created event",
+        "type": "object"
+      },
+      "ResponseCustomToolCallInputDeltaStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadía de forma incremental la entrada de una llamada a herramienta personalizada.",
+        "properties": {
+          "delta": {
+            "description": "El delta de entrada añadido.",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "El ID del elemento de llamada a herramienta personalizada actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.custom_tool_call_input.delta",
+            "description": "El tipo de evento, siempre `response.custom_tool_call_input.delta`.",
+            "enum": [
+              "response.custom_tool_call_input.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "delta"
+        ],
+        "title": "Response custom tool call input delta event",
+        "type": "object"
+      },
+      "ResponseCustomToolCallInputDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se había completado la entrada de una llamada a herramienta personalizada.",
+        "properties": {
+          "input": {
+            "description": "La cadena de entrada final emitida.",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "El ID del elemento de llamada a herramienta personalizada actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.custom_tool_call_input.done",
+            "description": "El tipo de evento, siempre `response.custom_tool_call_input.done`.",
+            "enum": [
+              "response.custom_tool_call_input.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "input"
+        ],
+        "title": "Response custom tool call input done event",
+        "type": "object"
+      },
+      "ResponseFailedStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que la respuesta falló.",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.failed",
+            "description": "El tipo de evento, siempre `response.failed`.",
+            "enum": [
+              "response.failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response failed event",
+        "type": "object"
+      },
+      "ResponseFunctionCallArgumentsDeltaStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadían argumentos de llamada a función de forma incremental.",
+        "properties": {
+          "delta": {
+            "description": "El delta de argumentos añadido.",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "El ID del elemento de llamada a herramienta actualizado.",
+            "type": "string"
+          },
+          "obfuscation": {
+            "description": "Una cadena de ofuscación añadida para rellenar la carga útil del evento.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.function_call_arguments.delta",
+            "description": "El tipo de evento, siempre `response.function_call_arguments.delta`.",
+            "enum": [
+              "response.function_call_arguments.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "delta"
+        ],
+        "title": "Response function call arguments delta event",
+        "type": "object"
+      },
+      "ResponseFunctionCallArgumentsDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se habían completado los argumentos de llamada a función.",
+        "properties": {
+          "arguments": {
+            "description": "La cadena final de argumentos emitida.",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "El ID del elemento de llamada a herramienta actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.function_call_arguments.done",
+            "description": "El tipo de evento, siempre `response.function_call_arguments.done`.",
+            "enum": [
+              "response.function_call_arguments.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "arguments"
+        ],
+        "title": "Response function call arguments done event",
+        "type": "object"
+      },
+      "ResponseInProgressStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que la respuesta estaba en curso.",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.in_progress",
+            "description": "El tipo de evento, siempre `response.in_progress`.",
+            "enum": [
+              "response.in_progress"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response in progress event",
+        "type": "object"
+      },
+      "ResponseIncompleteStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que la respuesta estaba incompleta.",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.incomplete",
+            "description": "El tipo de evento, siempre `response.incomplete`.",
+            "enum": [
+              "response.incomplete"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response incomplete event",
+        "type": "object"
+      },
+      "ResponseOutputItemAddedStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadió un elemento de salida a la respuesta.",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ItemField"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida añadido.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.output_item.added",
+            "description": "El tipo de evento, siempre `response.output_item.added`.",
+            "enum": [
+              "response.output_item.added"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "output_index",
+          "item"
+        ],
+        "title": "Response output item added event",
+        "type": "object"
+      },
+      "ResponseOutputItemDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se completó un elemento de salida.",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ItemField"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida completado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.output_item.done",
+            "description": "El tipo de evento, siempre `response.output_item.done`.",
+            "enum": [
+              "response.output_item.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "output_index",
+          "item"
+        ],
+        "title": "Response output item done event",
+        "type": "object"
+      },
+      "ResponseOutputTextAnnotationAddedStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se había añadido una anotación de texto de salida.",
+        "properties": {
+          "annotation": {
+            "$ref": "#/components/schemas/Annotation"
+          },
+          "annotation_index": {
+            "description": "El índice de la anotación añadida.",
+            "type": "integer"
+          },
+          "content_index": {
+            "description": "El índice del contenido de texto de salida actualizado.",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.output_text.annotation.added",
+            "description": "El tipo de evento, siempre `response.output_text.annotation.added`.",
+            "enum": [
+              "response.output_text.annotation.added"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "annotation_index",
+          "annotation"
+        ],
+        "title": "Response output text annotation added event",
+        "type": "object"
+      },
+      "ResponseOutputTextDeltaStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadió texto de salida de forma incremental.",
+        "properties": {
+          "content_index": {
+            "description": "El índice de la parte de contenido actualizada.",
+            "type": "integer"
+          },
+          "delta": {
+            "description": "El delta de texto añadido.",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "logprobs": {
+            "description": "Las probabilidades logarítmicas de los tokens emitidas con el delta, si las hubiera.",
+            "items": {
+              "$ref": "#/components/schemas/LogProb"
+            },
+            "type": "array"
+          },
+          "obfuscation": {
+            "description": "Una cadena de ofuscación añadida para rellenar la carga útil del evento.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.output_text.delta",
+            "description": "El tipo de evento, siempre `response.output_text.delta`.",
+            "enum": [
+              "response.output_text.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "delta"
+        ],
+        "title": "Response output text delta event",
+        "type": "object"
+      },
+      "ResponseOutputTextDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se completó el texto de salida.",
+        "properties": {
+          "content_index": {
+            "description": "El índice de la parte de contenido completada.",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "logprobs": {
+            "description": "Las probabilidades logarítmicas de los tokens emitidas con el texto final, si las hubiera.",
+            "items": {
+              "$ref": "#/components/schemas/LogProb"
+            },
+            "type": "array"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "text": {
+            "description": "El texto final emitido.",
+            "type": "string"
+          },
+          "type": {
+            "default": "response.output_text.done",
+            "description": "El tipo de evento, siempre `response.output_text.done`.",
+            "enum": [
+              "response.output_text.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "text"
+        ],
+        "title": "Response output text done event",
+        "type": "object"
+      },
+      "ResponseQueuedStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que la respuesta se puso en cola.",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.queued",
+            "description": "El tipo de evento, siempre `response.queued`.",
+            "enum": [
+              "response.queued"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response queued event",
+        "type": "object"
+      },
+      "ResponseReasoningDeltaStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadió texto de razonamiento de forma incremental.",
+        "properties": {
+          "content_index": {
+            "description": "El índice del contenido de razonamiento actualizado.",
+            "type": "integer"
+          },
+          "delta": {
+            "description": "El delta de texto de razonamiento añadido.",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "obfuscation": {
+            "description": "Una cadena de ofuscación añadida para rellenar la carga útil del evento.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.reasoning.delta",
+            "description": "El tipo de evento, siempre `response.reasoning.delta`.",
+            "enum": [
+              "response.reasoning.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "delta"
+        ],
+        "title": "Response reasoning delta event",
+        "type": "object"
+      },
+      "ResponseReasoningDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se había completado el texto de razonamiento.",
+        "properties": {
+          "content_index": {
+            "description": "El índice del contenido de razonamiento completado.",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "text": {
+            "description": "El texto de razonamiento final emitido.",
+            "type": "string"
+          },
+          "type": {
+            "default": "response.reasoning.done",
+            "description": "El tipo de evento, siempre `response.reasoning.done`.",
+            "enum": [
+              "response.reasoning.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "text"
+        ],
+        "title": "Response reasoning done event",
+        "type": "object"
+      },
+      "ResponseReasoningSummaryDeltaStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadía un resumen del razonamiento de forma incremental.",
+        "properties": {
+          "delta": {
+            "description": "El delta de texto del resumen añadido.",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "obfuscation": {
+            "description": "Una cadena de ofuscación añadida para rellenar la carga útil del evento.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "summary_index": {
+            "description": "El índice del contenido del resumen actualizado.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.reasoning_summary_text.delta",
+            "description": "El tipo de evento, siempre `response.reasoning_summary.delta`.",
+            "enum": [
+              "response.reasoning_summary_text.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "summary_index",
+          "delta"
+        ],
+        "title": "Response reasoning summary delta event",
+        "type": "object"
+      },
+      "ResponseReasoningSummaryDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se había completado un resumen del razonamiento.",
+        "properties": {
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "summary_index": {
+            "description": "El índice del contenido del resumen completado.",
+            "type": "integer"
+          },
+          "text": {
+            "description": "El texto final del resumen emitido.",
+            "type": "string"
+          },
+          "type": {
+            "default": "response.reasoning_summary_text.done",
+            "description": "El tipo de evento, siempre `response.reasoning_summary.done`.",
+            "enum": [
+              "response.reasoning_summary_text.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "summary_index",
+          "text"
+        ],
+        "title": "Response reasoning summary done event",
+        "type": "object"
+      },
+      "ResponseReasoningSummaryPartAddedStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadió una parte del resumen de razonamiento.",
+        "properties": {
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "part": {
+            "description": "Una parte de contenido que compone un elemento de entrada o salida.",
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/OutputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/TextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/RefusalContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputFileContent"
+              }
+            ]
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "summary_index": {
+            "description": "El índice de la parte del resumen añadida.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.reasoning_summary_part.added",
+            "description": "El tipo de evento, siempre `response.reasoning_summary_part.added`.",
+            "enum": [
+              "response.reasoning_summary_part.added"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "summary_index",
+          "part"
+        ],
+        "title": "Response reasoning summary part added event",
+        "type": "object"
+      },
+      "ResponseReasoningSummaryPartDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se completó una parte del resumen de razonamiento.",
+        "properties": {
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "part": {
+            "description": "Una parte de contenido que compone un elemento de entrada o salida.",
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/OutputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/TextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/RefusalContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputFileContent"
+              }
+            ]
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "summary_index": {
+            "description": "El índice de la parte del resumen completada.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.reasoning_summary_part.done",
+            "description": "El tipo de evento, siempre `response.reasoning_summary_part.done`.",
+            "enum": [
+              "response.reasoning_summary_part.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "summary_index",
+          "part"
+        ],
+        "title": "Response reasoning summary part done event",
+        "type": "object"
+      },
+      "ResponseRefusalDeltaStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se añadió texto de rechazo de forma incremental.",
+        "properties": {
+          "content_index": {
+            "description": "El índice del contenido de rechazo actualizado.",
+            "type": "integer"
+          },
+          "delta": {
+            "description": "El delta de texto de rechazo añadido.",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.refusal.delta",
+            "description": "El tipo de evento, siempre `response.refusal.delta`.",
+            "enum": [
+              "response.refusal.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "delta"
+        ],
+        "title": "Response refusal delta event",
+        "type": "object"
+      },
+      "ResponseRefusalDoneStreamingEvent": {
+        "description": "Un evento de streaming que indicaba que se completó el texto de rechazo.",
+        "properties": {
+          "content_index": {
+            "description": "El índice del contenido de rechazo completado.",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "El ID del elemento actualizado.",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "El índice del elemento de salida actualizado.",
+            "type": "integer"
+          },
+          "refusal": {
+            "description": "El texto final de rechazo emitido.",
+            "type": "string"
+          },
+          "sequence_number": {
+            "description": "El número de secuencia del evento emitido.",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.refusal.done",
+            "description": "El tipo de evento, siempre `response.refusal.done`.",
+            "enum": [
+              "response.refusal.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "refusal"
+        ],
+        "title": "Response refusal done event",
+        "type": "object"
+      },
+      "ResponseResource": {
+        "description": "El objeto de respuesta completo devuelto por la API de Responses.",
+        "properties": {
+          "background": {
+            "description": "Indica si esta solicitud se ejecutó en segundo plano.",
+            "type": "boolean"
+          },
+          "completed_at": {
+            "description": "La marca de tiempo Unix (en segundos) de finalización de la respuesta, si se completó.",
+            "nullable": true,
+            "type": "integer"
+          },
+          "created_at": {
+            "description": "La marca de tiempo Unix (en segundos) de creación de la respuesta.",
+            "type": "integer"
+          },
+          "error": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Error"
+              }
+            ],
+            "description": "El error que se produjo, si la respuesta falló.",
+            "nullable": true
+          },
+          "frequency_penalty": {
+            "description": "La penalización por frecuencia usada para penalizar tokens nuevos según su frecuencia en el texto hasta ese momento.",
+            "type": "number"
+          },
+          "id": {
+            "description": "El ID único de la respuesta creada.",
+            "type": "string"
+          },
+          "incomplete_details": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IncompleteDetails"
+              }
+            ],
+            "description": "Detalles sobre por qué la respuesta quedó incompleta, si corresponde.",
+            "nullable": true
+          },
+          "instructions": {
+            "description": "Instrucciones adicionales usadas para guiar al modelo en esta respuesta.",
+            "nullable": true,
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "max_output_tokens": {
+            "description": "El número máximo de tokens que el modelo podía generar para esta respuesta.",
+            "nullable": true,
+            "type": "integer"
+          },
+          "max_tool_calls": {
+            "description": "El número máximo de llamadas a herramientas que el modelo podía realizar mientras generaba la respuesta.",
+            "nullable": true,
+            "type": "integer"
+          },
+          "metadata": {
+            "description": "Metadatos definidos por el desarrollador asociados a la respuesta."
+          },
+          "model": {
+            "description": "El modelo que generó esta respuesta.",
+            "type": "string"
+          },
+          "object": {
+            "default": "response",
+            "description": "El tipo de objeto, que siempre es `response`.",
+            "enum": [
+              "response"
+            ],
+            "type": "string"
+          },
+          "output": {
+            "description": "Los elementos de salida generados por el modelo.",
+            "items": {
+              "$ref": "#/components/schemas/ItemField"
+            },
+            "type": "array"
+          },
+          "parallel_tool_calls": {
+            "description": "Indica si el modelo podía invocar varias herramientas en paralelo.",
+            "type": "boolean"
+          },
+          "presence_penalty": {
+            "description": "La penalización por presencia usada para penalizar tokens nuevos según aparezcan o no en el texto hasta ese momento.",
+            "type": "number"
+          },
+          "previous_response_id": {
+            "description": "El ID de la respuesta anterior de la cadena a la que se hizo referencia, si la hubiera.",
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_key": {
+            "description": "Una clave utilizada para leer de la caché de prompts o escribir en ella.",
+            "nullable": true,
+            "type": "string"
+          },
+          "reasoning": {
+            "additionalProperties": true,
+            "description": "La configuración de razonamiento usada para esta respuesta.",
+            "nullable": true,
+            "type": "object"
+          },
+          "safety_identifier": {
+            "description": "Un identificador estable utilizado para la supervisión de seguridad y la detección de abusos.",
+            "nullable": true,
+            "type": "string"
+          },
+          "service_tier": {
+            "description": "El nivel de servicio utilizado para esta respuesta.",
+            "type": "string"
+          },
+          "status": {
+            "description": "El estado establecido para la respuesta.",
+            "type": "string"
+          },
+          "store": {
+            "description": "Indica si esta respuesta se almacenó para poder recuperarla más adelante.",
+            "type": "boolean"
+          },
+          "temperature": {
+            "description": "La temperatura de muestreo usada para esta respuesta.",
+            "type": "number"
+          },
+          "text": {
+            "additionalProperties": true,
+            "description": "La configuración de salida de texto usada para esta respuesta.",
+            "type": "object"
+          },
+          "tool_choice": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FunctionToolChoice"
+              },
+              {
+                "$ref": "#/components/schemas/ToolChoiceValueEnum"
+              },
+              {
+                "$ref": "#/components/schemas/AllowedToolChoice"
+              }
+            ]
+          },
+          "tools": {
+            "description": "Las herramientas disponibles para el modelo durante la generación de la respuesta.",
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "type": "array"
+          },
+          "top_logprobs": {
+            "description": "El número de tokens más probables devueltos en cada posición, junto con sus probabilidades logarítmicas.",
+            "type": "integer"
+          },
+          "top_p": {
+            "description": "El parámetro de muestreo de núcleo usado para esta respuesta.",
+            "type": "number"
+          },
+          "truncation": {
+            "$ref": "#/components/schemas/TruncationEnum"
+          },
+          "usage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Usage"
+              }
+            ],
+            "description": "Estadísticas de uso de tokens registradas para la respuesta, si están disponibles.",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created_at",
+          "completed_at",
+          "status",
+          "incomplete_details",
+          "model",
+          "previous_response_id",
+          "instructions",
+          "output",
+          "error",
+          "tools",
+          "tool_choice",
+          "truncation",
+          "parallel_tool_calls",
+          "text",
+          "top_p",
+          "presence_penalty",
+          "frequency_penalty",
+          "top_logprobs",
+          "temperature",
+          "reasoning",
+          "usage",
+          "max_output_tokens",
+          "max_tool_calls",
+          "store",
+          "background",
+          "service_tier",
+          "metadata",
+          "safety_identifier",
+          "prompt_cache_key"
+        ],
+        "title": "The response object",
+        "type": "object"
+      },
+      "ResponseStreamEvent": {
+        "description": "Un evento en una respuesta transmitida por streaming.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ResponseCreatedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseQueuedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseInProgressStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseCompletedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseFailedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseIncompleteStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputItemAddedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputItemDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningSummaryPartAddedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningSummaryPartDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseContentPartAddedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseContentPartDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputTextDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputTextDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseRefusalDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseRefusalDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningSummaryDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningSummaryDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputTextAnnotationAddedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseFunctionCallArgumentsDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseFunctionCallArgumentsDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseCustomToolCallInputDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseCustomToolCallInputDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorStreamingEvent"
+          }
+        ],
+        "title": "Response stream event"
+      },
+      "ResponsesToolParam": {
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FunctionToolParam"
+          },
+          {
+            "$ref": "#/components/schemas/CustomToolParam"
+          },
+          {
+            "$ref": "#/components/schemas/NamespaceToolParam"
+          }
+        ],
+        "x-unionDisplay": "section",
+        "x-unionTitle": "Tool Types"
+      },
+      "ServiceTierEnum": {
+        "enum": [
+          "auto",
+          "default",
+          "flex",
+          "priority"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Choose a service tier automatically based on current account state.",
+          "default": "Choose the default service tier.",
+          "flex": "Choose the flex service tier.",
+          "priority": "Choose the priority service tier."
+        }
+      },
+      "SpecificFunctionParam": {
+        "properties": {
+          "name": {
+            "description": "El nombre de la herramienta de función que se invocará.",
+            "type": "string"
+          },
+          "type": {
+            "default": "function",
+            "description": "La herramienta que se invocará. Siempre es `function`.",
+            "enum": [
+              "function"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SpecificToolChoiceParam": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SpecificFunctionParam"
+          }
+        ]
+      },
+      "StreamOptionsParam": {
+        "description": "Opciones que controlan el comportamiento de las respuestas en streaming.",
+        "properties": {
+          "include_obfuscation": {
+            "description": "Indica si se debe ofuscar información confidencial en la salida en streaming. El valor predeterminado es `true`.",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SummaryTextContent": {
+        "description": "Un texto de resumen del modelo.",
+        "properties": {
+          "text": {
+            "description": "Un resumen de la salida de razonamiento del modelo hasta el momento.",
+            "type": "string"
+          },
+          "type": {
+            "default": "summary_text",
+            "description": "El tipo de objeto. Siempre es `summary_text`.",
+            "enum": [
+              "summary_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Summary text",
+        "type": "object"
+      },
+      "SystemMessageItemParam": {
+        "properties": {
+          "content": {
+            "description": "El contenido del mensaje como un array de partes de contenido.",
+            "oneOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "description": "El contenido del mensaje como una sola cadena.",
+                "maxLength": 10485760,
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "description": "El ID único de este elemento de mensaje.",
+            "example": "msg_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "default": "system",
+            "description": "El rol del mensaje. Siempre `system`.",
+            "enum": [
+              "system"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "El estado del elemento de mensaje.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "message",
+            "description": "El tipo de elemento. Siempre `message`.",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "TextContent": {
+        "description": "Contenido de texto.",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "default": "text",
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Text Content",
+        "type": "object"
+      },
+      "TextField": {
+        "properties": {
+          "format": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TextResponseFormat"
+              },
+              {
+                "$ref": "#/components/schemas/JsonObjectResponseFormat"
+              },
+              {
+                "$ref": "#/components/schemas/JsonSchemaResponseFormat"
+              }
+            ]
+          },
+          "verbosity": {
+            "$ref": "#/components/schemas/VerbosityEnum"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "type": "object"
+      },
+      "TextFormatParam": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextResponseFormat"
+          },
+          {
+            "$ref": "#/components/schemas/JsonSchemaResponseFormatParam"
+          }
+        ]
+      },
+      "TextParam": {
+        "properties": {
+          "format": {
+            "$ref": "#/components/schemas/TextFormatParam"
+          },
+          "verbosity": {
+            "$ref": "#/components/schemas/VerbosityEnum"
+          }
+        },
+        "type": "object"
+      },
+      "TextResponseFormat": {
+        "properties": {
+          "type": {
+            "default": "text",
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "Tool": {
+        "description": "Una herramienta que puede usarse para generar una respuesta.",
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FunctionTool"
+          }
+        ]
+      },
+      "ToolChoiceParam": {
+        "description": "Controla qué herramienta debe usar el modelo, si corresponde.",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SpecificToolChoiceParam"
+          },
+          {
+            "$ref": "#/components/schemas/ToolChoiceValueEnum"
+          }
+        ]
+      },
+      "ToolChoiceValueEnum": {
+        "enum": [
+          "none",
+          "auto",
+          "required"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Let the model choose the tools from among the provided set.",
+          "none": "Restrict the model from calling any tools.",
+          "required": "Require the model to call a tool."
+        }
+      },
+      "TopLogProb": {
+        "description": "La máxima probabilidad logarítmica de un token.",
+        "properties": {
+          "bytes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "logprob": {
+            "type": "number"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "logprob",
+          "bytes"
+        ],
+        "title": "Top log probability",
+        "type": "object"
+      },
+      "TruncationEnum": {
+        "enum": [
+          "disabled"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Let the service decide how to truncate.",
+          "disabled": "Disable service truncation. Context over the model's context limit will result in a 400 error."
+        }
+      },
+      "UrlCitationBody": {
+        "description": "Una cita de un recurso web utilizado para generar una respuesta del modelo.",
+        "properties": {
+          "end_index": {
+            "description": "El índice del último carácter de la cita de URL en el mensaje.",
+            "type": "integer"
+          },
+          "start_index": {
+            "description": "El índice del primer carácter de la cita de URL en el mensaje.",
+            "type": "integer"
+          },
+          "title": {
+            "description": "El título del recurso web.",
+            "type": "string"
+          },
+          "type": {
+            "default": "url_citation",
+            "description": "El tipo de cita de URL. Siempre es `url_citation`.",
+            "enum": [
+              "url_citation"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "description": "La URL del recurso web.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "url",
+          "start_index",
+          "end_index",
+          "title"
+        ],
+        "title": "URL citation",
+        "type": "object"
+      },
+      "UrlCitationParam": {
+        "properties": {
+          "end_index": {
+            "description": "El índice del último carácter de la cita en el mensaje.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start_index": {
+            "description": "El índice del primer carácter de la cita en el mensaje.",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "description": "El título del recurso citado.",
+            "type": "string"
+          },
+          "type": {
+            "default": "url_citation",
+            "description": "El tipo de cita. Siempre `url_citation`.",
+            "enum": [
+              "url_citation"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "description": "La URL del recurso citado.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "start_index",
+          "end_index",
+          "url",
+          "title"
+        ],
+        "type": "object"
+      },
+      "Usage": {
+        "description": "Estadísticas de uso de tokens registradas para la respuesta.",
+        "properties": {
+          "input_tokens": {
+            "description": "El número de tokens de entrada usados para generar la respuesta.",
+            "type": "integer"
+          },
+          "input_tokens_details": {
+            "$ref": "#/components/schemas/InputTokensDetails"
+          },
+          "output_tokens": {
+            "description": "El número de tokens de salida generados por el modelo.",
+            "type": "integer"
+          },
+          "output_tokens_details": {
+            "$ref": "#/components/schemas/OutputTokensDetails"
+          },
+          "total_tokens": {
+            "description": "El número total de tokens usados.",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "total_tokens",
+          "input_tokens_details",
+          "output_tokens_details"
+        ],
+        "title": "Usage",
+        "type": "object"
+      },
+      "UserMessageItemParam": {
+        "properties": {
+          "content": {
+            "description": "El contenido del mensaje como un array de partes de contenido.",
+            "oneOf": [
+              {
+                "items": {
+                  "description": "Una parte del contenido del mensaje, como texto, una imagen o un archivo.",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputImageContentParamAutoParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "description": "El contenido del mensaje como una sola cadena.",
+                "maxLength": 10485760,
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "description": "El ID único de este elemento de mensaje.",
+            "example": "msg_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "default": "user",
+            "description": "El rol del mensaje. Siempre `user`.",
+            "enum": [
+              "user"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "El estado del elemento de mensaje.",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "message",
+            "description": "El tipo de elemento. Siempre `message`.",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "VerbosityEnum": {
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "high": "Instruct the model to emit more verbose final responses.",
+          "low": "Instruct the model to emit less verbose final responses.",
+          "medium": "Use the model's default verbosity setting."
+        }
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "description": "Tu API key de Perplexity.",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "Acceso compatible con OpenAI Responses a modelos de distintos proveedores. La estructura del esquema se basa en la especificación OpenResponses, con licencia Apache-2.0, y documenta los formatos de solicitud y respuesta compatibles con Router.",
+    "title": "Perplexity Router API (OpenAI Responses-compatible)",
+    "version": "2026-04-24"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/router/v1/responses": {
+      "post": {
+        "description": "Genera una respuesta del modelo mediante el esquema OpenAI Responses. Establece `stream: true` para recibir eventos tipados enviados por el servidor, seguidos de `data: [DONE]`.",
+        "operationId": "gateway_create_response",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResponseBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseResource"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseStreamEvent"
+                }
+              }
+            },
+            "description": "Respuesta correcta. JSON para solicitudes sin streaming; un `text/event-stream` de eventos de respuesta tipados cuando `stream` es true."
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Solicitud no válida: cuerpo mal formado, parámetro no compatible o modelo no disponible en Router."
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Se superó el límite de frecuencia o el modelo seleccionado está sobrecargado. Vuelve a intentarlo después del intervalo `Retry-After`."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "No se pudo completar la solicitud debido a un error del servidor."
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "Crear respuesta"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.perplexity.ai"
+    }
+  ]
+}

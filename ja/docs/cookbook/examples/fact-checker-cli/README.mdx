@@ -1,0 +1,222 @@
+---
+title: "Fact Checker CLI"
+description: "Perplexity の Sonar API を使って、記事や発言に含まれる虚偽・誤解を招く主張を検出するコマンドラインツール"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="fact-checker-cli">
+  # Fact Checker CLI
+</div>
+
+PerplexityのSonar APIによるウェブ調査を活用し、記事や発言に含まれる誤った主張や誤解を招く主張を特定するコマンドラインツールです。
+
+<div id="features">
+  ## 機能
+</div>
+
+* 個別の主張や記事全体の事実的正確性を分析
+* 虚偽・誤解を招く・検証不能な主張を特定
+* 不正確な情報について説明と訂正を提示
+* 結果を人間が読みやすい形式または構造化 JSON で出力
+* ファクトチェックの評価根拠として信頼できる情報源を引用
+* Perplexity の構造化出力を活用し、確実な JSON パースを実現 (Tier 3 以上のユーザー向け)
+
+<div id="installation">
+  ## インストール
+</div>
+
+<div id="1-install-required-dependencies">
+  ### 1. 必要な依存関係をインストールする
+</div>
+
+```bash theme={null}
+# requirements ファイルからインストール（推奨）
+pip install -r requirements.txt
+
+# または手動でインストール
+pip install requests pydantic newspaper3k
+```
+
+<div id="2-make-the-script-executable">
+  ### 2. スクリプトに実行権限を付与する
+</div>
+
+```bash theme={null}
+chmod +x fact_checker.py
+```
+
+<div id="api-key-setup">
+  ## API keyの設定
+</div>
+
+このツールを使用するには、Perplexity APIのAPI keyが必要です。次のいずれかの方法で指定してください。
+
+<div id="1-as-a-command-line-argument">
+  ### 1. コマンドライン引数として指定する
+</div>
+
+```bash theme={null}
+./fact_checker.py --api-key YOUR_API_KEY
+```
+
+<div id="2-as-an-environment-variable">
+  ### 2. 環境変数として設定する
+</div>
+
+```bash theme={null}
+export PPLX_API_KEY=YOUR_API_KEY
+```
+
+<div id="3-in-a-file">
+  ### 3. ファイルに保存する
+</div>
+
+スクリプトと同じディレクトリに `pplx_api_key` または `.pplx_api_key` という名前のファイルを作成します。
+
+```bash theme={null}
+echo "YOUR_API_KEY" > .pplx_api_key
+chmod 600 .pplx_api_key
+```
+
+**注意:** 構造化出力機能を使用する場合は、Tier 3 以上のアクセスレベルを持つ Perplexity API アカウントが必要です。
+
+<div id="quick-start">
+  ## クイックスタート
+</div>
+
+セットアップ後、すぐに次のコマンドを実行します。
+
+```bash theme={null}
+./fact_checker.py -t "The Earth is flat and NASA is hiding the truth."
+```
+
+これにより、主張を分析し、Perplexity の Sonar API を使って調査したうえで、評価・説明・情報源を含む詳細なファクトチェック結果が返されます。
+
+<div id="usage">
+  ## 使い方
+</div>
+
+<div id="check-a-claim">
+  ### 主張をファクトチェックする
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "The Earth is flat and NASA is hiding the truth."
+```
+
+<div id="check-an-article-from-a-file">
+  ### ファイル内の記事をチェックする
+</div>
+
+```bash theme={null}
+./fact_checker.py --file article.txt
+```
+
+<div id="check-an-article-from-a-url">
+  ### URL から記事をファクトチェックする
+</div>
+
+```bash theme={null}
+./fact_checker.py --url https://www.example.com/news/article-to-check
+```
+
+<div id="specify-a-different-model">
+  ### 別の model を指定する
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "Global temperatures have decreased over the past century." --model "sonar-pro"
+```
+
+<div id="output-results-as-json">
+  ### 結果を JSON で出力する
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "Mars has a breathable atmosphere." --json
+```
+
+<div id="use-a-custom-prompt-file">
+  ### カスタムプロンプトファイルを使用する
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "The first human heart transplant was performed in the United States." --prompt-file custom_prompt.md
+```
+
+<div id="enable-structured-outputs-for-tier-3-users">
+  ### 構造化出力を有効にする (Tier 3 以上のユーザー向け) 
+</div>
+
+構造化出力はデフォルトでは無効です。有効にするには、`--structured-output` フラグを指定します。
+
+```bash theme={null}
+./fact_checker.py --text "Vaccines cause autism." --structured-output
+```
+
+<div id="get-help">
+  ### ヘルプを表示する
+</div>
+
+```bash theme={null}
+./fact_checker.py --help
+```
+
+<div id="output-format">
+  ## 出力形式
+</div>
+
+このツールは、以下を含む出力を生成します:
+
+* **総合評価**: MOSTLY&#95;TRUE、MIXED、または MOSTLY&#95;FALSE
+* **要約**: ファクトチェック結果の簡潔な概要
+* **主張の分析**: 個々の評価を付与した具体的な主張の一覧:
+  * TRUE: 事実として正確で、証拠によって裏付けられている
+  * FALSE: 証拠と矛盾している
+  * MISLEADING: 一部は事実だが、誤った結論を導きかねない
+  * UNVERIFIABLE: 入手可能な情報では確定的に検証できない
+* **説明**: 各主張についての詳細な根拠
+* **出典**: 検証に使用した引用元とURL
+
+<div id="example">
+  ## 例
+</div>
+
+次のコマンドを実行します。
+
+```bash theme={null}
+./fact_checker.py -t "The Great Wall of China is visible from the moon."
+```
+
+出力例:
+
+```
+ファクトチェックを実行中...
+
+🔴 総合評価: MOSTLY_FALSE
+
+📝 要約:
+万里の長城が月から見えるという主張は誤りです。これはよくある誤解であり、NASAの宇宙飛行士の証言や科学的根拠によって否定されています。
+
+🔍 主張の分析:
+
+主張 1: ❌ FALSE  
+  記述: 「万里の長城は月から見える。」  
+  解説: 万里の長城を月から肉眼で見ることはできません。NASAの宇宙飛行士たちがこれを確認しており、ニール・アームストロングも月周回軌道から長城を見ることはできなかったと述べています。長城は幅が狭すぎ、それほどの距離から見ると周囲と色が似ています。  
+  出典:
+    - NASA.gov
+    - Scientific American
+    - National Geographic
+```
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+* ファクトチェックの精度は、Perplexity Sonar API から取得できる情報の品質に左右されます。
+* 他の言語モデルと同様に、基盤となる AI にも特定の専門分野では限界があります。
+* 構造化出力機能を利用するには、Tier 3 以上の Perplexity API アカウントが必要です。
+* 本ツールは、機微性や複雑性の高いコンテンツについて、専門のファクトチェックサービスに代わるものではありません。

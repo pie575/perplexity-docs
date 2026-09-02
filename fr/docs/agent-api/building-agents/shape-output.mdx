@@ -1,0 +1,95 @@
+---
+title: "Structurer la sortie"
+description: "Forcez le modèle à renvoyer du JSON exploitable par votre code plutôt qu'un texte brut qu'il faut décortiquer."
+---
+
+Par défaut, une exécution renvoie un seul bloc de texte lorsqu&#39;elle se termine. Lorsqu&#39;un système en aval doit consommer le résultat, le texte libre est difficile à exploiter : vous finissez par écrire des analyseurs fragiles. La sortie structurée amène le modèle à renvoyer du JSON conforme à un schéma que vous définissez, ce qui vous permet de le désérialiser directement. Pour la référence exhaustive — streaming, exécutions en arrière-plan, gestion des erreurs et exemples de schémas complets — consultez [Contrôle de la sortie](/fr/docs/agent-api/output-control).
+
+<div id="structured-output">
+  ## Sortie structurée
+</div>
+
+Définissez `response_format` sur un `json_schema` comportant un `name` et un `schema`. Le texte de la réponse est conforme au schéma, sauf si la génération est interrompue prématurément. L&#39;exemple ci-dessous construit le schéma à partir d&#39;un modèle Pydantic et valide la réponse par rapport à celui-ci :
+
+<CodeGroup>
+  ```python Python theme={null}
+  from typing import List, Optional
+  from pydantic import BaseModel
+  from perplexity import Perplexity
+
+  class CompanySummary(BaseModel):
+      name: str
+      sector: str
+      headquarters: str
+      key_products: Optional[List[str]] = None
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Summarize NVIDIA: sector, headquarters, and key products.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "company_summary",
+              "schema": {
+                  **CompanySummary.model_json_schema(),
+                  "required": list(CompanySummary.model_fields.keys()),
+                  "additionalProperties": False,
+              },
+          },
+      },
+  )
+
+  summary = CompanySummary.model_validate_json(response.output_text)
+  print(summary.name, summary.sector)
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Summarize NVIDIA: sector, headquarters, and key products.",
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "company_summary",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "name": { "type": "string" },
+              "sector": { "type": "string" },
+              "headquarters": { "type": "string" },
+              "key_products": { "type": "array", "items": { "type": "string" } }
+            },
+            "required": ["name", "sector", "headquarters"]
+          }
+        }
+      }
+    }' | jq
+  ```
+</CodeGroup>
+
+<Tip>
+  Rappelez le schéma dans votre prompt (« Renvoyez les données sous forme d&#39;objet JSON conforme au schéma ») afin d&#39;en améliorer le respect.
+</Tip>
+
+<Warning>
+  Évitez de demander des liens à l&#39;intérieur du JSON. Un modèle qui produit des URL dans une sortie structurée risque de générer des liens mal formés ou inventés. Récupérez plutôt les liens depuis les éléments `citations` ou `search_results` de l&#39;`output` de la réponse.
+</Warning>
+
+<div id="next-steps">
+  ## Prochaines étapes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Conserver le contexte" icon="link" href="/fr/docs/agent-api/building-agents/keep-context">
+    Maintenez l&#39;état sur plusieurs tours de conversation.
+  </Card>
+
+  <Card title="Contrôle de la sortie" icon="sliders" href="/fr/docs/agent-api/output-control">
+    Streaming, exécutions en arrière-plan, gestion des erreurs et exemples complets de sortie structurée.
+  </Card>
+</CardGroup>

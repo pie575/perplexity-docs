@@ -1,0 +1,377 @@
+---
+title: "Utiliser la Search API avec le SDK OpenAI"
+sidebarTitle: "OpenAI"
+description: "Enregistrez la Search API de Perplexity en tant qu'outil de fonction dans l'API Responses d'OpenAI et exécutez la boucle standard d'appels d'outils avec les modèles GPT."
+---
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Ce guide montre comment exposer la [Search API](/fr/docs/search/quickstart) de Perplexity à un modèle OpenAI sous forme d&#39;outil de fonction. La Responses API repose sur une boucle manuelle d&#39;appels d&#39;outils : le modèle émet un élément `function_call` accompagné d&#39;un `call_id`, vous exécutez l&#39;outil (ici, un appel à `client.search.create`), puis vous renvoyez le résultat sous forme d&#39;élément `function_call_output` associé au même `call_id`. La boucle se poursuit jusqu&#39;à ce que la réponse ne contienne plus d&#39;appels de fonction en attente.
+
+<Info>
+  Cette page utilise la **Responses API** (`client.responses.create`), la nouvelle interface d&#39;OpenAI. La structure de l&#39;outil est plate (`{type: "function", name, description, parameters, strict}`) — contrairement à l&#39;ancienne structure d&#39;appel de fonctions de `chat.completions`, qui imbrique les champs sous `function: {…}`.
+</Info>
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install openai perplexityai
+  export OPENAI_API_KEY="your_openai_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+
+  ```bash Typescript theme={null}
+  npm install openai @perplexity-ai/perplexity_ai
+  export OPENAI_API_KEY="your_openai_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+</CodeGroup>
+
+<div id="tool-definition">
+  ## Définition de l&#39;outil
+</div>
+
+L&#39;API Responses attend un objet d&#39;outil plat : `type`, `name`, `description`, `parameters` (JSON Schema) et, facultativement, `strict`. La description ci-dessous a été affinée pour la Search API de Perplexity ; conservez-la telle quelle — c&#39;est cette formulation qui produit de bonnes requêtes courtes, de type mots-clés.
+
+<CodeGroup>
+  ```python Python theme={null}
+  WEB_SEARCH_TOOL_DESCRIPTION = """\
+  Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline."""
+
+  QUERIES_PARAM_DESCRIPTION = (
+      "An array of keyword-based search queries. Each query should be short, "
+      "as longer queries may reduce performance. Do not provide more than three "
+      "queries to maintain efficiency."
+  )
+
+  WEB_SEARCH_TOOL = {
+      "type": "function",
+      "name": "web_search",
+      "description": WEB_SEARCH_TOOL_DESCRIPTION,
+      "strict": True,
+      "parameters": {
+          "type": "object",
+          "additionalProperties": False,
+          "properties": {
+              "queries": {
+                  "type": "array",
+                  "description": QUERIES_PARAM_DESCRIPTION,
+                  "items": {"type": "string"},
+              },
+          },
+          "required": ["queries"],
+      },
+  }
+  ```
+
+  ```typescript Typescript theme={null}
+  const WEB_SEARCH_TOOL_DESCRIPTION = `Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline.`;
+
+  const QUERIES_PARAM_DESCRIPTION =
+    "An array of keyword-based search queries. Each query should be short, " +
+    "as longer queries may reduce performance. Do not provide more than three " +
+    "queries to maintain efficiency.";
+
+  const WEB_SEARCH_TOOL = {
+    type: "function" as const,
+    name: "web_search",
+    description: WEB_SEARCH_TOOL_DESCRIPTION,
+    strict: true,
+    parameters: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        queries: {
+          type: "array" as const,
+          description: QUERIES_PARAM_DESCRIPTION,
+          items: { type: "string" as const },
+        },
+      },
+      required: ["queries"],
+    },
+  };
+  ```
+</CodeGroup>
+
+<Warning>
+  **Contraintes du mode strict.** Avec `strict: true`, le JSON Schema doit définir `additionalProperties: false` et lister toutes les propriétés dans `required`. OpenAI refuse `maxItems`/`minItems` et les contraintes similaires en mode strict — imposez la règle des « trois requêtes maximum » via la description, puis tronquez par précaution dans votre gestionnaire.
+</Warning>
+
+<div id="tool-handler">
+  ## Gestionnaire de l&#39;outil
+</div>
+
+Le gestionnaire est une fine surcouche de `client.search.create`. La Search API accepte nativement un tableau de requêtes : le tableau produit par le modèle peut donc être transmis tel quel.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  perplexity = Perplexity()
+
+  def run_web_search(queries: list[str]) -> str:
+      """Appelle Perplexity Search et met en forme les résultats pour le modèle."""
+      # Limite défensive — la description demande ≤3, mais ne faites confiance à rien.
+      queries = queries[:3]
+
+      response = perplexity.search.create(query=queries, max_results=5)
+
+      lines = []
+      for result in response.results:
+          snippet = (result.snippet or "").strip().replace("\n", " ")
+          if len(snippet) > 400:
+              snippet = snippet[:400] + "…"
+          lines.append(f"- {result.title}\n  {result.url}\n  {snippet}")
+      return "\n\n".join(lines) if lines else "No results."
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const perplexity = new Perplexity();
+
+  async function runWebSearch(queries: string[]): Promise<string> {
+    const capped = queries.slice(0, 3);
+
+    const response = await perplexity.search.create({
+      query: capped,
+      max_results: 5,
+    });
+
+    const lines = response.results.map((r) => {
+      const snippet = (r.snippet ?? "").trim().replace(/\n/g, " ");
+      const trimmed = snippet.length > 400 ? `${snippet.slice(0, 400)}…` : snippet;
+      return `- ${r.title}\n  ${r.url}\n  ${trimmed}`;
+    });
+    return lines.length ? lines.join("\n\n") : "No results.";
+  }
+  ```
+</CodeGroup>
+
+<div id="tool-call-loop">
+  ## Boucle d&#39;appel d&#39;outils
+</div>
+
+L&#39;API Responses renvoie `response.output` sous la forme d&#39;une liste plate d&#39;éléments. Parcourez-la pour repérer les éléments dont le `type` vaut `"function_call"`, exécutez chaque appel, puis ajoutez au tableau `input` en cours un élément `function_call_output` correspondant. Rappelez `responses.create` jusqu&#39;à ce que la réponse ne contienne plus d&#39;appels de fonction.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from openai import OpenAI
+
+  openai_client = OpenAI()
+
+  def chat_with_search(user_prompt: str, model: str = "gpt-5.5") -> str:
+      # Le champ `input` de l'API Responses est une liste ordonnée d'éléments ; nous y ajoutons
+      # des éléments function_call_output au fil de la boucle.
+      input_items: list[dict] = [{"role": "user", "content": user_prompt}]
+
+      while True:
+          response = openai_client.responses.create(
+              model=model,
+              input=input_items,
+              tools=[WEB_SEARCH_TOOL],
+          )
+
+          function_calls = [
+              item for item in response.output if item.type == "function_call"
+          ]
+
+          if not function_calls:
+              return response.output_text
+
+          # Conserve les éléments function_call de l'assistant dans la conversation.
+          for item in response.output:
+              input_items.append(item.model_dump())
+
+          # Exécute chaque appel de fonction et ajoute le function_call_output correspondant.
+          for call in function_calls:
+              args = json.loads(call.arguments)
+              if call.name == "web_search":
+                  output = run_web_search(args["queries"])
+              else:
+                  output = json.dumps({"error": f"unknown tool: {call.name}"})
+              input_items.append({
+                  "type": "function_call_output",
+                  "call_id": call.call_id,
+                  "output": output,
+              })
+
+
+  if __name__ == "__main__":
+      answer = chat_with_search(
+          "What were the major AI infrastructure announcements this week?"
+      )
+      print(answer)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from "openai";
+
+  const openaiClient = new OpenAI();
+
+  async function chatWithSearch(
+    userPrompt: string,
+    model = "gpt-5.5",
+  ): Promise<string> {
+    const inputItems: OpenAI.Responses.ResponseInputItem[] = [
+      { role: "user", content: userPrompt },
+    ];
+
+    while (true) {
+      const response = await openaiClient.responses.create({
+        model,
+        input: inputItems,
+        tools: [WEB_SEARCH_TOOL],
+      });
+
+      const functionCalls = response.output.filter(
+        (item): item is OpenAI.Responses.ResponseFunctionToolCall =>
+          item.type === "function_call",
+      );
+
+      if (functionCalls.length === 0) {
+        return response.output_text;
+      }
+
+      // Conserve les éléments function_call de l'assistant dans la conversation.
+      inputItems.push(...response.output);
+
+      for (const call of functionCalls) {
+        const args = JSON.parse(call.arguments) as { queries: string[] };
+        let output: string;
+        if (call.name === "web_search") {
+          output = await runWebSearch(args.queries);
+        } else {
+          output = JSON.stringify({ error: `unknown tool: ${call.name}` });
+        }
+        inputItems.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output,
+        });
+      }
+    }
+  }
+
+  (async () => {
+    const answer = await chatWithSearch(
+      "What were the major AI infrastructure announcements this week?",
+    );
+    console.log(answer);
+  })();
+  ```
+</CodeGroup>
+
+<div id="streaming">
+  ## Streaming
+</div>
+
+Pour le streaming, utilisez `client.responses.stream(...)`. Le SDK émet des événements typés : `response.output_item.added` au démarrage d&#39;un élément `function_call`, `response.function_call_arguments.delta` pour chaque fragment du JSON des arguments, et `response.function_call_arguments.done` une fois la chaîne d&#39;arguments complète. Pour le reste, la structure de la boucle est identique à celle de la version sans streaming.
+
+<CodeGroup>
+  ```python Python theme={null}
+  with openai_client.responses.stream(
+      model="gpt-5.5",
+      input=input_items,
+      tools=[WEB_SEARCH_TOOL],
+  ) as stream:
+      for event in stream:
+          if event.type == "response.output_text.delta":
+              print(event.delta, end="", flush=True)
+      final = stream.get_final_response()
+
+  # Inspectez final.output pour y trouver les éléments function_call, puis reprenez la boucle
+  # de la même manière que dans la version sans streaming.
+  ```
+
+  ```typescript Typescript theme={null}
+  const stream = openaiClient.responses.stream({
+    model: "gpt-5.5",
+    input: inputItems,
+    tools: [WEB_SEARCH_TOOL],
+  });
+
+  for await (const event of stream) {
+    if (event.type === "response.output_text.delta") {
+      process.stdout.write(event.delta);
+    }
+  }
+  const final = await stream.finalResponse();
+  // Inspectez final.output pour y trouver les éléments function_call, comme dans la version sans streaming.
+  ```
+</CodeGroup>
+
+<div id="notes">
+  ## Notes
+</div>
+
+* **`call_id` associe les requêtes aux résultats.** Chaque élément `function_call_output` doit inclure le `call_id` d&#39;origine. Si plusieurs appels de fonction parallèles ont lieu dans un même tour de l&#39;assistant, chacun reçoit son propre résultat associé.
+* **État côté serveur.** Plutôt que de renvoyer l&#39;intégralité du tableau `input` à chaque tour, vous pouvez transmettre `previous_response_id=<id>` et n&#39;ajouter que les nouveaux éléments. C&#39;est particulièrement utile pour les longues boucles d&#39;agent.
+* **Raccourci `output_text`.** `response.output_text` aplatit pour vous le contenu textuel de l&#39;assistant. Si vous avez besoin d&#39;un accès plus fin (annotations, segments), parcourez `response.output` et extrayez les blocs `output_text` de l&#39;élément de message.
+* **Domaines et dates.** Transmettez `search_domain_filter`, `country` et les autres paramètres de la Search API dans `run_web_search` si vous souhaitez imposer des contraintes de récupération fixes. Consultez le [démarrage rapide de la Search API](/fr/docs/search/quickstart) pour la liste complète des paramètres.
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Utilisation avec le SDK Anthropic" icon="code" href="/fr/docs/search/agent-sdks/anthropic">
+    Intégrez la Search API à l&#39;API Messages d&#39;Anthropic.
+  </Card>
+
+  <Card title="Utilisation avec le SDK Gemini" icon="code" href="/fr/docs/search/agent-sdks/gemini">
+    Intégrez la Search API au SDK `google-genai` de Google.
+  </Card>
+
+  <Card title="Démarrage rapide de la Search API" icon="rocket" href="/fr/docs/search/quickstart">
+    Référence complète des paramètres de la Search API.
+  </Card>
+
+  <Card title="Bonnes pratiques de recherche" icon="lightbulb" href="/fr/docs/search/best-practices">
+    Modèles de conception pour les charges de recherche en production.
+  </Card>
+</CardGroup>

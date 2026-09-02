@@ -1,0 +1,436 @@
+---
+title: "Perplexity Router API"
+sidebarTitle: "Inicio rápido"
+description: "Acceso unificado a modelos de pesos abiertos a través de las APIs de OpenAI Chat Completions, OpenAI Responses y Anthropic Messages, con tu API key de Perplexity."
+---
+
+<Note>
+  La Router API está en vista previa privada. Escribe a [api@perplexity.ai](mailto:api@perplexity.ai) para solicitar acceso.
+</Note>
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+La Router API brinda acceso unificado a modelos de pesos abiertos alojados por Perplexity mediante una sola API y una sola API key. Envía solicitudes en formato OpenAI Chat Completions, OpenAI Responses o Anthropic Messages, elige cualquier modelo del [catálogo](/es/docs/router/models) y la plataforma enrutará cada solicitud automáticamente a un despliegue en buen estado: sin cuentas por proveedor, sin SDK adicionales y sin lógica de conmutación por error de tu lado.
+
+Cualquier modelo del catálogo puede invocarse mediante cualquier esquema compatible, sin importar cuál sea su proveedor original. Esto convierte al Router en un reemplazo directo de las integraciones existentes con OpenAI o Anthropic: solo hace falta cambiar la URL base y la API key.
+
+Usa la Router API para acceder directamente a los modelos con tus propios prompts y herramientas. Si necesitas respuestas fundamentadas en la web con citas integradas, usa la [Agent API](/es/docs/agent-api/quickstart).
+
+La URL base es `https://api.perplexity.ai/router/v1`, y tu API key de Perplexity actual funciona tal cual.
+
+<div id="installation">
+  ## Instalación
+</div>
+
+La Router API es compatible con los formatos Chat Completions y Responses de OpenAI, además del formato Messages de Anthropic, por lo que puedes usar el SDK oficial de cualquiera de los dos proveedores: instala el que corresponda a tu integración (o ambos):
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install openai       # Formatos Chat Completions y Responses de OpenAI
+  pip install anthropic    # Formato Messages de Anthropic
+  ```
+
+  ```bash Typescript theme={null}
+  npm install openai              # Formatos Chat Completions y Responses de OpenAI
+  npm install @anthropic-ai/sdk   # Formato Messages de Anthropic
+  ```
+</CodeGroup>
+
+<div id="authentication">
+  ## Autenticación
+</div>
+
+Define tu API key como variable de entorno:
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+</Tabs>
+
+Las solicitudes se autentican mediante un encabezado `Authorization: Bearer`, que los SDK establecen por ti a partir del parámetro `api_key`.
+
+<div id="basic-usage">
+  ## Uso básico
+</div>
+
+Apunta el SDK de OpenAI a la URL base del Router y pasa cualquier id de modelo del [catálogo](/es/docs/router/models). Los ids de modelo usan slugs con el formato `creator/model-name`, por lo que cambiar de proveedor implica modificar una sola línea:
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  response = client.chat.completions.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+  )
+
+  print(response.choices[0].message.content)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const response = await client.chat.completions.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Explain the CAP theorem in two sentences." }
+      ]
+  });
+
+  console.log(response.choices[0].message.content);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/chat/completions' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Respuesta">
+  ```json theme={null}
+  {
+    "id": "chatcmpl-Xr7aQ2mVb9L4tW8pDcEfGh1JkNs0y",
+    "object": "chat.completion",
+    "created": 1753747200,
+    "model": "perplexity/kimi-k3",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The CAP theorem states that a distributed system can guarantee at most two of three properties: consistency, availability, and partition tolerance. Since network partitions are unavoidable in practice, designers must choose between consistency and availability when a partition occurs.",
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 18,
+      "completion_tokens": 52,
+      "total_tokens": 70,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  }
+  ```
+</Accordion>
+
+La respuesta devuelve el id del modelo que solicitaste y siempre se factura según las [tarifas publicadas](/es/docs/router/models) de ese modelo, sin importar cómo se haya atendido la solicitud.
+
+<div id="openai-responses">
+  ## OpenAI Responses
+</div>
+
+Usa `client.responses.create()` con la misma URL base del Router cuando tu integración utilice el formato OpenAI Responses. El endpoint Responses del Router no mantiene el estado, por lo que debes incluir la conversación completa en `input` en cada solicitud.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  response = client.responses.create(
+      model="perplexity/kimi-k3",
+      input="Explain the CAP theorem in two sentences.",
+      max_output_tokens=1024
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const response = await client.responses.create({
+      model: "perplexity/kimi-k3",
+      input: "Explain the CAP theorem in two sentences.",
+      max_output_tokens: 1024
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/responses' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "input": "Explain the CAP theorem in two sentences.",
+      "max_output_tokens": 1024
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="streaming-chat-completions">
+  ## Chat Completions en streaming
+</div>
+
+Establece `stream: true` para recibir tokens como eventos enviados por el servidor (SSE). Para obtener el consumo de tokens en una respuesta en streaming, define también `stream_options: {"include_usage": true}`: el consumo llegará en un fragmento final, justo antes de `data: [DONE]`:
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  stream = client.chat.completions.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Write a haiku about network latency."}
+      ],
+      stream=True,
+      stream_options={"include_usage": True}
+  )
+
+  for chunk in stream:
+      if chunk.choices and chunk.choices[0].delta.content:
+          print(chunk.choices[0].delta.content, end="")
+      if chunk.usage:
+          print(f"\n\nTokens used: {chunk.usage.total_tokens}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const stream = await client.chat.completions.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Write a haiku about network latency." }
+      ],
+      stream: true,
+      stream_options: { include_usage: true }
+  });
+
+  for await (const chunk of stream) {
+      if (chunk.choices[0]?.delta?.content) {
+          process.stdout.write(chunk.choices[0].delta.content);
+      }
+      if (chunk.usage) {
+          console.log(`\n\nTokens used: ${chunk.usage.total_tokens}`);
+      }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -N -X POST 'https://api.perplexity.ai/router/v1/chat/completions' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Write a haiku about network latency."}
+      ],
+      "stream": true,
+      "stream_options": {"include_usage": true}
+    }'
+  ```
+</CodeGroup>
+
+<div id="anthropic-messages">
+  ## Anthropic Messages
+</div>
+
+Los mismos modelos están disponibles en el formato Anthropic Messages en `/router/v1/messages`, por lo que el código escrito para el SDK de Anthropic funciona con solo cambiar la URL base:
+
+<Info>
+  El SDK de Anthropic añade `/v1/messages` a su URL base, así que configúralo con `https://api.perplexity.ai/router` (sin `/v1`). El SDK de OpenAI añade `/chat/completions` y se configura con `https://api.perplexity.ai/router/v1`.
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from anthropic import Anthropic
+  import os
+
+  client = Anthropic(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router"
+  )
+
+  message = client.messages.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+  )
+
+  print(message.content[0].text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Anthropic from '@anthropic-ai/sdk';
+
+  const client = new Anthropic({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router"
+  });
+
+  const message = await client.messages.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Explain the CAP theorem in two sentences." }
+      ]
+  });
+
+  console.log(message.content[0].text);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/messages' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="discovering-models">
+  ## Descubrir modelos
+</div>
+
+Consulta el catálogo actual en cualquier momento: la respuesta es compatible con OpenAI, está ordenada por el id del modelo e incluye los precios base de tokens de cada modelo en USD por millón de tokens:
+
+```bash theme={null}
+curl 'https://api.perplexity.ai/router/v1/models' \
+  -H "Authorization: Bearer $PERPLEXITY_API_KEY" | jq
+```
+
+<Accordion title="Respuesta">
+  ```json theme={null}
+  {
+    "object": "list",
+    "data": [
+      {
+        "id": "perplexity/deepseek-v4-flash-0731",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 0.13,
+          "output": 0.26,
+          "cache_read": 0.028,
+          "unit": "usd_per_1m_tokens"
+        }
+      },
+      {
+        "id": "perplexity/glm-5.2",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 1.4,
+          "output": 4.4,
+          "cache_read": 0.14,
+          "unit": "usd_per_1m_tokens"
+        }
+      },
+      {
+        "id": "perplexity/kimi-k3",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 3,
+          "output": 15,
+          "cache_read": 0.3,
+          "unit": "usd_per_1m_tokens"
+        }
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+Consulta la [página de modelos](/es/docs/router/models) para ver el catálogo completo con precios.
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Modelos y precios" icon="brain" href="/es/docs/router/models">
+    El catálogo de modelos con las tarifas por token.
+  </Card>
+
+  <Card title="Enrutamiento y fiabilidad" icon="arrows-shuffle" href="/es/docs/router/routing-and-reliability">
+    Cómo se enrutan las solicitudes y qué ocurre cuando falla un proveedor.
+  </Card>
+
+  <Card title="Referencia de Chat Completions" icon="code" href="/es/api-reference/gateway-chat-completions-post">
+    Esquema completo de solicitud y respuesta.
+  </Card>
+
+  <Card title="Referencia de Responses" icon="code" href="/es/api-reference/gateway-responses-post">
+    El esquema del endpoint compatible con Responses de OpenAI.
+  </Card>
+
+  <Card title="Referencia de Messages" icon="code" href="/es/api-reference/gateway-messages-post">
+    El esquema del endpoint compatible con Anthropic.
+  </Card>
+</CardGroup>
+
+¿Necesitas ayuda? Visita nuestra [comunidad](https://community.perplexity.ai) para obtener soporte.

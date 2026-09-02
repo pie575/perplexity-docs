@@ -1,0 +1,331 @@
+---
+title: "Analytics API"
+description: "使用免费的组织级 API key，以编程方式查询贵组织的 Perplexity 使用分析数据"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+Analytics API 让 Perplexity Enterprise 组织能够以编程方式获取整个 Perplexity 平台上的组织使用分析数据——额度、查询量、活跃成员、连接器、工件、技能、空间、工作流以及任务时长——数据以分桶时间序列的形式返回，可导入 BI 工具或内部报表系统。额度用量和查询量还可以[按成员](#per-member-usage)细分。
+
+Analytics 请求免费，不消耗 API 额度。
+
+<Info>
+  此 API 仅面向 Perplexity Enterprise 组织开放。如果你看不到下文所述的 Analytics API 开关，可能是该功能尚未为你的组织启用——请联系你的 Perplexity 客户代表。
+</Info>
+
+<div id="getting-access">
+  ## 获取访问权限
+</div>
+
+访问权限由贵组织的管理员在 Perplexity 网页应用中管理：
+
+<Steps>
+  <Step title="启用 Analytics API">
+    在 Perplexity 网页应用中，打开组织的 **Computer** 设置，找到 **Analytics** 部分。开启 **Analytics API**，即可为你的组织开通 API 访问权限。
+  </Step>
+
+  <Step title="生成 API key">
+    在开关下方出现的一行中，点击 **Generate key**。
+  </Step>
+</Steps>
+
+分析 API key 有以下几个特点：
+
+* **组织级、由管理员管理** —— 该 API key 归属于组织，而非创建它的管理员。任何组织管理员都可以查看当前 API key 并重新生成。
+* **仅一个有效 API key** —— 每个组织最多只能有一个有效的分析 API key，重新生成会吊销此前的 API key。
+* **仅限分析用途** —— 该 API key 只能用于分析端点的身份验证，无法调用其他 Perplexity API，也不关联任何计费。
+* **禁用即吊销** —— 关闭 Analytics API 开关会永久吊销该 API key。
+
+<div id="authentication">
+  ## 身份验证
+</div>
+
+将 API key 作为 bearer token 传递：
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v1/analytics/computer/usage?dataset=credit_usage&start_time=1746057600" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+<div id="querying-usage">
+  ## 查询用量
+</div>
+
+`GET /v1/analytics/computer/usage` 每次请求返回单个数据集的一条时间序列。
+
+<div id="parameters">
+  ### 参数
+</div>
+
+| 参数             | 是否必需 | 说明                                                                                                                                                    |
+| -------------- | ---- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`      | 是    | 取值为 `credit_usage`、`query_volume`、`daily_active_users`、`connectors`、`artifacts`、`skills`、`spaces`、`workflows`、`task_durations` 之一。参见[数据集](#datasets)。 |
+| `start_time`   | 是    | 时间窗口起点，Unix 秒 (UTC) 。含该时刻。会向下对齐到分桶网格。                                                                                                                 |
+| `end_time`     | 否    | 时间窗口终点，Unix 秒 (UTC) 。不含该时刻。默认为当前时间；晚于当前时间的值会被截断为当前时间。                                                                                                 |
+| `bucket_width` | 否    | `1d` (默认) 或 `1h`。分桶按 UTC 网格对齐。`query_volume` 和 `daily_active_users` 仅接受 `1d`。                                                                         |
+| `limit`        | 否    | 每页分桶数。`1d`：默认 7，最大 31。`1h`：默认 24，最大 168。                                                                                                              |
+| `page`         | 否    | 上一次响应中 `next_page` 返回的不透明分页游标。仅当查询参数与签发时一致才有效。                                                                                                        |
+| `user_email`   | 否    | 将结果限定为组织中的某一位成员。`query_volume` 和 `daily_active_users` 不支持该参数。参见[按成员筛选](#filtering-by-member)。                                                         |
+
+<div id="datasets">
+  ### 数据集
+</div>
+
+每个数据集衡量的指标各不相同。大多数数据集既支持桶宽度，也支持成员过滤；而 `query_volume` 和 `daily_active_users` 面向整个组织按天聚合，两者都不支持。
+
+| 数据集                  | 统计对象       | 拆分维度                                               | 粒度与范围       |
+| -------------------- | ---------- | -------------------------------------------------- | ----------- |
+| `credit_usage`       | 额度         | `Model`、`Credit Source`                            | `1d` 或 `1h` |
+| `query_volume`       | 查询数        | `Feature`、`Model`、`Model Family`、`Project`、`Comet` | `1d`，仅限组织   |
+| `daily_active_users` | 当天活跃的去重成员数 | 无                                                  | `1d`，仅限组织   |
+| `connectors`         | 会话线程       | `Connector`                                        | `1d` 或 `1h` |
+| `artifacts`          | 会话线程       | `Artifact Type`                                    | `1d` 或 `1h` |
+| `skills`             | 会话线程       | `Skill`                                            | `1d` 或 `1h` |
+| `spaces`             | 会话线程       | `Space`                                            | `1d` 或 `1h` |
+| `workflows`          | 会话线程       | `Workflow`                                         | `1d` 或 `1h` |
+| `task_durations`     | 已完成的会话线程   | `Task Duration`                                    | `1d` 或 `1h` |
+
+若对按天统计的数据集请求 `bucket_width=1h`，或对仅限组织的数据集传入 `user_email`，接口将返回 `400`，而不是空序列。如需按成员统计查询量，请使用 [v2 端点](#per-member-usage)。
+
+<div id="response">
+  ### 响应
+</div>
+
+```json theme={null}
+{
+  "categories": ["Model", "Credit Source"],
+  "data": [
+    {
+      "start_time": 1746057600,
+      "end_time": 1746144000,
+      "count": 350,
+      "by_categories": {
+        "Model": [
+          { "category": "claude-opus-4-8", "count": 210 },
+          { "category": "claude-sonnet-4-6", "count": 120 }
+        ],
+        "Credit Source": [
+          { "category": "paid", "count": 250 },
+          { "category": "promo", "count": 80 }
+        ]
+      }
+    }
+  ],
+  "has_more": false,
+  "next_page": null
+}
+```
+
+* `categories` 按标准渲染顺序列出该数据集提供的细分维度——参见 [Datasets](#datasets)。大多数数据集只有一个维度，`credit_usage` 有两个，`query_volume` 有五个，`daily_active_users` 则没有维度 (`categories` 为 `[]`，且每个分桶的 `by_categories` 为 `{}`) 。
+* `data` 按时间顺序包含该页时间窗口内的所有分桶。没有数据的分桶其 `count` 为 `0`，且 `by_categories` 中每个维度下均为空列表。
+* `by_categories` 将每个维度标签映射到该分桶下的细分结果。维度内的类别即数据集的维度取值——`connectors` 为连接器名称，`artifacts` 为工件类型，`task_durations` 为时长区间，`credit_usage` 的 `Credit Source` 为 `paid`/`promo`，`credit_usage` 的 `Model` 为 model 名称，而 `spaces`/`skills`/`workflows` 则为成员为相应条目所起的标题。
+* 对于 `query_volume`，`Feature` 将每次查询归入 `Search` 或 `Computer`，`Model`/`Model Family` 则标明作答的 model (`Model` 为具体所选 model，`Model Family` 为更粗粒度的分组) 。`Project` 和 `Comet` 是相互重叠的子集，而非互斥划分——在项目中执行的查询同时也是 `Search` 或 `Computer` 查询——因此这两个维度的各项之和不等于 `count`。
+* 对于 `credit_usage`，`count` 可能大于任一单个细分维度的各项之和——没有类别归属的用量会计入总数，但不计入细分。
+
+<div id="time-windows-and-buckets">
+  ### 时间窗口与分桶
+</div>
+
+该 API **仅返回完整的 UTC 网格分桶**：
+
+* `start_time` 会向下对齐到所在分桶的起点，因此第一个分桶可能包含请求起始时间之前的用量。
+* `end_time` 不含端点，且会被限制在当前时间，随后向下对齐——进行中的分桶不会被返回。当 `bucket_width=1d` 时，当天的分桶不会包含在内；如需当日数据，请使用 `1h`。
+* 若有效时间窗口内不包含任何完整分桶，则返回 `200`，且 `data` 为空。
+
+<Note>
+  **数据新鲜度。** 分析数据存储是定期同步的，而非实时同步。近期分桶中的 `count` 为 `0`，可能表示数据尚未同步，而不一定是用量为零。当 `has_more` 为 `false` 时，说明你已到达当前的数据边界——请稍后再次轮询以获取更新的分桶。
+</Note>
+
+<div id="pagination">
+  ### 分页
+</div>
+
+当时间窗口跨越的分桶数超过 `limit` 时，响应中会包含 `has_more: true` 和一个 `next_page` 游标。请将该游标作为 `page` 回传，并保持其余参数完全一致——游标会经过严格校验，若与不同的参数搭配使用，将返回 `400`。
+
+```python theme={null}
+import requests
+
+BASE_URL = "https://api.perplexity.ai/v1/analytics/computer/usage"
+HEADERS = {"Authorization": "Bearer YOUR_API_KEY"}
+
+params = {
+    "dataset": "credit_usage",
+    "start_time": 1746057600,
+    "bucket_width": "1d",
+}
+
+buckets = []
+while True:
+    response = requests.get(BASE_URL, headers=HEADERS, params=params)
+    response.raise_for_status()
+    payload = response.json()
+    buckets.extend(payload["data"])
+    if not payload["has_more"]:
+        break
+    params["page"] = payload["next_page"]
+
+print(f"Fetched {len(buckets)} buckets")
+```
+
+<div id="filtering-by-member">
+  ### 按成员筛选
+</div>
+
+传入 `user_email`，可将数据序列限定为组织中的某一位成员：
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v1/analytics/computer/usage?dataset=credit_usage&start_time=1746057600&user_email=member@example.com" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+除 `query_volume` 和 `daily_active_users` 外，所有数据集均接受 `user_email`；这两个数据集按组织聚合，传入该参数会返回 `400`。如需按成员查看查询量，请使用 [v2 端点](#per-member-usage)。
+
+该邮箱必须属于你所在组织的现有成员。其他任何值 (包括未注册 Perplexity 账户的邮箱) 都会返回同样的通用 `400`：
+
+```json theme={null}
+{
+  "error": {
+    "message": "user_email does not match a member of this organization.",
+    "type": "invalid_request",
+    "code": 400
+  }
+}
+```
+
+<div id="per-member-usage">
+  ## 按成员统计用量
+</div>
+
+`GET /v2/analytics/computer/usage` 会将数据集**按成员**拆分，而不是汇总为单一的组织总量。该接口返回按天分桶的数据，每个桶中当天有用量的成员各占一行，并以邮箱作为键。它与 v1 使用相同的 API key、错误结构和限制。
+
+目前有两个数据集支持按成员分组，粒度为天：
+
+* `credit_usage` — 成员消耗的额度，并沿用 v1 中的 `Model` 和 `Credit Source` 拆分维度。
+* `query_volume` — 成员的查询量，包含 `Feature`、`Project` 和 `Comet` 拆分维度。
+
+`group_by` 以参数形式提供，因此后续新增分组方式时不会引入破坏性变更。
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v2/analytics/computer/usage?dataset=credit_usage&group_by=user_email&start_time=1746057600" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+<div id="parameters-2">
+  ### 参数
+</div>
+
+| 参数           | 是否必需 | 说明                                                     |
+| ------------ | ---- | ------------------------------------------------------ |
+| `dataset`    | 是    | `credit_usage` 或 `query_volume` —— 目前支持按成员分组的数据集。      |
+| `group_by`   | 是    | 必须为 `user_email` —— 目前唯一支持的分组方式。                       |
+| `start_time` | 是    | 时间窗口起点，unix 秒 (UTC) 。包含该时刻，并向下对齐到天。                    |
+| `end_time`   | 否    | 时间窗口终点，unix 秒 (UTC) 。不包含该时刻。默认为当前时间；晚于当前时间的值将被截断为当前时间。 |
+| `limit`      | 否    | 每页返回的成员行数。默认 50，最大 100。单页可能跨越多天。                       |
+| `page`       | 否    | 上一次响应中 `next_page` 返回的不透明分页游标。仅在查询参数与签发时完全一致的情况下有效。    |
+
+<div id="response-2">
+  ### 响应
+</div>
+
+```json theme={null}
+{
+  "categories": ["Model", "Credit Source"],
+  "data": [
+    {
+      "start_time": 1746057600,
+      "end_time": 1746144000,
+      "results": [
+        {
+          "user_email": "alice@example.com",
+          "count": 900,
+          "by_categories": {
+            "Model": [{ "category": "claude-opus-4-8", "count": 900 }],
+            "Credit Source": [{ "category": "paid", "count": 900 }]
+          }
+        },
+        {
+          "user_email": "bob@example.com",
+          "count": 500,
+          "by_categories": {
+            "Model": [{ "category": "claude-sonnet-4-6", "count": 500 }],
+            "Credit Source": [{ "category": "promo", "count": 500 }]
+          }
+        }
+      ]
+    }
+  ],
+  "has_more": true,
+  "next_page": "eyJwayI6ICJPUkcjLi4uIn0="
+}
+```
+
+* 每个 `data` 条目对应一个 UTC 日；`results` 中每行代表当天有用量的一名成员，按 `(day, member)` 顺序排列。无用量的日期会直接省略，而不是返回空结果。
+* `user_email` 用于标识成员。`count` 为该成员当天的额度消耗或查询数，具体取决于 `dataset`；`by_categories` 则承载该数据集的各个维度——即响应顶层 `categories` 中列出的内容。
+* 时间窗口与分桶语义与 v1 的 `1d` 模式一致——仅包含完整的 UTC 日，且同样适用[数据新鲜度](#time-windows-and-buckets)方面的注意事项。
+
+<div id="paginating-members">
+  ### 成员分页
+</div>
+
+v2 是按**成员行**分页的，而不是按天——单页可能跨越多天，且每位成员的每一天都算作 `limit` 中的一行。请持续翻页，直到 `has_more` 为 `false`；每次请求将 `next_page` 作为 `page` 传回，其余参数保持不变：
+
+```python theme={null}
+import requests
+
+BASE_URL = "https://api.perplexity.ai/v2/analytics/computer/usage"
+HEADERS = {"Authorization": "Bearer YOUR_API_KEY"}
+
+params = {
+    "dataset": "credit_usage",
+    "group_by": "user_email",
+    "start_time": 1746057600,
+}
+
+days = []
+while True:
+    response = requests.get(BASE_URL, headers=HEADERS, params=params)
+    response.raise_for_status()
+    payload = response.json()
+    days.extend(payload["data"])
+    if not payload["has_more"]:
+        break
+    params["page"] = payload["next_page"]
+
+print(f"Fetched {len(days)} daily buckets")
+```
+
+<div id="errors">
+  ## 错误
+</div>
+
+错误统一采用以下结构返回：
+
+```json theme={null}
+{
+  "error": {
+    "message": "Human-readable description.",
+    "type": "machine_readable_type",
+    "code": 400
+  }
+}
+```
+
+| 状态码   | `type`                        | 含义                                                                                                                                            |
+| ----- | ----------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400` | `bad_request`                 | 某个参数未通过校验 (类型错误或值格式不正确) 。                                                                                                                     |
+| `400` | `invalid_request`             | 参数格式正确，但语义无效——例如 `start_time` 晚于 `end_time`、时间窗口超过 90 天、分页游标使用不当、`user_email` 未匹配到任何成员，或 `dataset` 与不受支持的 `bucket_width` 或 `user_email` 同时使用。 |
+| `401` | `unauthorized`                | API key 缺失或无效。                                                                                                                                |
+| `404` | `feature_disabled`            | 你的组织未启用 Analytics API。                                                                                                                        |
+| `429` | `request_rate_limit_exceeded` | 超出速率限制。速率限制以组织为单位统计，涵盖该组织的所有密钥；请使用退避策略重试。                                                                                                     |
+
+<div id="limits">
+  ## 限制
+</div>
+
+* 每次请求的时间窗口最长为 **90 天** (如需查询更长时间范围，请在窗口内分页获取) 。
+* 速率限制**按组织**计算——组织下签发的所有密钥共享同一配额。

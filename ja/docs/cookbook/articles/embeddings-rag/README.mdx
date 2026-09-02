@@ -1,0 +1,942 @@
+---
+title: "Perplexity Embeddings を使った RAG"
+description: "Perplexity の標準エンベディングモデルとコンテキスト化エンベディングモデルを使って、エンドツーエンドの検索拡張生成パイプラインを構築します。"
+---
+
+このガイドでは、Perplexity の Embeddings API と Agent API を使って、検索拡張生成 (RAG) パイプラインを一から構築する手順を説明します。
+
+扱う内容は、ドキュメントのチャンク分割、標準モデルとコンテキスト化モデル双方によるエンベディング生成、インメモリのベクトルインデックスの構築、関連コンテキストのクエリ、そして根拠に基づいた回答の生成です。
+
+<Info>
+  このガイドでは、エンドツーエンドのパイプラインを中心に解説します。個々のエンベディング種別に関する API リファレンスの詳細は、[標準埋め込み](/ja/docs/embeddings/standard-embeddings)と[コンテキスト化埋め込み](/ja/docs/embeddings/contextualized-embeddings)を参照してください。
+</Info>
+
+<div id="pipeline-overview">
+  ## パイプラインの概要
+</div>
+
+RAG パイプラインは、回答を生成する前に自前のドキュメントから関連情報を検索し、モデルがパラメータとして持つ知識だけに頼るのではなく、自社のデータに基づいた応答を実現します。
+
+<img src="https://mintcdn.com/perplexity/mJe6zlFqiKQDJxBJ/docs/assets/images/cookbook/articles/embeddings-rag-diagram.svg?fit=max&auto=format&n=mJe6zlFqiKQDJxBJ&q=85&s=586467bbbce4759a125dd4b49827259c" alt="RAG Pipeline Diagram" width="1200" className="block dark:hidden" data-path="docs/assets/images/cookbook/articles/embeddings-rag-diagram.svg" />
+
+<img src="https://mintcdn.com/perplexity/mJe6zlFqiKQDJxBJ/docs/assets/images/cookbook/articles/embeddings-rag-diagram-dark.svg?fit=max&auto=format&n=mJe6zlFqiKQDJxBJ&q=85&s=87b6b2f5f5e8e797edb54cfd98d2152c" alt="RAG Pipeline Diagram" width="1200" className="hidden dark:block" data-path="docs/assets/images/cookbook/articles/embeddings-rag-diagram-dark.svg" />
+
+手順は次のとおりです。
+
+1. ソースドキュメントを、オーバーラップを持たせた扱いやすい単位に**チャンク分割**する。
+2. Perplexity の埋め込みモデルを使って各チャンクを**埋め込み**に変換する。
+3. 類似度検索のために埋め込みを**インデックス化**する。
+4. 同じモデルでユーザーの質問を埋め込みに変換して**クエリ**する。
+5. 最も類似度の高い上位 k 件のチャンクを**取得**する。
+6. 取得したコンテキストを Agent API に渡して回答を**生成**する。
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+Perplexity SDK をインストールします。
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+API key をまだお持ちでない場合:
+
+<Card title="Perplexity API Key を取得する" icon="key" arrow="True" horizontal="True" iconType="solid" cta="こちらをクリック" href="https://perplexity.ai/account/api">
+  API ポータルの **API Keys** タブに移動し、新しいキーを生成してください。
+</Card>
+
+次に、API key を環境変数としてエクスポートします。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="document-chunking">
+  ## ドキュメントのチャンク分割
+</div>
+
+意味的なまとまりを保ちつつ、modelのコンテキストウィンドウに収まる十分小さなチャンクにドキュメントを分割します。チャンクを重複させておくと、チャンク境界にある情報が失われずに済みます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> list[str]:
+      """文字数に基づいてテキストを重複ありのチャンクに分割する。"""
+      chunks = []
+      start = 0
+      while start < len(text):
+          end = start + chunk_size
+          chunk = text[start:end].strip()
+          if chunk:
+              chunks.append(chunk)
+          start += chunk_size - overlap
+      return chunks
+
+  document = """Retrieval-augmented generation (RAG) is a technique that combines
+  information retrieval with text generation. Rather than relying solely on a
+  language model's training data, RAG systems first search a knowledge base for
+  relevant documents, then use those documents as context when generating a
+  response. This reduces hallucinations and allows the system to provide answers
+  grounded in specific, up-to-date sources."""
+
+  chunks = chunk_text(document, chunk_size=300, overlap=50)
+  for i, chunk in enumerate(chunks):
+      print(f"Chunk {i} ({len(chunk)} chars): {chunk[:60]}...")
+  ```
+
+  ```typescript TypeScript theme={null}
+  function chunkText(text: string, chunkSize: number = 500, overlap: number = 100): string[] {
+      const chunks: string[] = [];
+      let start = 0;
+      while (start < text.length) {
+          const end = start + chunkSize;
+          const chunk = text.slice(start, end).trim();
+          if (chunk) chunks.push(chunk);
+          start += chunkSize - overlap;
+      }
+      return chunks;
+  }
+
+  const document = `Retrieval-augmented generation (RAG) is a technique that combines
+  information retrieval with text generation. Rather than relying solely on a
+  language model's training data, RAG systems first search a knowledge base for
+  relevant documents, then use those documents as context when generating a
+  response. This reduces hallucinations and allows the system to provide answers
+  grounded in specific, up-to-date sources.`;
+
+  const chunks = chunkText(document, 300, 50);
+  chunks.forEach((chunk, i) => {
+      console.log(`Chunk ${i} (${chunk.length} chars): ${chunk.slice(0, 60)}...`);
+  });
+  ```
+</CodeGroup>
+
+<Tip>
+  ほとんどのユースケースでは、チャンクサイズ300〜500文字、重複50〜100文字が適切です。構造化されたドキュメント (Markdown、HTML) の場合は、単純な文字数ではなく見出しや段落の境界で分割することを検討してください。
+</Tip>
+
+<div id="embedding-with-the-standard-model">
+  ## 標準モデルでの埋め込み
+</div>
+
+標準の埋め込みでは、各テキストを個別に扱います。チャンクが自己完結しており、前後の文脈に依存しない場合に使用してください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string: str) -> np.ndarray:
+      """base64エンコードされたint8の埋め込みをfloat32のnumpy配列にデコードする。"""
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  chunks = [
+      "RAG combines retrieval with generation to ground responses in real data.",
+      "Document chunking splits text into overlapping segments for embedding.",
+      "Cosine similarity measures the angle between two embedding vectors.",
+  ]
+
+  response = client.embeddings.create(input=chunks, model="pplx-embed-v1-4b")
+  embeddings = [decode_embedding(emb.embedding) for emb in response.data]
+  print(f"Embedded {len(embeddings)} chunks, each with {len(embeddings[0])} dimensions")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  const chunks = [
+      "RAG combines retrieval with generation to ground responses in real data.",
+      "Document chunking splits text into overlapping segments for embedding.",
+      "Cosine similarity measures the angle between two embedding vectors.",
+  ];
+
+  const response = await client.embeddings.create({
+      input: chunks,
+      model: "pplx-embed-v1-4b"
+  });
+  const embeddings = response.data.map(emb => decodeEmbedding(emb.embedding));
+  console.log(`Embedded ${embeddings.length} chunks, each with ${embeddings[0].length} dimensions`);
+  ```
+</CodeGroup>
+
+<div id="embedding-with-the-contextualized-model">
+  ## コンテキスト化モデルによる埋め込み
+</div>
+
+コンテキスト化埋め込みは、複数のチャンクが同一のドキュメントに属していることを認識します。モデルはチャンク間アテンションを使用するため、各チャンクの埋め込みには隣接チャンクの情報が反映されます。API 上の主な違いはネストされた配列構造です。内側の各配列が、単一ドキュメントに由来するチャンク群を表します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 2つのソースドキュメント、それぞれをチャンクに分割
+  doc1_chunks = [
+      "RAG combines retrieval with generation to produce grounded answers.",
+      "The retrieval step searches a vector index for chunks similar to the query.",
+      "The generation step uses retrieved context to produce a final response."
+  ]
+  doc2_chunks = [
+      "Embedding models convert text into dense vector representations.",
+      "Cosine similarity is the standard metric for comparing embeddings."
+  ]
+
+  # ネストされた配列として渡す（ドキュメントごとに内側の配列を1つ）
+  response = client.contextualized_embeddings.create(
+      input=[doc1_chunks, doc2_chunks],
+      model="pplx-embed-context-v1-4b"
+  )
+
+  # ネストされたレスポンス: response.data[doc_idx].data[chunk_idx]
+  for doc in response.data:
+      for chunk in doc.data:
+          print(f"Doc {doc.index}, Chunk {chunk.index}: {chunk.embedding[:20]}...")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const doc1Chunks = [
+      "RAG combines retrieval with generation to produce grounded answers.",
+      "The retrieval step searches a vector index for chunks similar to the query.",
+      "The generation step uses retrieved context to produce a final response."
+  ];
+  const doc2Chunks = [
+      "Embedding models convert text into dense vector representations.",
+      "Cosine similarity is the standard metric for comparing embeddings."
+  ];
+
+  // ネストされた配列として渡す（ドキュメントごとに内側の配列を1つ）
+  const response = await client.contextualizedEmbeddings.create({
+      input: [doc1Chunks, doc2Chunks],
+      model: "pplx-embed-context-v1-4b"
+  });
+
+  // ネストされたレスポンス: response.data[docIdx].data[chunkIdx]
+  for (const doc of response.data) {
+      for (const chunk of doc.data) {
+          console.log(`Doc ${doc.index}, Chunk ${chunk.index}: ${chunk.embedding.slice(0, 20)}...`);
+      }
+  }
+  ```
+</CodeGroup>
+
+<Warning>
+  **チャンクの順序が重要です。** 各ドキュメント内のチャンクは、元の並び順のまま渡してください。コンテキスト化モデルは位置関係を手がかりに隣接チャンクを関連付けるため、順序を入れ替えると埋め込みの品質が低下します。
+</Warning>
+
+<div id="querying-a-contextualized-index">
+  ## コンテキスト化インデックスへのクエリ
+</div>
+
+コンテキスト化埋め込みを使用する場合は、各クエリを要素が1つだけの内側リスト (例: `[[query]]`) でラップし、APIが単一チャンクのドキュメントとして扱うようにします。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+  import base64, numpy as np
+
+  client = Perplexity()
+
+  def decode_embedding(b64: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+      return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+  # コンテキスト化モデルでインデックスを作成（チャンク間でアテンションを共有）
+  doc_chunks = [
+      "RAG combines retrieval with generation to produce grounded answers.",
+      "The retrieval step finds chunks similar to the user query.",
+      "The generation step uses retrieved context to produce a final response.",
+  ]
+  ctx_response = client.contextualized_embeddings.create(
+      input=[doc_chunks],  # ネストされた配列: 1ドキュメントにつき内側リスト1つ
+      model="pplx-embed-context-v1-4b"
+  )
+  index = [
+      {"embedding": decode_embedding(chunk.embedding), "text": doc_chunks[chunk.index]}
+      for chunk in ctx_response.data[0].data
+  ]
+
+  # インデックスにクエリを実行
+  query = "How does retrieval work in RAG?"
+  q_response = client.contextualized_embeddings.create(
+      input=[[query]], model="pplx-embed-context-v1-4b"
+  )
+  q_emb = decode_embedding(q_response.data[0].data[0].embedding)
+  results = sorted(index, key=lambda x: cosine_similarity(q_emb, x["embedding"]), reverse=True)
+  print(f"Top result: {results[0]['text']}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64: string): Int8Array {
+      const buffer = Buffer.from(b64, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dot = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dot += a[i] * b[i]; normA += a[i] ** 2; normB += b[i] ** 2;
+      }
+      return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // コンテキスト化モデルでインデックスを作成
+  const docChunks = [
+      "RAG combines retrieval with generation to produce grounded answers.",
+      "The retrieval step finds chunks similar to the user query.",
+      "The generation step uses retrieved context to produce a final response.",
+  ];
+  const ctxResponse = await client.contextualizedEmbeddings.create({
+      input: [docChunks],  // ネストされた配列: 1ドキュメントにつき内側配列1つ
+      model: "pplx-embed-context-v1-4b"
+  });
+  const index = ctxResponse.data[0].data.map(chunk => ({
+      embedding: decodeEmbedding(chunk.embedding),
+      text: docChunks[chunk.index],
+  }));
+
+  // インデックスにクエリを実行
+  const query = "How does retrieval work in RAG?";
+  const qResponse = await client.contextualizedEmbeddings.create({
+      input: [[query]], model: "pplx-embed-context-v1-4b"
+  });
+  const qEmb = decodeEmbedding(qResponse.data[0].data[0].embedding);
+  const results = [...index].sort((a, b) => cosineSimilarity(qEmb, b.embedding) - cosineSimilarity(qEmb, a.embedding));
+  console.log(`Top result: ${results[0].text}`);
+  ```
+</CodeGroup>
+
+<div id="building-a-vector-index">
+  ## ベクトルインデックスの構築
+</div>
+
+この例では、シンプルなインメモリインデックスに対し、numpy でコサイン類似度を計算します。数百万規模のベクトルを扱う本番システムでは、専用のベクトルデータベース (Pinecone、Weaviate、Qdrant など) を使用してください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+      return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+  # インデックスに登録するドキュメント
+  documents = {
+      "RAG Overview": [
+          "Retrieval-augmented generation grounds LLM responses in external data.",
+          "RAG reduces hallucinations by providing factual context to the model.",
+          "A typical RAG pipeline has three stages: indexing, retrieval, and generation."
+      ],
+      "Embedding Models": [
+          "Embedding models map text to dense vector representations.",
+          "Similar texts produce vectors that are close in the embedding space.",
+          "Perplexity offers both standard and contextualized embedding models."
+      ]
+  }
+
+  # インデックスの構築: (embedding, text, doc_title) のタプルのリスト
+  index = []
+  for title, chunks in documents.items():
+      response = client.embeddings.create(input=chunks, model="pplx-embed-v1-4b")
+      for emb_obj in response.data:
+          index.append({
+              "embedding": decode_embedding(emb_obj.embedding),
+              "text": chunks[emb_obj.index],
+              "doc_title": title
+          })
+
+  print(f"Indexed {len(index)} chunks")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dot = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dot += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  const documents: Record<string, string[]> = {
+      "RAG Overview": [
+          "Retrieval-augmented generation grounds LLM responses in external data.",
+          "RAG reduces hallucinations by providing factual context to the model.",
+          "A typical RAG pipeline has three stages: indexing, retrieval, and generation."
+      ],
+      "Embedding Models": [
+          "Embedding models map text to dense vector representations.",
+          "Similar texts produce vectors that are close in the embedding space.",
+          "Perplexity offers both standard and contextualized embedding models."
+      ]
+  };
+
+  // インデックスの構築
+  const index: { embedding: Int8Array; text: string; docTitle: string }[] = [];
+  for (const [title, chunks] of Object.entries(documents)) {
+      const response = await client.embeddings.create({
+          input: chunks,
+          model: "pplx-embed-v1-4b"
+      });
+      for (const embObj of response.data) {
+          index.push({
+              embedding: decodeEmbedding(embObj.embedding),
+              text: chunks[embObj.index],
+              docTitle: title
+          });
+      }
+  }
+
+  console.log(`Indexed ${index.length} chunks`);
+  ```
+</CodeGroup>
+
+<div id="query-pipeline">
+  ## クエリパイプライン
+</div>
+
+クエリパイプライン全体では、ユーザーの質問を埋め込み、類似度の高い上位k件のチャンクを取得して、それらをコンテキストとして Agent API に渡し、回答を生成します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  def rag_query(question: str, index: list[dict], top_k: int = 3, min_score: float = 0.3) -> str:
+      """質問を埋め込み -> 類似チャンクを取得 -> 回答を生成"""
+      # ステップ1: 質問を埋め込む
+      query_response = client.embeddings.create(input=[question], model="pplx-embed-v1-4b")
+      query_emb = decode_embedding(query_response.data[0].embedding)
+
+      # ステップ2: 最小類似度しきい値を超える上位k件のチャンクを取得する
+      scored = sorted(
+          [{"score": cosine_similarity(query_emb, item["embedding"]), **item} for item in index],
+          key=lambda x: x["score"], reverse=True
+      )[:top_k]
+      scored = [item for item in scored if item["score"] >= min_score]
+
+      if not scored:
+          return "No relevant context found for this question."
+
+      # 各チャンクに出典情報を付与する
+      context = "\n\n".join(
+          f"[Source: {item['doc_title']}]\n{item['text']}" for item in scored
+      )
+
+      # ステップ3: Agent API で回答を生成する
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=question,
+          instructions=(
+              "Answer based only on the provided context. "
+              "Cite sources by name when referencing specific information. "
+              "If the context does not contain enough information, say so.\n\n"
+              f"Context:\n{context}"
+          )
+      )
+      return response.output_text
+
+  answer = rag_query("What are the stages of a RAG pipeline?", index)
+  print(answer)
+  ```
+
+  ```typescript TypeScript theme={null}
+  async function ragQuery(question: string, idx: typeof index, topK: number = 3, minScore: number = 0.3): Promise<string> {
+      // ステップ1: 質問を埋め込む
+      const qResponse = await client.embeddings.create({
+          input: [question], model: "pplx-embed-v1-4b"
+      });
+      const qEmb = decodeEmbedding(qResponse.data[0].embedding);
+
+      // ステップ2: 最小類似度しきい値を超える上位k件のチャンクを取得する
+      const scored = idx
+          .map(item => ({ ...item, score: cosineSimilarity(qEmb, item.embedding) }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, topK)
+          .filter(item => item.score >= minScore);
+
+      if (scored.length === 0) {
+          return "No relevant context found for this question.";
+      }
+
+      // 各チャンクに出典情報を付与する
+      const context = scored
+          .map(item => `[Source: ${item.docTitle}]\n${item.text}`)
+          .join("\n\n");
+
+      // ステップ3: Agent API で回答を生成する
+      const response = await client.responses.create({
+          model: "openai/gpt-5.4",
+          input: question,
+          instructions: `Answer based only on the provided context. Cite sources by name when referencing specific information. If the context does not contain enough information, say so.\n\nContext:\n${context}`
+      });
+      return response.output_text;
+  }
+
+  const answer = await ragQuery("What are the stages of a RAG pipeline?", index);
+  console.log(answer);
+  ```
+</CodeGroup>
+
+<Tip>
+  ほとんどのユースケースでは `top_k=3`、`min_score=0.3` から始めてください。漠然とした質問やチャンクが短い場合は `top_k` を5〜7に上げます。取得したチャンクに無関係な情報が混ざる場合は `min_score` を0.5〜0.7に上げてください。内容が多岐にわたるクエリや曖昧なクエリでは0.2程度まで下げます。
+</Tip>
+
+<div id="standard-vs-contextualized-comparison">
+  ## 標準版と文脈考慮版の比較
+</div>
+
+| 項目                   | 標準版 (`pplx-embed-v1-4b`)                  | 文脈考慮版 (`pplx-embed-context-v1-4b`)                         |
+| -------------------- | ----------------------------------------- | ---------------------------------------------------------- |
+| **入力形式**             | テキストのフラットなリスト                             | ドキュメント単位でグループ化したネスト配列                                      |
+| **文脈の考慮**            | 各テキストを個別に埋め込み                             | 同一ドキュメント内でチャンク間の文脈を共有                                      |
+| **適した用途**            | FAQ項目、単独のテキスト、短いドキュメント                    | ドキュメントの段落、記事のセクション                                         |
+| **チャンクの順序**          | 順序は問わない                                   | 元のドキュメントと同じ順序にする必要がある                                      |
+| **クエリの埋め込み**         | `client.embeddings.create(input=[query])` | `client.contextualized_embeddings.create(input=[[query]])` |
+| **価格 (4bモデル)&#x20;**&#x20;| $0.03 / 100万トークン                          | $0.05 / 100万トークン                                           |
+
+<div id="when-to-use-standard-embeddings">
+  ### 標準埋め込みを使うべき場合
+</div>
+
+* チャンクが自己完結しており、周囲の文脈に依存しない場合。
+* コンテンツがFAQのペア、製品説明、短く独立した項目で構成されている場合。
+* tokenあたりのコストを最小限に抑えたい場合。
+
+<div id="when-to-use-contextualized-embeddings">
+  ### コンテキスト化埋め込みを使うべき場面
+</div>
+
+* チャンクが長い文書に由来し、その意味が周辺のテキストに依存する場合。
+* 「このアプローチは性能を20%向上させます」のようなチャンクが、前後の文脈があって初めて意味を持つ場合。
+* 記事、レポート、技術文書の段落を埋め込む場合。
+* わずかなコスト増で、より高い検索精度を得たい場合。
+
+<div id="matryoshka-dimensions">
+  ## Matryoshka 次元
+</div>
+
+Perplexity の埋め込みモデルは Matryoshka Representation Learning (MRL) に対応しており、最も重要な情報が先頭 N 次元に集約されます。API から直接、削減した次元数をリクエストすることで、検索の高速化とストレージの削減が可能です。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  texts = ["Matryoshka embeddings allow dimension reduction without re-embedding."]
+
+  def decode_embedding(b64: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64), dtype=np.int8)
+
+  # フル次元（4b モデルでは 2560）
+  full = client.embeddings.create(input=texts, model="pplx-embed-v1-4b")
+
+  # API 経由で 512 次元に削減
+  reduced = client.embeddings.create(input=texts, model="pplx-embed-v1-4b", dimensions=512)
+
+  print(f"Full: {len(decode_embedding(full.data[0].embedding))} dimensions")
+  print(f"Reduced: {len(decode_embedding(reduced.data[0].embedding))} dimensions")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const texts = ["Matryoshka embeddings allow dimension reduction without re-embedding."];
+
+  function decodeEmbedding(b64: string): Int8Array {
+      const buffer = Buffer.from(b64, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  // フル次元（4b モデルでは 2560）
+  const full = await client.embeddings.create({ input: texts, model: "pplx-embed-v1-4b" });
+
+  // API 経由で 512 次元に削減
+  const reduced = await client.embeddings.create({
+      input: texts, model: "pplx-embed-v1-4b", dimensions: 512
+  });
+
+  console.log(`Full: ${decodeEmbedding(full.data[0].embedding).length} dimensions`);
+  console.log(`Reduced: ${decodeEmbedding(reduced.data[0].embedding).length} dimensions`);
+  ```
+</CodeGroup>
+
+`pplx-embed-v1-4b` モデルにおける次元削減のトレードオフ:
+
+|     次元     | ベクトルあたりのストレージ | 相対的な品質 | ユースケース                  |
+| :--------: | :-----------: | :----: | ----------------------- |
+| 2560 (フル)  |     2.5 KB    |   最高   | 精度を最優先する場合、小規模データセット    |
+|    1024    |      1 KB     |  非常に高い | 多くの用途でバランスが良い           |
+|     512    |     512 B     |   高い   | 大規模検索、高速な検索             |
+|     256    |     256 B     |   中程度  | 極めて大規模なデータセット、粗いフィルタリング |
+|     128    |     128 B     |   低め   | 一次候補の絞り込み               |
+
+<Tip>
+  ベクトルを手動で切り詰めるのではなく、API 呼び出しの `dimensions` パラメータを使用してください。API は要求された次元数に応じて適切な正規化を行います。まずはフル次元から始め、ストレージやレイテンシがボトルネックになった場合にのみ削減してください。
+</Tip>
+
+<div id="batch-processing">
+  ## バッチ処理
+</div>
+
+大規模なドキュメントコレクションを埋め込む場合は、APIのレート制限内に収まるようバッチ単位で処理してください。標準APIは1リクエストあたり最大512件のテキストを受け付け、合計120,000 tokenの上限があります。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import base64
+  import numpy as np
+  from perplexity import AsyncPerplexity
+
+  def decode_embedding(b64_string: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  async def batch_embed(texts: list[str], batch_size: int = 100) -> list[np.ndarray]:
+      """レート制限に配慮しながらテキストをバッチで埋め込む。"""
+      async with AsyncPerplexity() as client:
+          all_embeddings = []
+          for i in range(0, len(texts), batch_size):
+              batch = texts[i:i + batch_size]
+              response = await client.embeddings.create(
+                  input=batch, model="pplx-embed-v1-4b"
+              )
+              all_embeddings.extend(decode_embedding(e.embedding) for e in response.data)
+              print(f"Embedded {min(i + batch_size, len(texts))}/{len(texts)}")
+              if i + batch_size < len(texts):
+                  await asyncio.sleep(0.1)  # バッチ間の短い待機
+          return all_embeddings
+
+  # 使用例
+  texts = [f"Document chunk number {i} with content." for i in range(500)]
+  embeddings = asyncio.run(batch_embed(texts, batch_size=100))
+  print(f"Total: {len(embeddings)} embeddings")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  async function batchEmbed(texts: string[], batchSize: number = 100): Promise<Int8Array[]> {
+      const allEmbeddings: Int8Array[] = [];
+      for (let i = 0; i < texts.length; i += batchSize) {
+          const batch = texts.slice(i, i + batchSize);
+          const response = await client.embeddings.create({
+              input: batch, model: "pplx-embed-v1-4b"
+          });
+          allEmbeddings.push(...response.data.map(e => decodeEmbedding(e.embedding)));
+          console.log(`Embedded ${Math.min(i + batchSize, texts.length)}/${texts.length}`);
+          if (i + batchSize < texts.length) {
+              await new Promise(r => setTimeout(r, 100)); // バッチ間の短い待機
+          }
+      }
+      return allEmbeddings;
+  }
+
+  // 使用例
+  const texts = Array.from({ length: 500 }, (_, i) => `Document chunk number ${i} with content.`);
+  const embeddings = await batchEmbed(texts, 100);
+  console.log(`Total: ${embeddings.length} embeddings`);
+  ```
+</CodeGroup>
+
+<Info>
+  コンテキスト化された埋め込みの場合は、同じパターンで `client.contextualized_embeddings.create(input=batch_of_doc_arrays)` を使い、ドキュメント単位でバッチ処理してください。コンテキスト化APIは1リクエストあたり最大512件のドキュメント、合計16,000チャンクを受け付けます。
+</Info>
+
+<Warning>
+  **レート制限:** バッチサイズはAPIの上限 (標準は512テキスト / 120,000 token、コンテキスト化は512ドキュメント / 16,000チャンク) に対して十分な余裕を持たせ、リクエスト間に短い待機を入れてスロットリングを回避してください。
+</Warning>
+
+<div id="complete-example">
+  ## 完全な例
+</div>
+
+2 つのドキュメントをコンテキスト化された埋め込みでインデックスし、インデックス済みのコンテンツに対する質問に回答する、自己完結型のパイプラインです。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # --- ヘルパー関数 ---
+
+  def chunk_text(text: str, chunk_size: int = 400, overlap: int = 80) -> list[str]:
+      chunks, start = [], 0
+      while start < len(text):
+          chunk = text[start:start + chunk_size].strip()
+          if chunk:
+              chunks.append(chunk)
+          start += chunk_size - overlap
+      return chunks
+
+  def decode_embedding(b64: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+      return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+  # --- ソースドキュメント ---
+
+  DOCUMENTS = {
+      "Quantum Computing": (
+          "Quantum computers use qubits that can exist in superposition, representing "
+          "0 and 1 simultaneously. Unlike classical bits, qubits leverage quantum "
+          "interference to perform calculations. Quantum entanglement allows qubits to "
+          "be correlated, enabling parallel processing at scale. Current quantum computers "
+          "from IBM, Google, and others have dozens to hundreds of physical qubits."
+      ),
+      "Machine Learning": (
+          "Machine learning enables computers to learn from data without explicit "
+          "programming. Supervised learning uses labeled examples to train models for "
+          "classification and regression. Neural networks with many layers (deep learning) "
+          "excel at image recognition and language tasks. Training requires large datasets "
+          "and significant compute, often using GPUs or TPUs."
+      ),
+  }
+
+  # --- ステップ1: modelでインデックスを構築 ---
+
+  def build_index(documents: dict[str, str]) -> list[dict]:
+      index = []
+      for title, text in documents.items():
+          chunks = chunk_text(text)
+          response = client.contextualized_embeddings.create(
+              input=[chunks],
+              model="pplx-embed-context-v1-4b"
+          )
+          for chunk_obj in response.data[0].data:
+              index.append({
+                  "embedding": decode_embedding(chunk_obj.embedding),
+                  "text": chunks[chunk_obj.index],
+                  "doc_title": title,
+              })
+      print(f"Indexed {len(index)} chunks from {len(documents)} documents")
+      return index
+
+  # --- ステップ2: インデックスにクエリして取得し、回答を生成 ---
+
+  def rag_query(question: str, index: list[dict], top_k: int = 3, min_score: float = 0.3) -> str:
+      q_resp = client.contextualized_embeddings.create(
+          input=[[question]], model="pplx-embed-context-v1-4b"
+      )
+      q_emb = decode_embedding(q_resp.data[0].data[0].embedding)
+
+      results = sorted(
+          [{"score": cosine_similarity(q_emb, item["embedding"]), **item} for item in index],
+          key=lambda x: x["score"], reverse=True
+      )[:top_k]
+      results = [r for r in results if r["score"] >= min_score]
+
+      if not results:
+          return "No relevant context found for this question."
+
+      context = "\n\n".join(f"[{r['doc_title']}]\n{r['text']}" for r in results)
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=question,
+          instructions=(
+              "Answer based only on the provided context. "
+              "Cite the source name in brackets when referencing information. "
+              "If the context is insufficient, say so.\n\n"
+              f"Context:\n{context}"
+          )
+      )
+      return response.output_text
+
+  # --- 実行 ---
+
+  if __name__ == "__main__":
+      index = build_index(DOCUMENTS)
+
+      questions = [
+          "What makes qubits different from classical bits?",
+          "What hardware is used to train machine learning models?",
+      ]
+      for q in questions:
+          print(f"\nQ: {q}")
+          print(f"A: {rag_query(q, index)}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // --- ヘルパー ---
+
+  function chunkText(text: string, chunkSize = 400, overlap = 80): string[] {
+      const chunks: string[] = [];
+      let start = 0;
+      while (start < text.length) {
+          const chunk = text.slice(start, start + chunkSize).trim();
+          if (chunk) chunks.push(chunk);
+          start += chunkSize - overlap;
+      }
+      return chunks;
+  }
+
+  function decodeEmbedding(b64: string): Int8Array {
+      const buffer = Buffer.from(b64, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dot = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dot += a[i] * b[i]; normA += a[i] ** 2; normB += b[i] ** 2;
+      }
+      return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // --- ソースドキュメント ---
+
+  const DOCUMENTS: Record<string, string> = {
+      "Quantum Computing": "Quantum computers use qubits that can exist in superposition, representing 0 and 1 simultaneously. Unlike classical bits, qubits leverage quantum interference to perform calculations. Quantum entanglement allows qubits to be correlated, enabling parallel processing at scale. Current quantum computers from IBM, Google, and others have dozens to hundreds of physical qubits.",
+      "Machine Learning": "Machine learning enables computers to learn from data without explicit programming. Supervised learning uses labeled examples to train models for classification and regression. Neural networks with many layers (deep learning) excel at image recognition and language tasks. Training requires large datasets and significant compute, often using GPUs or TPUs.",
+  };
+
+  type IndexEntry = { embedding: Int8Array; text: string; docTitle: string };
+
+  // --- ステップ1: モデルでインデックスを作成 ---
+
+  async function buildIndex(documents: Record<string, string>): Promise<IndexEntry[]> {
+      const index: IndexEntry[] = [];
+      for (const [title, text] of Object.entries(documents)) {
+          const chunks = chunkText(text);
+          const response = await client.contextualizedEmbeddings.create({
+              input: [chunks],
+              model: "pplx-embed-context-v1-4b"
+          });
+          for (const chunkObj of response.data[0].data) {
+              index.push({
+                  embedding: decodeEmbedding(chunkObj.embedding),
+                  text: chunks[chunkObj.index],
+                  docTitle: title,
+              });
+          }
+      }
+      console.log(`Indexed ${index.length} chunks from ${Object.keys(documents).length} documents`);
+      return index;
+  }
+
+  // --- ステップ2: インデックスへのクエリ、取得、生成 ---
+
+  async function ragQuery(
+      question: string,
+      index: IndexEntry[],
+      topK = 3,
+      minScore = 0.3
+  ): Promise<string> {
+      const qResp = await client.contextualizedEmbeddings.create({
+          input: [[question]], model: "pplx-embed-context-v1-4b"
+      });
+      const qEmb = decodeEmbedding(qResp.data[0].data[0].embedding);
+
+      const results = index
+          .map(item => ({ ...item, score: cosineSimilarity(qEmb, item.embedding) }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, topK)
+          .filter(r => r.score >= minScore);
+
+      if (results.length === 0) return "No relevant context found for this question.";
+
+      const context = results.map(r => `[${r.docTitle}]\n${r.text}`).join("\n\n");
+
+      const response = await client.responses.create({
+          model: "openai/gpt-5.4",
+          input: question,
+          instructions: `Answer based only on the provided context. Cite the source name in brackets when referencing information. If the context is insufficient, say so.\n\nContext:\n${context}`,
+      });
+      return response.output_text;
+  }
+
+  // --- 実行 ---
+
+  const index = await buildIndex(DOCUMENTS);
+
+  const questions = [
+      "What makes qubits different from classical bits?",
+      "What hardware is used to train machine learning models?",
+  ];
+  for (const q of questions) {
+      console.log(`\nQ: ${q}`);
+      console.log(`A: ${await ragQuery(q, index)}`);
+  }
+  ```
+</CodeGroup>
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="標準埋め込み" icon="cube" href="/ja/docs/embeddings/standard-embeddings">
+    標準埋め込みのパラメータとレスポンス形式のAPIリファレンス。
+  </Card>
+
+  <Card title="コンテキスト化埋め込み" icon="file-lines" href="/ja/docs/embeddings/contextualized-embeddings">
+    コンテキスト化埋め込みのパラメータとレスポンス形式のAPIリファレンス。
+  </Card>
+
+  <Card title="ベストプラクティス" icon="star" href="/ja/docs/embeddings/best-practices">
+    エンコード形式、類似度指標、正規化、エラー処理について。
+  </Card>
+
+  <Card title="Agent API" icon="robot" href="/ja/docs/agent-api">
+    回答生成に使用するResponses APIについて詳しく解説します。
+  </Card>
+</CardGroup>

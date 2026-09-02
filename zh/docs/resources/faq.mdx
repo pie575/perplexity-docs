@@ -1,0 +1,209 @@
+---
+title: "常见问题"
+description: "解答有关 Perplexity API 的常见问题，涵盖模型、输出与功能、搜索行为、计费与限额、错误、数据隐私以及技术支持。"
+---
+
+<div id="models">
+  ## Models
+</div>
+
+<AccordionGroup>
+  <Accordion title="API 目前支持网页浏览吗？">
+    支持。Agent API 内置了[网页搜索工具](/zh/docs/agent-api/tools/web-search)，而面向研究场景的 [preset](/zh/docs/agent-api/presets) 默认已启用搜索。
+  </Accordion>
+
+  <Accordion title="各个 model 的上下文窗口有多大？">
+    上下文窗口大小因 model 而异。详见 [Agent API models 页面](/zh/docs/agent-api/models)及其中链接的提供方文档。
+  </Accordion>
+
+  <Accordion title="你们支持微调吗？">
+    目前我们不支持微调。
+  </Accordion>
+
+  <Accordion title="model 的版本管理和弃用机制是怎样的？">
+    某个 model 下线时，我们会在[更新日志](/zh/docs/resources/changelog)中发布公告，并给出推荐的替代 model。为避免服务中断，请在请求中显式指定 model ID，不要依赖默认值，同时关注更新日志中的弃用通知。当前可用的 model 列表见 [Agent API models](/zh/docs/agent-api/models) 页面。
+  </Accordion>
+</AccordionGroup>
+
+<div id="output-capabilities">
+  ## 输出与能力
+</div>
+
+<AccordionGroup>
+  <Accordion title="我能获得结构化（JSON）输出吗？">
+    可以。使用 `text.format` 字段将响应约束为指定的 JSON schema。示例参见[结构化输出](/zh/docs/agent-api/output-control#structured-outputs)。
+  </Accordion>
+
+  <Accordion title="API 支持流式响应吗？">
+    支持。传入 `stream: true`，即可在生成过程中逐步接收响应，无需等待完整结果。参见[流式响应](/zh/docs/agent-api/output-control#streaming-responses)。[官方 SDK](/zh/docs/sdk/overview) 直接提供了流式能力。
+  </Accordion>
+
+  <Accordion title="API 支持工具调用或函数调用吗？">
+    支持。Agent API 提供了多种内置工具，包括 [web search](/zh/docs/agent-api/tools/web-search)、[fetch URL content](/zh/docs/agent-api/tools/fetch-url-content)、[people search](/zh/docs/agent-api/tools/people-search)、[finance search](/zh/docs/agent-api/tools/finance-search) 以及[代码 sandbox](/zh/docs/agent-api/tools/sandbox)。model 会在回答请求的过程中自行决定何时调用这些工具。
+  </Accordion>
+
+  <Accordion title="该 API 在多大程度上兼容 OpenAI？">
+    Perplexity API 在设计上与 OpenAI 的 chat completions 端点大体兼容：采用类似的结构——包括 `id`、`model`、`usage` 等字段——并支持 `model`、`messages`、`stream` 等对应参数。
+
+    **与标准 OpenAI 响应的主要差异包括：**
+
+    * **响应对象结构：**
+      * OpenAI 响应的 `object` 值通常为 `"chat.completion"`，并带有 `created` 时间戳；而我们的响应使用 `object: "response"` 和 `created_at` 字段。
+      * 我们的响应内容不放在 `choices` 数组中，而是放在 `output` 数组里，其中包含详细的消息对象。
+
+    * **消息细节：**
+      * 输出中的每条消息都包含 `type` (通常为 `"message"`) 、唯一的 `id` 和 `status`。
+      * 实际文本嵌套在 `content` 数组中，数组元素为对象，包含 `type`、`text` 以及用于补充上下文的 `annotations` 数组。
+
+    * **额外字段：**
+      * 我们的 API 响应还提供标准 OpenAI 响应中没有的元信息 (例如 `status`、`error`、`instructions` 和 `max_output_tokens`) 。
+      * `usage` 字段也有所不同，它提供输入和输出 token 的详细拆分 (包括 `input_tokens_details`、`output_tokens_details` 等字段) 。
+
+    这些差异旨在提供更强的功能和更丰富的上下文信息，同时保持与 OpenAI API 设计的广泛兼容性。
+  </Accordion>
+
+  <Accordion title="Deep Research 中的推理 token 与答案中的 CoT 相同吗？">
+    Deep Research 中的推理 token 与答案中的 CoT 略有不同——这些 token 用于对研究材料进行推理，之后才通过 CoT 生成最终输出。
+  </Accordion>
+</AccordionGroup>
+
+<div id="search-results">
+  ## 搜索与结果
+</div>
+
+<AccordionGroup>
+  <Accordion title="为什么 API 返回的结果与网页界面不同？">
+    1. API 与网页界面使用同一套搜索系统，但配置有所不同，因此输出结果可能存在差异。
+    2. 对于同一个查询，API 与网页界面底层使用的 AI model 可能不同。
+  </Accordion>
+
+  <Accordion title="API 提供的互联网数据访问能力与 Perplexity 网页界面完全一致吗？">
+    是的，API 提供的互联网数据访问能力与 Perplexity 网页平台完全相同。
+  </Accordion>
+
+  <Accordion title="API 是否使用内容过滤或 SafeSearch？">
+    是的，API 默认启用以 SafeSearch 形式实现的内容过滤，可从搜索结果中过滤掉可能令人反感或不适宜的内容 (包括色情内容) 。SafeSearch 是一项自动过滤机制，作用于所有搜索结果，以提供更安全的使用体验。你可以在[官方维基百科页面](https://en.wikipedia.org/wiki/SafeSearch)进一步了解 SafeSearch。
+  </Accordion>
+</AccordionGroup>
+
+<div id="account-billing-limits">
+  ## 账户、账单与限制
+</div>
+
+<AccordionGroup>
+  <Accordion title="API 定价如何计算？">
+    定价基于用量，且因 API 而异。Router API 按各 model 公布的费率以 token 计费，不收取单次请求费用；Agent API 按供应商直接费率以 token 计费，不加价，并对工具按调用次数收费；Search API 按请求计费；Embeddings 按 token 计费。完整说明请参见[定价页面](/zh/docs/getting-started/pricing)。
+  </Accordion>
+
+  <Accordion title="如何充值额度或设置账单？">
+    在 API 控制台的[账单页面](https://console.perplexity.ai/project/billing)购买 API 额度。启用**自动充值**后，余额不足时会自动补充额度，避免服务中断。你也可以通过 [AWS Marketplace](/zh/docs/resources/aws-marketplace) 购买额度以合并账单，或[联系我们的销售团队](https://perplexity.typeform.com/to/m3WnMaG6)进行企业采购。随着累计购买金额增长，你的[用量等级](/zh/docs/admin/rate-limits-usage-tiers)会自动提升。
+  </Accordion>
+
+  <Accordion title="如何升级到下一个用量等级？">
+    账户升级到下一个用量等级的唯一途径是提高累计额度购买金额。
+
+    各等级对应的消费标准如下：
+
+    | 等级     | 额度购买金额 (累计)  |
+    | ------ | ------------ |
+    | Tier 0 | -            |
+    | Tier 1 | $50          |
+    | Tier 2 | $250         |
+    | Tier 3 | $500         |
+    | Tier 4 | $1000        |
+    | Tier 5 | $5000        |
+  </Accordion>
+
+  <Accordion title="API 调用次数有哪些限制？">
+    你可以在[这里查看我们的速率限制](/zh/docs/admin/rate-limits-usage-tiers)。
+  </Accordion>
+
+  <Accordion title="如何按 API key 跟踪我的支出/用量？">
+    我们支持按 API key 跟踪账单。请前往以下位置查看：
+
+    **Settings &gt; View Dashboard &gt; Invoice history &gt; Invoices**
+
+    然后点击任意一张发票，总账单中的每一项末尾都会带有一个代码 (例如 pro (743S)) 。这 4 个字符就是你 API key 的后 4 位。
+  </Accordion>
+</AccordionGroup>
+
+<div id="errors-troubleshooting">
+  ## 错误与故障排查
+</div>
+
+<AccordionGroup>
+  <Accordion title="遇到 401：授权错误应该如何处理？">
+    401 错误码表示所提供的 API key 无效、已被删除，或所属账户的额度已耗尽。你可能需要在[账单页面](https://console.perplexity.ai/project/billing)购买更多额度。开启自动充值可避免此问题。
+  </Accordion>
+
+  <Accordion title="遇到 429：请求过多错误应该如何处理？">
+    429 表示你已超出速率限制。速率限制随[用量等级](/zh/docs/admin/rate-limits-usage-tiers)提升，并采用漏桶算法，允许在限额范围内出现短时突发流量。建议使用指数退避加抖动进行重试，在批处理任务中利用突发容量,并升级层级——或[申请自定义限额](https://perplexity.typeform.com/to/yctmfyVT)——以持续获得更高吞吐量。两种 SDK 的重试示例参见[错误处理](/zh/docs/sdk/error-handling)。
+  </Accordion>
+
+  <Accordion title="出现 5xx 或连接、超时错误该怎么办？">
+    5xx 响应表示服务端出现临时性问题，连接或超时错误通常说明存在网络问题。请使用指数退避重试，设置合理的客户端超时时间，并记录 `X-Request-ID` 响应头，以便在联系支持团队时一并提供。[错误处理指南](/zh/docs/sdk/error-handling)介绍了 SDK 的异常类型与恢复模式。
+  </Accordion>
+
+  <Accordion title="在哪里可以查看 API 状态和故障事件？">
+    当前 API 可用性及历史故障事件请见[系统状态页面](/zh/docs/resources/status)。如果你遇到的错误在该页面上没有说明，请通过下方的支持渠道联系我们。
+  </Accordion>
+</AccordionGroup>
+
+<div id="data-privacy-security">
+  ## 数据、隐私与安全
+</div>
+
+<AccordionGroup>
+  <Accordion title="通过 API 提交的用户数据会被用于模型训练或其他用途吗？">
+    我们收集以下类型的信息：
+
+    **API 使用数据：** 我们会收集可计费的使用元数据，例如请求数和 token 数。你可以在 API 控制台的[账单页面](https://console.perplexity.ai/project/billing)查看自己的用量。
+
+    **用户账户信息：** 当你注册账户时，我们会收集你的姓名、电子邮件地址及其他相关联系方式。
+
+    我们不会保留通过 API 发送的任何查询数据，也不会使用你的任何数据进行训练。
+  </Accordion>
+
+  <Accordion title="Perplexity 的语言模型托管在哪里？">
+    我们的算力由 Amazon Web Services 提供，部署在北美。默认情况下，API 对用户提示词数据实行零天保留，这些数据绝不会用于 AI 训练。
+  </Accordion>
+
+  <Accordion title="该 API 具备哪些安全与合规认证？">
+    Perplexity 持有 **SOC 2 Type II** 报告、**2025 年 HIPAA 差距评估**以及 **CAIQlite** 云安全评估。这些报告以及数据处理和其他合规文档 (例如用于 DPA 或 GDPR 请求的文档) 均可通过 [Perplexity 信任中心](https://trust.perplexity.ai/)获取。概览请参阅[隐私与安全](/zh/docs/resources/privacy-security)；如需获取未在该处发布的文档，请[联系我们](mailto:api@perplexity.ai)。
+  </Accordion>
+</AccordionGroup>
+
+<div id="support-reliability">
+  ## 支持与可靠性
+</div>
+
+<AccordionGroup>
+  <Accordion title="如何提交缺陷报告？提交后会怎样处理？">
+    如需提交缺陷报告，请前往我们的[开发者社区](https://community.perplexity.ai/)，在 “Bug Reports” 分类下创建新帖子。
+
+    非常感谢你的耐心等待，我们会尽快回复。由于目前报告量较大，回复可能需要一些时间，但请放心，我们正在处理。
+  </Accordion>
+
+  <Accordion title="如何提出新功能需求？">
+    功能需求是指为改进 Perplexity API 平台或为其新增功能而提出的建议，例如：
+
+    * 请求支持新的 model 或新能力 (例如图像处理、微调选项)
+    * 申请新的 API 参数 (例如更多筛选条件、搜索选项)
+    * 建议性能优化 (例如更快的响应速度、更好的引用处理)
+    * 增强现有 API 功能 (例如提升流式传输可靠性、增加新的输出格式)
+
+    如果你的需求属于以上情形，请在此处提交功能需求：[Github Feature requests](https://github.com/ppl-ai/api-discussion/issues)
+  </Accordion>
+
+  <Accordion title="了解 API 更新的最佳方式是什么？">
+    我们会通过邮件向用户通知最新进展，同时也会发布在 [更新日志](/zh/docs/resources/changelog) 中。
+  </Accordion>
+
+  <Accordion title="Perplexity 是否提供服务质量保障，例如服务可用性、故障频率以及故障时的目标恢复时间？">
+    目前我们不提供此类保障。
+  </Accordion>
+
+  <Accordion title="我还有其他问题或遇到了故障">
+    其他 API 相关咨询请联系 [api@perplexity.ai](mailto:api@perplexity.ai) 或 [support@perplexity.ai](mailto:support@perplexity.ai)。你也可以在我们的[讨论论坛](https://github.com/ppl-ai/api-discussion/discussions)发帖，我们会尽快回复。
+  </Accordion>
+</AccordionGroup>

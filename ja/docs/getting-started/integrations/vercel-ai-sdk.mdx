@@ -1,0 +1,207 @@
+---
+title: "Vercel AI SDK で Perplexity を使う"
+description: "@ai-sdk/open-responses プロバイダーを利用して、Vercel AI SDK（Next.js）アプリから Perplexity の Agent API を呼び出します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[Vercel AI SDK](https://ai-sdk.dev) は、AI アプリケーション (Next.js や React) を構築するための TypeScript ツールキットで、ストリーミングのプリミティブや `useChat` などの UI フックを備えています。
+Perplexity の `/v1/responses` エンドポイントを指定した [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses) プロバイダー経由で [Agent API](/ja/docs/agent-api/quickstart) を利用すれば、`generateText`、`streamText`、`useChat` にそのまま渡せるネイティブな AI SDK の モデル を取得できます。
+
+<Info>
+  プロバイダーはサーバー側 (Next.js の Route Handler、Server Action、API ルートなど) で作成してください。こうすることで `PERPLEXITY_API_KEY` がブラウザーに渡ることはありません。
+</Info>
+
+<div id="installation">
+  ## インストール
+</div>
+
+<CodeGroup>
+  ```bash pnpm theme={null}
+  pnpm add ai @ai-sdk/open-responses
+  ```
+
+  ```bash npm theme={null}
+  npm install ai @ai-sdk/open-responses
+  ```
+</CodeGroup>
+
+<div id="api-key-setup">
+  ## API keyの設定
+</div>
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  API ポータルで Perplexity API キーを生成します。
+</Card>
+
+<div id="quickstart">
+  ## クイックスタート
+</div>
+
+`createOpenResponses` でプロバイダーを作成し、`/v1/responses` を指定して `generateText` を呼び出します。
+
+```typescript theme={null}
+import { createOpenResponses } from "@ai-sdk/open-responses";
+import { generateText } from "ai";
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const { text } = await generateText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "Explain the difference between supervised and unsupervised learning.",
+});
+
+console.log(text);
+```
+
+<div id="web-grounded-answers">
+  ## Web に基づく回答
+</div>
+
+[`web_search`](/ja/docs/agent-api/tools/web-search) ツールを追加すると、Perplexity の Web 検索によるリアルタイムな結果に基づいて回答を生成できます。この検索は、Perplexity 自身の回答エンジンを支えているものと同じです。
+プロバイダーは固定のリクエストボディを送信し、Agent API の組み込みツールを第一級のオプションとしては公開していません。そのため、プロバイダーの `fetch` フックでボディに追加して `web_search` を有効化します。
+
+```typescript theme={null}
+import { createOpenResponses } from "@ai-sdk/open-responses";
+import { generateText } from "ai";
+
+// プロバイダーは結果に情報源を含めないため、フック内で取得しておきます。
+let sources = [];
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  fetch: async (url, options) => {
+    const body = JSON.parse(options.body as string);
+    // リクエストボディに追加して、組み込みの web_search ツールを有効化します。
+    body.tools = [{ type: "web_search" }];
+    const response = await fetch(url, { ...options, body: JSON.stringify(body) });
+
+    // 情報源は、レスポンスの `output` 配列内の独立した `search_results` 項目として返されます。
+    // （ストリーミングの場合はボディが JSON ではなくイベントストリームになるためスキップします。）
+    if (!body.stream) {
+      const raw = await response.clone().json();
+      sources = raw.output
+        .filter((item) => item.type === "search_results")
+        .flatMap((item) => item.results); // 各要素: { title, url, snippet, date, ... }
+    }
+
+    return response;
+  },
+});
+
+const { text } = await generateText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "What are the latest breakthroughs in fusion energy this year?",
+});
+
+console.log(text);
+
+for (const source of sources) {
+  console.log(source.title, source.url);
+}
+```
+
+回答はサーバー側でグラウンディングされますが、`@ai-sdk/open-responses` は結果にソースを含めないため、`result.sources` は空のままです。
+そのため、`fetch` フックではレスポンスの `output` 配列にある生の `search_results` 項目からソースを読み取っています。
+レスポンスの完全な構造については [Reading Sources from the Response](/ja/docs/agent-api/prompt-guide) を参照してください。
+
+<div id="presets">
+  ## Presets
+</div>
+
+[Preset](/ja/docs/agent-api/presets)は、ユースケースに合わせたモデル、ツール、チューニング済みのシステムプロンプトをひとまとめにしたもので、これらを自分で構成する必要がなくなります。
+同じ `fetch` フック内で、リクエストボディに `preset` を設定します。presetには `web_search` があらかじめ含まれているため、ツールを個別に追加する必要はありません。
+
+```typescript theme={null}
+// fetch フックでは、ツールを追加する代わりに preset を設定します:
+body.preset = "fast"; // fast | low | medium | high | xhigh
+```
+
+<Tip>
+  preset は `fast` (単一の事実の検索) から `xhigh` (sandbox でのコード実行を伴う、オープンエンドなエージェント的作業) まで段階的に用意されています。
+  適切なものを選ぶには [preset ガイド](/ja/docs/agent-api/presets) を参照してください。
+</Tip>
+
+<div id="streaming">
+  ## ストリーミング
+</div>
+
+token 単位で出力する場合は `streamText` を使用します。
+Next.js の Route Handler では `result.toUIMessageStreamResponse()` を返し、クライアント側で `useChat` を使ってレンダリングします。
+
+```typescript theme={null}
+import { streamText } from "ai";
+
+// 上で作成した `perplexity` プロバイダーを再利用します。
+const result = streamText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "What are the latest breakthroughs in fusion energy this year?",
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+<div id="supported-models">
+  ## サポートされているモデル
+</div>
+
+[Agent API のモデル](/ja/docs/agent-api/models) であれば、OpenAI、Anthropic、Google、xAI など、どれでもプロバイダーに指定できます。いずれも 1 つの Perplexity キーでルーティングされます。
+
+```typescript theme={null}
+perplexity("openai/gpt-5.6-sol");
+perplexity("google/gemini-3-flash-preview");
+perplexity("xai/grok-4.5");
+```
+
+<Card title="Agent API のモデル" icon="sparkles" href="/ja/docs/agent-api/models">
+  利用可能なすべてのモデルと料金をご覧いただけます。
+</Card>
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Open Responses プロバイダー" icon="plug" href="https://ai-sdk.dev/providers/ai-sdk-providers/open-responses">
+    このページで使用する AI SDK プロバイダーを設定します。
+  </Card>
+
+  <Card title="Agent API クイックスタート" icon="bolt" href="/ja/docs/agent-api/quickstart">
+    Agent API の モデル、ツール、preset を活用して開発しましょう。
+  </Card>
+
+  <Card title="Web Search ツール" icon="magnifying-glass" href="/ja/docs/agent-api/tools/web-search">
+    Perplexity のリアルタイムな Web 検索に基づいて回答を生成します。
+  </Card>
+
+  <Card title="Vercel AI SDK ドキュメント" icon="globe" href="https://ai-sdk.dev/docs">
+    中核となる生成 API と UI フック。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+統合でお困りですか？
+
+* [Vercel AI SDK ドキュメント](https://ai-sdk.dev/docs)を参照する
+* [よくある質問](/ja/docs/resources/faq)を確認する

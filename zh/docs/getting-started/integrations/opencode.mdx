@@ -1,0 +1,222 @@
+---
+title: "在 OpenCode 中使用 Perplexity"
+description: "在 OpenCode AI 编程智能体中使用 Perplexity Agent API——一个端点，接入所有前沿模型，只需一个 API key。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概述
+</div>
+
+[OpenCode](https://opencode.ai) 是一款开源的 AI 编程智能体，可运行在终端、IDE 或桌面端。Perplexity **Agent API** 兼容 OpenAI Responses API，通过单一端点即可调用 OpenAI、Anthropic、Google、xAI 和 Perplexity 的前沿模型。
+
+将 OpenCode 接入 Agent API 后，你可以为编程智能体或研究子智能体自由切换任意前沿模型，而无需同时打理多个服务商账户。
+
+<Info>
+  **OpenCode** 内置多智能体编排能力：你可以配置 `primary` 智能体负责编程，并配置 `subagent` 智能体处理专项任务。详见 [opencode.ai](https://opencode.ai)。
+</Info>
+
+<div id="setup">
+  ## 设置
+</div>
+
+Agent API 实现了 OpenAI Responses API，因此你可以在 OpenCode 中通过 [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses) 将其配置为自定义提供方，并指向 Perplexity 的 `/v1/responses` 端点。
+
+<Steps>
+  <Step title="安装 OpenCode">
+    参照 [OpenCode 安装指南](https://opencode.ai/docs)，按你所用的平台 (macOS、Linux、Windows) 进行安装。
+  </Step>
+
+  <Step title="获取 Perplexity API key">
+    <Card title="获取 API Key" icon="key" href="https://console.perplexity.ai/project/keys">
+      在 API 门户中生成你的 Perplexity API key。
+    </Card>
+
+    在 shell 中导出该密钥：
+
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="pplx-..."
+    ```
+  </Step>
+
+  <Step title="配置 OpenCode">
+    在 `opencode.json` (或 `~/.config/opencode/config.json`) 中将 Perplexity Agent API 添加为提供方，具体配置见下文。
+  </Step>
+
+  <Step title="验证">
+    运行 `/models`，确认选择器中已出现 Perplexity Agent 模型。
+  </Step>
+</Steps>
+
+<div id="provider-configuration">
+  ## 提供方配置
+</div>
+
+`@ai-sdk/open-responses` 提供方专为实现 OpenAI Responses API 的服务端而设计——这正是 Agent API 所采用的协议方言。将其 `url` 指向 Perplexity 的 `/v1/responses` 端点，并在选择器中声明需要使用的模型。
+
+<Warning>
+  请使用 **Responses API** 提供方——`@ai-sdk/open-responses` (如本文所示) 或 `@ai-sdk/openai`，后者的 `.responses()` 模型会请求同一路由。**切勿**使用 `@ai-sdk/openai-compatible`：它面向的是 Chat Completions (`/v1/chat/completions`) ，并非有效的 Agent API 路由，会返回 404。
+</Warning>
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "provider": {
+    "perplexity-agent": {
+      "npm": "@ai-sdk/open-responses",
+      "name": "Perplexity Agent API",
+      "options": {
+        "name": "perplexity-agent",
+        "url": "https://api.perplexity.ai/v1/responses",
+        "apiKey": "{env:PERPLEXITY_API_KEY}",
+        "headers": {
+          "X-Pplx-Integration": "opencode/1.0"
+        }
+      },
+      "models": {
+        "openai/gpt-5.6-sol": { "name": "GPT-5.6 Sol" },
+        "openai/gpt-5.6-terra": { "name": "GPT-5.6 Terra" },
+        "openai/gpt-5.6-luna": { "name": "GPT-5.6 Luna" },
+        "anthropic/claude-opus-4-8": { "name": "Claude Opus 4.8" },
+        "anthropic/claude-sonnet-5": { "name": "Claude Sonnet 5" },
+        "anthropic/claude-haiku-4-5": { "name": "Claude Haiku 4.5" },
+        "google/gemini-3.1-pro-preview": { "name": "Gemini 3.1 Pro" },
+        "xai/grok-4.5": { "name": "Grok 4.5" },
+        "perplexity/kimi-k2.7-code": { "name": "Kimi K2.7 Code" }
+      }
+    }
+  }
+}
+```
+
+就这么简单——一个 API key，一个端点，畅享所有前沿模型。
+
+<div id="available-models">
+  ## 可用模型
+</div>
+
+Agent API 可路由到来自多个提供方的模型。完整的官方列表参见[模型页面](/zh/docs/agent-api/models);以下是编码场景中最常用的标识符:
+
+| 模型 ID                           | 适用场景           |
+| ------------------------------- | -------------- |
+| `openai/gpt-5.6-sol`            | 深度推理、长周期编码任务   |
+| `openai/gpt-5.6-terra`          | 通用型编程智能体       |
+| `openai/gpt-5.6-luna`           | 快速、低成本的代码补全    |
+| `anthropic/claude-opus-4-8`     | 最高质量的代码审查与架构设计 |
+| `anthropic/claude-sonnet-5`     | 编码与工具调用兼顾      |
+| `anthropic/claude-haiku-4-5`    | 快速、低成本的代码修改    |
+| `google/gemini-3.1-pro-preview` | 长上下文重构         |
+| `xai/grok-4.5`                  | 低延迟代码修改        |
+| `perplexity/kimi-k2.7-code`     | 专用于编码与智能体工作流   |
+
+<div id="use-as-a-primary-coding-model">
+  ## 用作主力编码模型
+</div>
+
+在 `opencode.json` 中将任意 Agent API 模型设为默认模型：
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "perplexity-agent/anthropic/claude-opus-4-8"
+}
+```
+
+OpenCode 使用 `<providerId>/<modelId>` 的格式来引用每个模型，因此完整标识符为 `perplexity-agent/anthropic/claude-opus-4-8`。
+
+<div id="multi-agent-setup">
+  ## 多智能体配置
+</div>
+
+为不同的 OpenCode 智能体分配不同的 Agent API 模型,全部通过同一个 Perplexity 密钥完成。下面的示例中,主编码智能体会将任务委派给一个更轻量的只读子智能体:
+
+```json theme={null}
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "perplexity-agent/anthropic/claude-opus-4-8",
+  "agent": {
+    "coder": {
+      "description": "Primary coding agent",
+      "mode": "primary",
+      "model": "perplexity-agent/anthropic/claude-opus-4-8",
+      "temperature": 0.2,
+      "tools": {
+        "write": true,
+        "edit": true,
+        "bash": true
+      }
+    },
+    "researcher": {
+      "description": "Read-only subagent for lookups and summarization",
+      "mode": "subagent",
+      "model": "perplexity-agent/openai/gpt-5.6-sol",
+      "temperature": 0.4,
+      "tools": {
+        "write": false,
+        "edit": false,
+        "bash": false
+      }
+    }
+  }
+}
+```
+
+`coder` 拥有文件系统权限 (写入、编辑、bash) ，而只读的 `researcher` 则运行在另一个模型上，负责分析与总结。两者的 `model` 都可以替换为任意 [Agent API 模型](/zh/docs/agent-api/models)。
+
+验证配置是否生效：
+
+```
+/agents   # 应显示 coder 和 researcher
+/models   # 应包含 Perplexity Agent 模型
+```
+
+<div id="why-the-agent-api">
+  ## 为什么选择 Agent API
+</div>
+
+Agent API 专为智能体循环而打造：
+
+* **一个密钥，畅用所有模型** —— 在 OpenAI、Anthropic、Google、xAI 和 Perplexity 之间自由切换，无需分别管理多个账户。
+* **兼容 OpenAI Responses** —— 可直接填入任何支持 `/v1/responses` 的 OpenCode 提供方配置位。
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 快速上手" icon="bolt" href="/zh/docs/agent-api/quickstart">
+    发送你的第一个 Agent API 请求。
+  </Card>
+
+  <Card title="Agent API 模型" icon="sparkles" href="/zh/docs/agent-api/models">
+    完整模型目录与定价。
+  </Card>
+
+  <Card title="Perplexity SDK" icon="code" href="/zh/docs/sdk/overview">
+    直接调用 Agent API，使用 preset 和工具，实现完全控制。
+  </Card>
+
+  <Card title="OpenAI 兼容性" icon="plug" href="/zh/docs/agent-api/openai-compatibility">
+    搭配任意 OpenAI SDK 使用 Agent API。
+  </Card>
+
+  <Card title="OpenCode 提供方" icon="book" href="https://opencode.ai/docs/providers/">
+    OpenCode 自定义提供方参考。
+  </Card>
+
+  <Card title="OpenCode 文档" icon="book-open" href="https://opencode.ai/docs">
+    OpenCode 官方文档。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中遇到问题？
+
+* 查阅 [OpenCode 文档](https://opencode.ai/docs)
+* 查看我们的[常见问题](/zh/docs/resources/faq)

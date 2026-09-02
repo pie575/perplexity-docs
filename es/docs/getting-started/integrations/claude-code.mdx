@@ -1,0 +1,342 @@
+---
+title: "Perplexity con Claude Code"
+description: "Usa Perplexity dentro de Claude Code: llama a la API desde el código de tu proyecto con el SDK oficial de TypeScript, utiliza la URL base compatible con OpenAI o configura el MCP de documentación de Perplexity alojado para consultar la documentación sin salir del editor."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+[Claude Code](https://docs.claude.com/en/docs/claude-code) es la herramienta de programación agéntica de Anthropic que vive en tu terminal, tu IDE y tu CI. Puede editar archivos, ejecutar comandos y llamar a servidores de Model Context Protocol (MCP) como parte de su flujo de trabajo. Esta guía cubre tres vías de integración con Perplexity:
+
+<CardGroup cols={3}>
+  <Card title="SDK oficial de TypeScript" icon="code">
+    Deja que Claude Code escriba y ejecute código de aplicación que llame directamente a la Perplexity API. **Recomendado.**
+  </Card>
+
+  <Card title="SDK compatible con OpenAI" icon="plug">
+    Reutiliza un cliente de OpenAI existente apuntando `baseURL` a `https://api.perplexity.ai/v1`.
+  </Card>
+
+  <Card title="MCP de Claude Code" icon="book">
+    Registra el MCP alojado de la documentación de Perplexity con `claude mcp add` para que Claude Code pueda consultar la documentación de Perplexity mientras trabajas.
+  </Card>
+</CardGroup>
+
+<Info>
+  **Vía recomendada:** haz que Claude Code desarrolle funcionalidades sobre el código de tu proyecto usando el SDK oficial (o el SDK compatible con OpenAI) y registra el MCP de la documentación de Perplexity para consultarla desde el editor. Claude Code **no** admite oficialmente sustituir su modelo subyacente por la Perplexity API; consulta [Reemplazar el modelo de Claude Code (no recomendado)](#replacing-claude-codes-model-not-recommended).
+</Info>
+
+<div id="prerequisites">
+  ## Requisitos previos
+</div>
+
+* Claude Code instalado — consulta la [guía de inicio rápido de Claude Code](https://docs.claude.com/en/docs/claude-code/quickstart)
+* Node.js 18+ para los ejemplos en TypeScript
+* Una API key de Perplexity
+
+<Card title="Obtener API key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Obtener key" href="https://console.perplexity.ai/project/keys">
+  Genera una API key desde el portal de la Perplexity API.
+</Card>
+
+<div id="api-key-handling">
+  ## Gestión de la API key
+</div>
+
+Nunca escribas tu API key directamente en el código fuente ni la subas a un repositorio. Guárdala en una variable de entorno y léela en tiempo de ejecución:
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title=".env (local del proyecto)">
+    Crea un archivo `.env` en la raíz de tu proyecto y añádelo a `.gitignore`:
+
+    ```bash theme={null}
+    # .env
+    PERPLEXITY_API_KEY=your_api_key_here
+    ```
+
+    Cárgalo al iniciar (por ejemplo, con [`dotenv`](https://www.npmjs.com/package/dotenv)):
+
+    ```typescript theme={null}
+    import "dotenv/config";
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Trata `PERPLEXITY_API_KEY` como una contraseña. No la pegues en prompts, no la compartas con Claude Code ni la subas al control de versiones. Si una clave queda expuesta, [rótala](https://console.perplexity.ai/project/keys) de inmediato.
+</Warning>
+
+***
+
+<div id="path-1-official-typescript-sdk-recommended">
+  ## Ruta 1: SDK oficial de TypeScript (recomendado)
+</div>
+
+Haz que Claude Code genere y edite el código que llama a la Perplexity API mediante el SDK oficial. Esta es la ruta más fiable y te ofrece seguridad de tipos completa, compatibilidad con presets y acceso a todas las funcionalidades de la API.
+
+<div id="install">
+  ### Instalación
+</div>
+
+```bash theme={null}
+npm install @perplexity-ai/perplexity_ai
+```
+
+<Tip>
+  `pnpm` y `yarn` funcionan igual: `pnpm add @perplexity-ai/perplexity_ai` / `yarn add @perplexity-ai/perplexity_ai`.
+</Tip>
+
+<div id="agent-api-with-low">
+  ### Agent API con `low`
+</div>
+
+La Agent API es la interfaz recomendada para la mayoría de las aplicaciones. Usa el preset `low` para obtener respuestas fundamentadas en la web con valores predeterminados razonables:
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity(); // lee PERPLEXITY_API_KEY del entorno
+
+const response = await client.responses.create({
+  preset: "low",
+  input: "Summarize the latest changes to the Perplexity Agent API.",
+});
+
+console.log(`Model used: ${response.model}`);
+console.log(response.output_text);
+```
+
+<Accordion title="Equivalente en Python">
+  ```python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()  # lee PERPLEXITY_API_KEY del entorno
+
+  response = client.responses.create(
+      preset="low",
+      input="Summarize the latest changes to the Perplexity Agent API.",
+  )
+
+  print(f"Model used: {response.model}")
+  print(response.output_text)
+  ```
+</Accordion>
+
+<div id="add-web-search">
+  ### Añadir búsqueda web
+</div>
+
+Habilita la herramienta `web_search` para controlar de forma explícita cuándo se utiliza la búsqueda:
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity();
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "What are the latest developments in AI inference hardware?",
+  tools: [{ type: "web_search" }],
+  instructions:
+    "You have access to a web_search tool. Use it for questions about current events, news, or recent developments.",
+});
+
+if (response.status === "completed") {
+  console.log(response.output_text);
+}
+```
+
+<Tip>
+  Pídele a Claude Code que prepare estas llamadas por ti; por ejemplo: *&quot;Agrega un script `summarize.ts` que use `@perplexity-ai/perplexity_ai` con el preset `low` y lea `PERPLEXITY_API_KEY` del entorno.&quot;* Claude Code editará el archivo, instalará el paquete y lo ejecutará.
+</Tip>
+
+Para ver más presets, herramientas y opciones de configuración, consulta la [guía de inicio rápido de Agent API](/es/docs/agent-api/quickstart) y la [descripción general del SDK](/es/docs/sdk/overview).
+
+***
+
+<div id="path-2-openai-compatible-sdk">
+  ## Ruta 2: SDK compatible con OpenAI
+</div>
+
+Si tu proyecto ya usa un cliente de OpenAI, puedes reutilizarlo apuntando `baseURL` a `https://api.perplexity.ai/v1`. Perplexity acepta `POST /v1/responses` como alias de la Agent API.
+
+<div id="install-2">
+  ### Instalación
+</div>
+
+```bash theme={null}
+npm install openai
+```
+
+<div id="use-it">
+  ### Úsalo
+</div>
+
+```typescript theme={null}
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  baseURL: "https://api.perplexity.ai/v1",
+});
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "Explain the key differences between REST and GraphQL APIs.",
+});
+
+console.log(response.output_text);
+```
+
+<Accordion title="Equivalente en Python">
+  ```python theme={null}
+  import os
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Explain the key differences between REST and GraphQL APIs.",
+  )
+
+  print(response.output_text)
+  ```
+</Accordion>
+
+<Info>
+  Usa `baseURL` (TypeScript) o `base_url` (Python): ambos deben incluir el sufijo `/v1`. Consulta la [guía de compatibilidad con OpenAI](/es/docs/agent-api/openai-compatibility) para ver la lista completa de parámetros admitidos y qué funcionalidades de Perplexity están disponibles por esta vía.
+</Info>
+
+***
+
+<div id="path-3-claude-code-mcp-for-docs-lookup">
+  ## Ruta 3: MCP de Claude Code para consultar la documentación
+</div>
+
+Claude Code es compatible con el Model Context Protocol (MCP). El **MCP de documentación de Perplexity** alojado en `https://docs.perplexity.ai/mcp` permite que Claude Code busque y lea directamente la documentación de Perplexity, algo útil para fundamentar las sugerencias de código en la documentación oficial sin tener que cambiar de contexto e ir al navegador.
+
+<div id="add-the-server">
+  ### Añadir el servidor
+</div>
+
+Claude Code puede registrar un servidor MCP remoto por HTTP mediante el comando `claude mcp add` con la opción `--transport http`:
+
+<Tabs>
+  <Tab title="Alcance de proyecto">
+    Añade el servidor solo para el proyecto actual (se escribe en el archivo `.mcp.json` de la raíz de tu repositorio):
+
+    ```bash theme={null}
+    claude mcp add --transport http --scope project perplexity-docs https://docs.perplexity.ai/mcp
+    ```
+  </Tab>
+
+  <Tab title="Alcance de usuario">
+    Añade el servidor para todos los proyectos de esta máquina:
+
+    ```bash theme={null}
+    claude mcp add --transport http --scope user perplexity-docs https://docs.perplexity.ai/mcp
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  Si prefieres no usar la CLI, también puedes editar directamente el archivo `.mcp.json` del proyecto:
+
+  ```json theme={null}
+  {
+    "mcpServers": {
+      "perplexity-docs": {
+        "type": "http",
+        "url": "https://docs.perplexity.ai/mcp"
+      }
+    }
+  }
+  ```
+
+  Para los servidores con alcance de proyecto, Claude Code lee el archivo `.mcp.json` ubicado en la raíz del repositorio. Consulta la [documentación de MCP de Claude Code](https://docs.claude.com/en/docs/claude-code/mcp) para conocer el esquema canónico y las opciones de transporte más recientes.
+</Tip>
+
+<div id="verify-and-use">
+  ### Verificar y usar
+</div>
+
+<Steps>
+  <Step title="Confirma que el servidor está registrado">
+    Ejecuta `claude mcp list` y comprueba que `perplexity-docs` aparezca en la salida.
+  </Step>
+
+  <Step title="Reinicia Claude Code">
+    Cierra y vuelve a abrir Claude Code (o ejecuta `/mcp` dentro de una sesión) para que se cargue el nuevo servidor.
+  </Step>
+
+  <Step title="Úsalo desde un prompt">
+    Pídele a Claude Code algo como *«Usando el MCP de la documentación de Perplexity, muéstrame cómo habilitar `low` en la Agent API»*. Claude Code llamará al servidor MCP y fundamentará su respuesta en la documentación actual.
+  </Step>
+</Steps>
+
+<Info>
+  El MCP de documentación es de solo lectura y no requiere una API key: solo sirve documentación de Perplexity. Para darle a Claude Code acceso a las herramientas de **búsqueda y razonamiento** de Perplexity (y no únicamente a la documentación), instala el [servidor MCP de Perplexity](/es/docs/getting-started/integrations/mcp-server), que usa `@perplexity-ai/mcp-server` y requiere `PERPLEXITY_API_KEY`.
+</Info>
+
+***
+
+<div id="replacing-claude-codes-model-not-recommended">
+  ## Reemplazar el modelo de Claude Code (no recomendado)
+</div>
+
+Claude Code está diseñado para ejecutarse sobre los modelos Claude de Anthropic, y el uso de herramientas, los prompts y el comportamiento de edición del agente están ajustados a esos modelos. Apuntar la CLI de Claude Code a la Perplexity API como proveedor de modelos alternativo **no es una configuración compatible oficialmente**.
+
+En su lugar:
+
+* **Usa Perplexity desde el código de tu proyecto** (ruta 1 o ruta 2). Claude Code puede escribir, editar y ejecutar sin problemas código que llame a Perplexity para obtener respuestas fundamentadas en la web, investigación y búsqueda.
+* **Añade el MCP de documentación de Perplexity** (ruta 3) para que Claude Code pueda consultar la documentación de Perplexity durante la sesión.
+
+Esta combinación te ofrece las fortalezas de edición y orquestación de Claude Code junto con las respuestas fundamentadas en búsqueda de Perplexity, sin depender de un comportamiento de sustitución de modelo no documentado.
+
+***
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Inicio rápido de Agent API" icon="rocket" href="/es/docs/agent-api/quickstart">
+    Presets, herramientas y todas las capacidades de Agent API utilizadas en los ejemplos anteriores.
+  </Card>
+
+  <Card title="Descripción general del SDK de Perplexity" icon="code-circle" href="/es/docs/sdk/overview">
+    Instala, configura y usa los SDK oficiales de Python y TypeScript.
+  </Card>
+
+  <Card title="Compatibilidad con OpenAI" icon="plug" href="/es/docs/agent-api/openai-compatibility">
+    Detalles de compatibilidad directa, parámetros admitidos y consejos de migración.
+  </Card>
+
+  <Card title="Servidor MCP de Perplexity" icon="server" href="/es/docs/getting-started/integrations/mcp-server">
+    Añade las herramientas de búsqueda, consulta, investigación y razonamiento de Perplexity a Claude Code y a otros clientes MCP.
+  </Card>
+</CardGroup>
+
+<Info>
+  ¿Necesitas ayuda? Únete a la [comunidad de desarrolladores de Perplexity](https://community.perplexity.ai) para obtener soporte y participar en los debates.
+</Info>

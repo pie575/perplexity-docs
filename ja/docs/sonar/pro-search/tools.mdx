@@ -1,0 +1,105 @@
+---
+title: "組み込みツール機能"
+description: "Pro Search の組み込みツールである ウェブ検索と URL コンテンツ取得について解説します"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+Pro Search には、クエリへの回答時に model が自動的に使用する組み込みツールが 2 つあります。どのツールをいつ使うかは model が判断するため、設定は不要です。これらのツールはシステムが自動的に呼び出すもので、カスタムツールを登録することはできません。
+
+<Info>
+  ツールの実行はすべて、ストリーミング応答の `reasoning_steps` 配列に表示されるため、model がクエリをどのように調査したかを確認できます。
+</Info>
+
+<div id="web_search">
+  ## web_search
+</div>
+
+ウェブ検索を実行し、最新の情報、統計、専門家の見解を取得します。
+
+**実際の使用例:**
+
+```json theme={null}
+{
+  "thought": "I need current data on EV market trends",
+  "type": "web_search",
+  "web_search": {
+    "search_keywords": [
+      "EV Statistics 2023-2024",
+      "electric vehicle sales data",
+      "global EV market trends"
+    ],
+    "search_results": [
+      {
+        "title": "Trends in electric cars",
+        "url": "https://www.iea.org/reports/global-ev-outlook-2024/trends-in-electric-cars",
+        "date": "2024-03-15",
+        "last_updated": null,
+        "snippet": "Electric car sales neared 14 million in 2023, 95% of which were in China, Europe and the United States...",
+        "source": "web"
+      }
+    ]
+  }
+}
+```
+
+<div id="fetch_url_content">
+  ## fetch_url_content
+</div>
+
+特定のURLから完全なコンテンツを取得し、検索結果のスニペットでは得られない詳細な情報にアクセスします。
+
+**実行例:**
+
+```json theme={null}
+{
+  "thought": "This research paper contains detailed methodology I need to review",
+  "type": "fetch_url_content",
+  "fetch_url_content": {
+    "contents": [
+      {
+        "title": "Attention Is All You Need",
+        "url": "https://arxiv.org/pdf/1706.03762",
+        "date": null,
+        "last_updated": null,
+        "snippet": "The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder...",
+        "source": "web"
+      }
+    ]
+  }
+}
+```
+
+<div id="multi-tool-workflows">
+  ## マルチツールワークフロー
+</div>
+
+モデルは必要に応じて複数のツールを自動的に組み合わせます。たとえば、太陽光パネルの選択肢を調査するよう指示された場合、次のような動作が考えられます。
+
+1. `web_search` で現在の補助金や費用を調べる
+2. `fetch_url_content` で詳細な政策文書を読み取る
+3. 再度 `web_search` を使って電気料金を確認し、事業者を比較する
+
+<div id="related-resources">
+  ## 関連リソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="クイックスタート" icon="rocket" href="/ja/docs/sonar/pro-search/quickstart">
+    Pro Search の基本を押さえて使い始める
+  </Card>
+
+  <Card title="ストリームモードガイド" icon="bolt" href="/ja/docs/sonar/pro-search/stream-mode">
+    ストリーミングとリアルタイムな推論の可視化について学ぶ
+  </Card>
+
+  <Card title="APIリファレンス" icon="book" href="/ja/api-reference/sonar-post">
+    APIドキュメントの全体
+  </Card>
+</CardGroup>

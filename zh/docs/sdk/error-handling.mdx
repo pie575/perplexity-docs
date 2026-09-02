@@ -1,0 +1,565 @@
+---
+title: "错误处理"
+description: "了解如何借助 Perplexity 的 Python 和 TypeScript SDK 优雅地处理 API 错误。"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+Perplexity SDK 提供了完善的错误处理机制，针对不同的错误场景定义了专门的异常类型。本指南介绍如何优雅地捕获并处理常见的 API 错误。
+
+<div id="common-error-types">
+  ## 常见错误类型
+</div>
+
+SDK 针对不同的错误场景提供了特定的异常类型：
+
+* **APIConnectionError** —— 网络连接问题
+* **RateLimitError** —— 超出 API 速率限制
+* **APIStatusError** —— HTTP 状态错误 (4xx、5xx)
+* **AuthenticationError** —— API key 无效或身份验证问题
+* **ValidationError** —— 请求参数无效
+
+<div id="basic-error-handling">
+  ## 基础错误处理
+</div>
+
+使用 try-catch 语句块处理常见的 API 错误：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  try:
+      search = client.search.create(query="OpenAI o-series reasoning model benchmarks")
+      print(search.results)
+  except perplexity.APIConnectionError as e:
+      print("Network connection failed")
+      print(e.__cause__)
+  except perplexity.RateLimitError as e:
+      print("Rate limit exceeded, please retry later")
+  except perplexity.APIStatusError as e:
+      print(f"API error: {e.status_code}")
+      print(e.response)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  try {
+      const search = await client.search.create({ query: "OpenAI o-series reasoning model benchmarks" });
+      console.log(search.results);
+  } catch (error: any) {
+      if (error.constructor.name === 'APIConnectionError') {
+          console.log("Network connection failed");
+          console.log(error.cause);
+      } else if (error.constructor.name === 'RateLimitError') {
+          console.log("Rate limit exceeded, please retry later");
+      } else if (error.constructor.name === 'APIStatusError') {
+          console.log(`API error: ${error.status}`);
+          console.log(error.response);
+      }
+  }
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "169d5d3b-272a-46ca-a59d-7c218f9d5ce2",
+    "results": [
+      {
+        "snippet": "",
+        "title": "Reasoning best practices | OpenAI API",
+        "url": "https://developers.openai.com/api/docs/guides/reasoning-best-practices",
+        "date": null,
+        "last_updated": "2026-05-21"
+      },
+      {
+        "snippet": "",
+        "title": "A Comparative Study on Reasoning Patterns of OpenAI's o1 Model",
+        "url": "https://arxiv.org/html/2410.13639v1",
+        "date": "2024-10-17",
+        "last_updated": "2026-03-22"
+      },
+      {
+        "snippet": "**OpenAI o1** is a generative pre-trained transformer (GPT), the first in OpenAI's \"o\" series of reasoning models.\nA preview of o1 was released by OpenAI on September 12, 2024.\no1 spends time \"thinking\" before it answers, making it better at complex reasoning tasks, science and programming than GPT-4o.\nThe full version was released to ChatGPT users on December 5, 2024.\n...\nOpenAI noted that o1 is the first of a series of \"reasoning\" models.\nOpenAI shared in December 2024 benchmark results for its successor, o3 (the name o2 was skipped to avoid trademark conflict with the mobile carrier brand named O2).\n...\no1 spends additional time thinking (generating a chain of thought) before generating an answer, which makes it better for complex reasoning tasks, particularly in science and mathematics.\n...\nOpenAI's test results suggest a correlation between accuracy and the logarithm of the amount of compute spent thinking before answering.\no1-preview performed approximately at a PhD level on benchmark tests related to physics, chemistry, and biology.\nOn the American Invitational Mathematics Examination, it solved 83% (12.5/15) of the problems, compared to 13% (1.8/15) for GPT-4o.\nIt also ranked in the 89th percentile in Codeforces coding competitions.\no1-mini is faster and 80% cheaper than o1-preview.\nIt is particularly suitable for programming and STEM-related tasks, but does not have the same \"broad world knowledge\" as o1-preview.\nOpenAI noted that o1's reasoning capabilities make it better at adhering to safety rules provided in the prompt's context window.\n...\nAccording to OpenAI's assessments, o1-preview and o1-mini crossed into \"medium risk\" in CBRN (biological, chemical, radiological, and nuclear) weapons.\nDan Hendrycks wrote that \"The model already outperforms PhD scientists most of the time on answering questions related to bioweapons.\"\n...\nAccording to OpenAI, o1 may \"fake alignment\", that is, generate a response that is contrary to accuracy and its own chain of thought, in about 0.38% of cases.\n...\nBy changing the numbers and names used in a math problem or simply running the same problem again, LLMs would perform somewhat worse than their best benchmark results.\nAdding extraneous but logically inconsequential information to the problems caused a much greater drop in performance, from −17.5% for o1-preview and −29.1% for o1-mini, to −65.7% for the worst model tested.",
+        "title": "OpenAI o1 - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/OpenAI_o1",
+        "date": "2024-09-12",
+        "last_updated": "2026-03-31"
+      },
+      {
+        "snippet": "",
+        "title": "OpenAI O3 & O4 Mini: The First True Reasoning Agents? - YouTube",
+        "url": "https://www.youtube.com/watch?v=TGnPcObHdLY",
+        "date": "2025-04-16",
+        "last_updated": "2026-04-08"
+      },
+      {
+        "snippet": "",
+        "title": "Safety",
+        "url": "https://openai.com/index/learning-to-reason-with-llms/",
+        "date": "2024-09-12",
+        "last_updated": "2026-03-29"
+      },
+      {
+        "snippet": "",
+        "title": "Introducing OpenAI o3 and o4-mini",
+        "url": "https://openai.com/index/introducing-o3-and-o4-mini/",
+        "date": "2025-04-16",
+        "last_updated": "2026-05-16"
+      },
+      {
+        "snippet": "",
+        "title": "OpenAI's o3 model scores 3% on the ARC-AGI-2 benchmark ...",
+        "url": "https://forum.effectivealtruism.org/posts/CoPNbwNqDai6orZhv/openai-s-o3-model-scores-3-on-the-arc-agi-2-benchmark",
+        "date": "2025-05-01",
+        "last_updated": "2026-05-17"
+      },
+      {
+        "snippet": "Built to handle hard problems — they take more time to think before responding, similar to how a person would approach a difficult task.\nThe “ OpenAI o1 preview ” model, specifically, shows incredible results for various hard problems: math, coding, and reasoning.\n...\nToday, OpenAI released the full version of the o1 model, making it production-ready for a wide range of use cases.\nIn this article, we’ll compare its capabilities with GPT-4o and Claude 3.5 Sonnet to see if it lives up to the claim.\n...\nWe compared these models across three key tasks:\nReasoning riddles, Math Problems, and Classifying customer tickets\nAlong the way, we explored the latest benchmarks, evaluated input and output token costs, assessed latency and throughput, and shared guidance on choosing the best model for your needs.\nFor up-to-date rankings, check our leaderboard , or keep reading to see the results of our evaluation.\nFrom this analysis we learn that:\nProduction apps: For apps in productions, we still recommend sing GPT-4o over o1, at least for one-off tasks like the ones we tested here.\nReasoning riddles: OpenAI o1 showed some inconsistency, refusing to answer one question and scoring 60% accuracy, similar to GPT-4o, though the difference isn’t major.\nGPT-4o is a great model for this task.\nClaude 3.5 Sonnet scored a lower accuracy of 56%.\n- Math equations: GPT-4o and the o1 model performed equally well on this task, raising questions about whether the higher cost of o1 is justified.\n- Surprisingly, the latest Claude 3.5 Sonnet lagged significantly behind, achieving only 39% accuracy on these examples.\n- Classification : All models performed similarly: GPT-4o (74%), O1 (73%), and Model 3.5 Sonnet (76%), with GPT-4o improving by 12% since September.\n- GPT-4o had the highest precision (86%) making it ideal for tasks where correct possitive predictions matter most.\nThe o1 model led in recall (82%) making it suitable when you need to capture as many TRUE cases as possible.\nThe Claude 3.5 Sonnet had best F1 score (77%) indicating robust overall classification performance.\n- Speed &amp; Cost: Given that we saw similar results across the three tasks we evaluated, we still can’t justify the cost of o1, and we recommend going with GPT-4o for most use-cases.\n- Complex Problems: Use OpenAI o1 when you need top-tier reasoning and latency isn’t a concern.\nIt’s ideal for agentic workflows with a “planning” stage, where the model creates a detailed plan that smaller, cheaper models can follow\n...\nAs expected, the new o1 models are slower due to their “reasoning” process.\nThis isn’t a drawback necessarily—it just makes them better suited for tasks where thoughtful problem-solving is essential.\nOpenAI o1 is approximately 30 times slower than GPT-4o.\nSimilarly, the o1 mini version is around 16 times slower than GPT-4o mini.\n## Cost comparison\nIt's evident that using OpenAI o1 will cost roughly 6x more than GPT-4o and Claude 3.5 Sonnet for input tokens, and about 5x more for output tokens.\n## Throughput (Output speed)\nOpenAI o1 stands out with the fastest throughput, generating 143 tokens per second.\nHowever, take this throughput data with a grain of salt — while its output speed is significantly higher than the other models, its latency, or time-to-think, is about 30x longer than GPT-4o and Claude 3.5 Sonnet.\n...\nWhen new models are released, we learn about their capabilities from benchmark data reported in the technical reports.\nThe new OpenAI o1 model improves on the most complex reasoning benchmarks:\nExceeds human PhD-level accuracy on challenging benchmark tasks in physics, chemistry, and biology on the GPQA benchmark Coding is easier — It ranks in the 89th percentile on competitive programming questions (Codeforces) It’s also very good at math — In a qualifying exam for the International Mathematics Olympiad (IMO), GPT-4o correctly solved only 13% of problems, while the reasoning model scored 83%.\nNow, this is next level.\nOn the standard ML benchmarks , it has huge improvements across the board:\n...\nThey’ve gathered over 6,000 votes, and the results show that the OpenAI o1 model is consistently ranked #1 across all categories, with Math being the most notable area of impact.\nThe o1-mini model is #1 in technical areas, #2 overall.\nCheck out the full results on this link.\n...\nThe results show that the newest model is great at complex tasks, but not preferred for some natural language tasks — suggesting that maybe the model is not the best for every use-case.\n...\nGPT-4o and the o1 model performed equally well on this task, raising questions about whether the higher cost of o1 is justified.\nSurprisingly, the latest Claude 3.5 Sonnet lagged significantly behind, achieving only 39% accuracy on these examples.\n...\nOpenAI o1 showed some inconsistency, refusing to answer one question and scoring 60% accuracy, similar to GPT-4o, though the difference isn’t major.\nGPT-4o is a great model for this task.\nClaude 3.5 Sonnet scored a lower accuracy of 56%.\n...\nWe ran the evaluation to test if the models' outputs matched our ground truth data for 100 labeled test cases, and we can see that they all got similar accuracies.\nGPT-4o got 74, O1 got 73, Claude 3.5 Sonnet got 76 answers right from total of 100.\nThis reinforces the idea that smarter, more cost-effective models without a \"reasoning module\" like o1 can perform just as well as o1, but without the added expense.\nIn a similar evaluation in September of 2024, we evaluated that GPT-4o had lower accuracy, and classified only 62 of the 100 examples correctly.\nToday, we’re seeing at a 12% improvement on this task!\n...\nToday, O1 has more production-ready properties and is starting to becomemore valuable for production use cases—though it’s best suited for those who can tolerate higher latency and need to tackle the toughest challenges.\nGPT-4O, however, remains the go-to model for many of the production use cases we see in the market.",
+        "title": "Analysis: OpenAI o1 vs GPT-4o vs Claude 3.5 Sonnet - Vellum",
+        "url": "https://www.vellum.ai/blog/analysis-openai-o1-vs-gpt-4o",
+        "date": "2024-12-17",
+        "last_updated": "2026-05-21"
+      },
+      {
+        "snippet": "",
+        "title": "THE RELATIONSHIP BETWEEN REASONING AND PERFORMANCE",
+        "url": "http://arxiv.org/pdf/2502.15631.pdf",
+        "date": null,
+        "last_updated": "2025-02-25"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<Info>
+  常见 HTTP 状态码：400 (请求错误) 、401 (身份验证失败) 、403 (权限不足) 、404 (未找到) 、429 (速率限制) 、500+ (服务器错误) 。
+</Info>
+
+<div id="advanced-error-handling">
+  ## 高级错误处理
+</div>
+
+<div id="exponential-backoff-for-rate-limits">
+  ### 针对速率限制的指数退避
+</div>
+
+为速率限制错误实现智能重试逻辑：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  import random
+  import perplexity
+  from perplexity import Perplexity
+
+  def search_with_retry(client, query, max_retries=3):
+      for attempt in range(max_retries):
+          try:
+              return client.search.create(query=query)
+          except perplexity.RateLimitError:
+              if attempt == max_retries - 1:
+                  raise  # 最后一次尝试时重新抛出异常
+              
+              # 带抖动的指数退避
+              delay = (2 ** attempt) + random.uniform(0, 1)
+              print(f"Rate limited. Retrying in {delay:.2f} seconds...")
+              time.sleep(delay)
+          except perplexity.APIConnectionError:
+              if attempt == max_retries - 1:
+                  raise
+              
+              # 连接错误使用较短的延迟
+              delay = 1 + random.uniform(0, 1)
+              print(f"Connection error. Retrying in {delay:.2f} seconds...")
+              time.sleep(delay)
+
+  # 用法
+  client = Perplexity()
+  result = search_with_retry(client, "artificial intelligence")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  async function searchWithRetry(
+      client: Perplexity, 
+      query: string, 
+      maxRetries: number = 3
+  ) {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+              return await client.search.create({ query });
+          } catch (error: any) {
+              if (attempt === maxRetries - 1) {
+                  throw error; // 最后一次尝试时重新抛出异常
+              }
+
+              if (error.constructor.name === 'RateLimitError') {
+                  // 带抖动的指数退避
+                  const delay = (2 ** attempt + Math.random()) * 1000;
+                  console.log(`Rate limited. Retrying in ${delay}ms...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+              } else if (error.constructor.name === 'APIConnectionError') {
+                  // 连接错误使用较短的延迟
+                  const delay = (1 + Math.random()) * 1000;
+                  console.log(`Connection error. Retrying in ${delay}ms...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+              } else {
+                  throw error; // 其他错误不重试
+              }
+          }
+      }
+  }
+
+  // 用法
+  const client = new Perplexity();
+  const result = await searchWithRetry(client, "artificial intelligence");
+  ```
+</CodeGroup>
+
+<div id="error-context-and-debugging">
+  ### 错误上下文与调试
+</div>
+
+提取详细的错误信息以便调试：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  try:
+      response = client.responses.create(
+          preset="low",
+          input="Explain how the 10-year US Treasury yield is determined and how it influences mortgage rates."
+      )
+  except perplexity.APIStatusError as e:
+      print(f"Status Code: {e.status_code}")
+      print(f"Error Type: {e.type}")
+      print(f"Error Message: {e.message}")
+      
+      # 获取原始响应以进行详细调试
+      if hasattr(e, 'response'):
+          print(f"Raw Response: {e.response.text}")
+          print(f"Request ID: {e.response.headers.get('X-Request-ID')}")
+          
+  except perplexity.ValidationError as e:
+      print(f"Validation Error: {e}")
+      # 处理参数校验错误
+      
+  except Exception as e:
+      print(f"Unexpected error: {type(e).__name__}: {e}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  try {
+      const response = await client.responses.create({
+          preset: "low",
+          input: "Explain how the 10-year US Treasury yield is determined and how it influences mortgage rates."
+      });
+  } catch (error: any) {
+      if (error.constructor.name === 'APIStatusError') {
+          console.log(`Status Code: ${error.status}`);
+          console.log(`Error Type: ${error.type}`);
+          console.log(`Error Message: ${error.message}`);
+          
+          // 获取原始响应以进行详细调试
+          if (error.response) {
+              console.log(`Raw Response: ${await error.response.text()}`);
+              console.log(`Request ID: ${error.response.headers.get('X-Request-ID')}`);
+          }
+      } else if (error.constructor.name === 'ValidationError') {
+          console.log(`Validation Error: ${error.message}`);
+          // 处理参数校验错误
+      } else {
+          console.log(`Unexpected error: ${error.constructor.name}: ${error.message}`);
+      }
+  }
+  ```
+</CodeGroup>
+
+<div id="error-recovery-strategies">
+  ## 错误恢复策略
+</div>
+
+<div id="graceful-degradation">
+  ### 优雅降级
+</div>
+
+在 API 调用失败时实现回退机制：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  def get_ai_response(query, fallback_response="I'm sorry, I'm temporarily unavailable."):
+      client = Perplexity()
+      
+      try:
+          response = client.responses.create(
+              preset="low",
+              input=query
+          )
+          return response.output_text
+          
+      except perplexity.RateLimitError:
+          return fallback_response
+              
+      except perplexity.APIConnectionError:
+          # 网络问题——返回缓存的响应或回退内容
+          return fallback_response
+          
+      except Exception as e:
+          print(f"Unexpected error: {e}")
+          return fallback_response
+
+  # 用法
+  response = get_ai_response("What is machine learning?")
+  print(response)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  async function getAIResponse(
+      query: string, 
+      fallbackResponse: string = "I'm sorry, I'm temporarily unavailable."
+  ): Promise<string> {
+      const client = new Perplexity();
+      
+      try {
+          const response = await client.responses.create({
+              preset: "low",
+              input: query
+          });
+          return response.output_text ?? fallbackResponse;
+          
+      } catch (error: any) {
+          if (error.constructor.name === 'RateLimitError') {
+              return fallbackResponse;
+          } else if (error.constructor.name === 'APIConnectionError') {
+              // 网络问题——返回缓存的响应或回退内容
+              return fallbackResponse;
+          } else {
+              console.log(`Unexpected error: ${error.message}`);
+              return fallbackResponse;
+          }
+      }
+  }
+
+  // 用法
+  const response = await getAIResponse("What is machine learning?");
+  console.log(response);
+  ```
+</CodeGroup>
+
+<div id="best-practices">
+  ## 最佳实践
+</div>
+
+<Steps>
+  <Step title="始终妥善处理速率限制">
+    调用 API 时遇到速率限制很常见，请务必实现带指数退避的重试逻辑。
+
+    <Warning>
+      切勿使用无延迟的高频重试循环——这只会让限流问题更严重。
+    </Warning>
+  </Step>
+
+  <Step title="记录错误日志以便监控">
+    添加完善的日志记录，以跟踪错误模式和 API 健康状况。
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import logging
+      import perplexity
+      from perplexity import Perplexity
+
+      logging.basicConfig(level=logging.INFO)
+      logger = logging.getLogger(__name__)
+
+      client = Perplexity()
+
+      try:
+          result = client.search.create(query="discovery of penicillin by Alexander Fleming")
+      except perplexity.APIStatusError as e:
+          logger.error(f"API Error {e.status_code}: {e.message}", 
+                      extra={'request_id': e.response.headers.get('X-Request-ID')})
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      try {
+          const result = await client.search.create({ query: "discovery of penicillin by Alexander Fleming" });
+      } catch (error: any) {
+          console.error(`API Error ${error.status}: ${error.message}`, {
+              requestId: error.response?.headers.get('X-Request-ID')
+          });
+      }
+      ```
+    </CodeGroup>
+
+    <Accordion title="响应">
+      ```json theme={null}
+      {
+        "id": "cf46c6eb-bf6e-4ee4-97f8-9d4dcfd99dd4",
+        "results": [
+          {
+            "snippet": "",
+            "title": "亚历山大·弗莱明与青霉素的发现和研发",
+            "url": "https://www.acs.org/education/whatischemistry/landmarks/flemingpenicillin.html",
+            "date": null,
+            "last_updated": "2026-05-21"
+          },
+          {
+            "snippet": "“*我没有发明青霉素。\n是大自然创造了它。\n我只是偶然发现了它*。”\n亚历山大·弗莱明是一位苏格兰医生兼科学家，因发现青霉素而闻名。\n这种抗生素的简单发现与应用挽救了数百万人的生命，并使弗莱明——与设计出大规模分离和生产青霉素方法的霍华德·弗洛里和恩斯特·钱恩一起——获得了1945年诺贝尔生理学或医学奖。\n...\n1928年，弗莱明开始了一系列关于常见葡萄球菌的实验。\n一个放在敞开窗户旁、未加盖的培养皿被霉菌孢子污染。\n弗莱明观察到靠近霉菌菌落的细菌正在死亡，其证据是周围的琼脂凝胶溶解并变得透明。\n他成功分离出这种霉菌，并鉴定其为*青霉菌*属的一员。\n他发现它对所有革兰氏阳性病原体都有效，这些病原体会引起猩红热、肺炎、淋病、脑膜炎和白喉等疾病。\n他判断出杀死细菌的并非霉菌本身，而是它所产生的某种“汁液”。\n他将这种“霉菌汁液”命名为青霉素。\n后来他说：“*1928年9月28日黎明后我醒来时，当然没有打算通过发现世界上第一种抗生素或杀菌剂来彻底改变整个医学。\n但我想这正是我所做的事*。”\n尽管弗莱明于1929年在《英国实验病理学杂志》上发表了青霉素的发现，科学界起初对他的工作反应冷淡。\n此外，弗莱明发现很难大量分离这种珍贵的“霉菌汁液”。\n直到1940年，就在他考虑退休之际，两位科学家霍华德·弗洛里和恩斯特·钱恩才对青霉素产生了兴趣。\n最终，他们得以大规模生产青霉素，用于第二次世界大战期间。",
+            "title": "亚历山大·弗莱明（1881–1955）：青霉素的发现者 - PMC - NIH",
+            "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4520913/",
+            "date": null,
+            "last_updated": "2026-04-11"
+          },
+          {
+            "snippet": "",
+            "title": "亚历山大·弗莱明 - 维基百科",
+            "url": "https://en.wikipedia.org/wiki/Alexander_Fleming",
+            "date": "2001-09-18",
+            "last_updated": "2026-05-18"
+          },
+          {
+            "snippet": "",
+            "title": "青霉素的发现 - 维基百科",
+            "url": "https://en.wikipedia.org/wiki/Discovery_of_penicillin",
+            "date": "2009-09-13",
+            "last_updated": "2026-03-28"
+          },
+          {
+            "snippet": "",
+            "title": "青霉素的发现——75多年后的新见解……",
+            "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5403050/",
+            "date": null,
+            "last_updated": "2026-03-29"
+          },
+          {
+            "snippet": "1928年一个发霉培养皿的偶然发现，开启了长达20年的历程，最终研发出世界上第一种能清除细菌感染的大规模生产药物：青霉素。\n...\n1928年，亚历山大·弗莱明博士度假归来，发现一个培养葡萄球菌的培养皿上长出了霉菌。\n他注意到这种霉菌似乎阻止了周围细菌的生长。\n他很快确认这种霉菌会产生一种可以杀死细菌的自我防御化学物质。\n他将这种物质命名为青霉素。\n弗莱明发表了他的研究结果，并向医学研究俱乐部介绍了他的发现。\n令他惊讶的是，同行们对他的工作兴趣寥寥。\n...\n近十年后的1937年，霍华德·弗洛里和恩斯特·钱恩在研究微生物及其产生的物质时，发现了弗莱明的研究，并组建了一支科学家团队专门从事“青霉素项目”。\n...\n该霉菌产生的青霉素是弗莱明原始菌株的六倍。\n...\n到1943年，美国已拥有足够的青霉素库存，以满足美国武装部队及其盟军的需求。\n...\n1946年，青霉素首次在英国面向公众供应，它改变了全世界的医学，并开启了抗生素时代。",
+            "title": "青霉素是如何研发出来的？",
+            "url": "https://www.sciencemuseum.org.uk/objects-and-stories/how-was-penicillin-developed",
+            "date": "2021-02-23",
+            "last_updated": "2025-11-10"
+          },
+          {
+            "snippet": "83年前的今天，亚历山大·弗莱明爵士发现了青霉素，这是使用最广泛的抗生素之一。\n受第一次世界大战战场上所见情景的启发，他回到位于伦敦圣玛丽医院的实验室，致力于研发对抗细菌感染的方法。\n1928年，他不慎让一个正在培养金黄色葡萄球菌的培养皿敞开未盖。\n后来，他注意到培养皿上长出了霉菌，而霉菌周围的葡萄球菌都已死亡。\n弗莱明将其分离出来，并鉴定该霉菌为特异青霉，一种类似于面包上生长的霉菌的真菌。\n弗莱明于1929年在《英国实验病理学杂志》上发表了他的研究结果，但这份报告并未引起多少关注。\n随后在1938年，与牛津大学病理学家霍华德·弗洛里共事的生物化学家恩斯特·钱恩，在研究抗菌化合物时偶然读到了弗莱明的论文。\n弗洛里实验室的科学家们开始研究青霉素，最终将其注射到小鼠体内，测试其能否治疗细菌感染。\n他们的实验取得了成功，接着又在人体上进行测试，同样看到了积极的结果。\n到1941年，已出现可用于治疗患者的注射剂型，这对在第二次世界大战中作战的士兵尤为有用。\n...\n1945年，弗莱明、钱恩和弗洛里因“发现青霉素及其对各种传染病的治疗效果”而被授予诺贝尔生理学或医学奖。\n弗莱明于1955年逝世。",
+            "title": "青霉素：83年前的今天",
+            "url": "https://www.publichealth.columbia.edu/research/center-infection-and-immunity/penicillin-83-years-ago-today",
+            "date": "2015-10-16",
+            "last_updated": "2026-03-12"
+          },
+          {
+            "snippet": "",
+            "title": "青霉素的历史 - 维基百科",
+            "url": "https://en.wikipedia.org/wiki/History_of_penicillin",
+            "date": "2006-03-31",
+            "last_updated": "2026-04-08"
+          },
+          {
+            "snippet": "苏格兰细菌学家亚历山大·弗莱明最为人所知的成就是他在1928年发现了青霉素，从而开启了抗生素革命。\n由于发现青霉素，他与他人共同获得了1945年诺贝尔生理学或医学奖。\n### 亚历山大·弗莱明是如何发现青霉素的？\n1928年，亚历山大·弗莱明注意到一块*金黄色葡萄球菌*培养皿被一种真菌污染了。\n这种霉菌后来被鉴定为*点青霉*（现归类为*产黄青霉*），它抑制了细菌的生长。\n他后来确定，该霉菌之所以能阻止细菌生长，是因为它产生了一种抗生素——青霉素。\n...\n**亚历山大·弗莱明**（1881年8月6日生于苏格兰艾尔郡达维尔的洛克菲尔德农场——1955年3月11日卒于英格兰伦敦）是一位苏格兰细菌学家，以发现青霉素而闻名。\n...\n他对伤口感染以及溶菌酶（一种存在于泪液和唾液中的抗菌酶）的研究，确保了他在细菌学史上的地位。\n但真正奠定其不朽声誉的，是他在1928年发现青霉素，从而开启了抗生素革命。\n弗莱明因这一成就于1945年获得认可，与澳大利亚病理学家霍华德·瓦尔特·弗洛里以及德国出生的英国生物化学家恩斯特·鲍里斯·钱恩共同获得诺贝尔生理学或医学奖，后两人分离并提纯了青霉素。\n...\n1928年9月3日，在被任命为细菌学教授后不久，弗莱明注意到他一直在研究的一块*金黄色葡萄球菌*培养皿被一种真菌污染了。\n一种霉菌后来被鉴定为*点青霉*（现归类为*产黄青霉*），它抑制了细菌的生长。\n他起初称这种物质为“霉汁”，后来根据产生它的霉菌将其命名为“青霉素”。\n弗莱明决定进一步研究，因为他认为自己发现了一种比溶菌酶更强效的酶。\n事实上，它并不是一种酶，而是一种抗生素——是最早被发现的抗生素之一。\n...\n青霉素最终在第二次世界大战期间投入使用，这得益于霍华德·弗洛里在牛津大学领导的一个科学家团队的工作。",
+            "title": "亚历山大·弗莱明 | 传记、教育、发现、诺贝尔奖 ...",
+            "url": "https://www.britannica.com/biography/Alexander-Fleming",
+            "date": "2026-04-24",
+            "last_updated": "2026-04-25"
+          },
+          {
+            "snippet": "Fleming’s serendipitous discovery of penicillin changed the course of medicine and earned him a Nobel Prize.\n...\nIn 1928 Alexander Fleming (1881–1955) discovered penicillin, though he did not realize the full significance of his discovery for at least another decade.\nHe eventually received the Nobel Prize in Physiology or Medicine in 1945.\n...\nIn 1928 Alexander Fleming discovered penicillin, made from the *Penicillium notatum* mold, but he did not receive the Nobel Prize in Physiology or Medicine for his discovery until 1945.\nFleming himself did not realize how important his discovery was; for a decade after, he focused instead on penicillin’s potential use as a topical antiseptic for wounds and surface infections and as a means of isolating certain bacteria in laboratory cultures.\n...\nFleming’s legendary discovery of penicillin occurred in 1928, while he was investigating staphylococcus, a common type of bacteria that causes boils and can also cause disastrous infections in patients with weakened immune systems.\nBefore Fleming left for a two-week vacation, a petri dish containing a staphylococcus culture was left on a lab bench and never placed in the incubator as intended.\nSomehow, in preparing the culture, a *Penicillium* mold spore had been accidentally introduced into the medium—perhaps coming in through a window, or more likely floating up a stairwell from the lab below where various molds were being cultured.\nThe temperature conditions that prevailed during Fleming’s absence permitted both the bacteria and the mold spores to grow; had the incubator been used, only the bacteria could have grown.\n...\nHe discovered that the antibacterial substance was not produced by all molds, only by certain strains of *Penicillium*, namely, *Penicillium notatum*.",
+            "title": "Alexander Fleming | Science History Institute",
+            "url": "https://www.sciencehistory.org/education/scientific-biographies/alexander-fleming/",
+            "date": "2026-02-23",
+            "last_updated": "2026-05-07"
+          }
+        ],
+        "server_time": null
+      }
+      ```
+    </Accordion>
+  </Step>
+
+  <Step title="设置合适的超时时间">
+    配置超时时间，避免请求长时间挂起。
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import httpx
+      from perplexity import Perplexity
+
+      client = Perplexity(
+          timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=10.0)
+      )
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity({
+          timeout: 30000 // 30 秒
+      });
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="处理身份验证错误">
+    检测无效的 API key，并给出清晰的错误提示。
+
+    <CodeGroup>
+      ```python Python theme={null}
+      try:
+          result = client.search.create(query="Perplexity Search API Python SDK quickstart example")
+      except perplexity.AuthenticationError:
+          print("Invalid API key. Please check your PERPLEXITY_API_KEY environment variable.")
+      ```
+
+      ```typescript TypeScript theme={null}
+      try {
+          const result = await client.search.create({ query: "Perplexity Search API Python SDK quickstart example" });
+      } catch (error: any) {
+          if (error.constructor.name === 'AuthenticationError') {
+              console.log("Invalid API key. Please check your PERPLEXITY_API_KEY environment variable.");
+          }
+      }
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+<div id="related-resources">
+  ## 相关资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="配置" icon="settings" href="/zh/docs/sdk/configuration">
+    配置超时与重试
+  </Card>
+
+  <Card title="最佳实践" icon="star" href="/zh/docs/sdk/best-practices">
+    环境变量与速率限制
+  </Card>
+</CardGroup>

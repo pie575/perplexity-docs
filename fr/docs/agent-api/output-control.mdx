@@ -1,0 +1,950 @@
+---
+title: "Contrôle des sorties"
+description: "Sorties en streaming et sorties structurées pour l'Agent API"
+---
+
+<div id="streaming-responses">
+  ## Réponses en streaming
+</div>
+
+Le streaming vous permet de recevoir les réponses de la Perplexity API de façon partielle, au fur et à mesure de leur génération, plutôt que d&#39;attendre la réponse complète. C&#39;est particulièrement utile pour les expériences utilisateur en temps réel, les réponses longues et les applications interactives.
+
+<Info>
+  Le streaming est pris en charge par tous les modèles disponibles via l&#39;Agent API.
+</Info>
+
+Pour activer le streaming, définissez `stream=True` (Python) ou `stream: true` (TypeScript) lors de la création des réponses :
+
+<CodeGroup>
+  ```python Python SDK theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Créer une réponse en streaming
+  stream = client.responses.create(
+      preset="fast",
+      input="Explain what a model card is in the context of large language models: the typical sections (intended use, training data, limitations, evaluation).",
+      stream=True
+  )
+
+  # Traiter la réponse en streaming
+  for event in stream:
+      if event.type == "response.output_text.delta":
+          print(event.delta, end="")
+      elif event.type == "response.completed":
+          print(f"\n\nCompleted: {event.response.usage}")
+  ```
+
+  ```typescript TypeScript SDK theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // Créer une réponse en streaming
+  const stream = await client.responses.create({
+    preset: "fast",
+    input: "Explain what a model card is in the context of large language models: the typical sections (intended use, training data, limitations, evaluation).",
+    stream: true
+  });
+
+  // Traiter la réponse en streaming
+  for await (const chunk of stream) {
+    if (chunk.type === "response.output_text.delta") {
+      process.stdout.write((chunk as any).delta);
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "fast",
+      "input": "Explain what a model card is in the context of large language models: the typical sections (intended use, training data, limitations, evaluation).",
+      "stream": true
+    }'
+  ```
+</CodeGroup>
+
+<Accordion title="Réponse">
+  ```json theme={null}
+  {
+    "id": "resp_081e7a0a-4087-403b-8e74-a997d28d6fd2",
+    "created_at": 1779391825,
+    "model": "openai/gpt-5.1",
+    "object": "response",
+    "output": [
+      {
+        "results": [
+          {
+            "id": 1,
+            "snippet": "Organizations developing and deploying AI, specifically generative AI, have turned to model cards as one way to promote explainability and achieve that transparency.\n...\nFirst proposed in 2018, model cards are short documents provided with machine learning models that explain the context in which the models are intended to be used, details of the performance evaluation procedures and other relevant information.\nA machine learning model intended to evaluate voter demographics, for example, would be released with a model card providing performance metrics across conditions like culture, race, geographic location, sex and intersectional groups that are relevant to the intended application.\n...\nMost importantly, for the current uses of and innovations in AI, model cards provide details about the construction of the machine learning model, like its architecture and training data.\n...\nSimilarly, the transparency principle in AI governs the extent to which information regarding an AI system is made available to stakeholders, including an understandable explanation of how the system works.\nThis is precisely what model cards do: explain information in the machine learning model to provide transparency into the AI system.\n...\nModel cards are the current tool of choice in providing transparency in large language and machine learning models.",
+            "title": "5 things to know about AI model cards | IAPP",
+            "url": "https://iapp.org/news/a/5-things-to-know-about-ai-model-cards",
+            "date": "2023-08-23",
+            "last_updated": "2026-05-16",
+            "source": "web"
+          },
+          {
+            "id": 2,
+            "snippet": "The term “Model Card” was coined by Mitchell et al. in the 2018 paper Model Cards for Model Reporting.\nAt their core, Model Cards are the nutrition labels of the AI world, providing instructions and warnings for a trained model.\nWhen used, they can inform users about the uses and limitations of a model and support audit and transparency requirements.",
+            "title": "Towards a Standard for Model Cards - Trustible",
+            "url": "https://trustible.ai/post/towards-a-standard-for-model-cards/",
+            "date": "2023-05-05",
+            "last_updated": "2026-05-20",
+            "source": "web"
+          },
+          {
+            "id": 3,
+            "snippet": "This work proposes model cards, a framework that can be used to document any trained machine learning model in the application fields of computer vision and natural language processing, and provides cards for two supervised models: One trained to detect smiling faces in images, and one training to detect toxic comments in text.",
+            "title": "[PDF] Model Cards for Model Reporting - Semantic Scholar",
+            "url": "https://www.semanticscholar.org/paper/Model-Cards-for-Model-Reporting-Mitchell-Wu/7365f887c938ca21a6adbef08b5a520ebbd4638f",
+            "date": null,
+            "last_updated": "2024-07-27",
+            "source": "web"
+          },
+          {
+            "id": 4,
+            "snippet": "A model card is a type of documentation that is created for, and provided with, machine learning models.\nA model card functions as a type of data sheet, similar in principle to the consumer safety labels, food nutritional labels, a material safety data sheet or product spec sheets.\n...\nFirst proposed by Google in 2018, the model card is a means of documenting vital elements of a ML model so users -- including AI designers, business leaders and ML end users -- can readily understand the intended use cases, characteristics, behaviors, ethical considerations, and the biases and limitations of a particular ML model.",
+            "title": "What is a model card in machine learning and what is its purpose?",
+            "url": "https://www.techtarget.com/whatis/definition/model-card-in-machine-learning",
+            "date": "2024-03-25",
+            "last_updated": "2026-05-18",
+            "source": "web"
+          },
+          {
+            "id": 5,
+            "snippet": "Model Cards are a powerful tool that promotes transparency, accountability, and regulatory compliance in Machine Learning & AI development.\n...\n{ts:43} data scientists so let's start with the basics what are model cards they're well described by this research paper model\n{ts:50} cards for model reporting they're a standardized way to document essential information about machine learning\n{ts:57} models providing insights into how a model Works its intended use its performance metrics ethical\n{ts:65} considerations and other things this section of the paper outlines exactly what goes into a model card and the\n{ts:71} things you need to think about for each section such as the model details like the date it was created what type of\n{ts:77} model it is if it has a license the intended use of that model metric such as its performance or decision\n...\n{ts:214} predictions secondly model cards support accountability in the way that these models were trained evaluated and are\n{ts:222} being used in production when issues or biases arise model cards can pinpoint the source of the problem and help guide\n{ts:229} improvements they're essential for responsible machine learning development lastly model cards can be used for\n…",
+            "title": "Model Cards for Model Reporting - YouTube",
+            "url": "https://www.youtube.com/watch?v=saAUB_MG2d0",
+            "date": "2024-02-13",
+            "last_updated": "2025-11-18",
+            "source": "web"
+          },
+          {
+            "id": 6,
+            "snippet": "#### Simple, structured overviews of how an advanced AI model was designed and evaluated.",
+            "title": "Model cards - Google DeepMind",
+            "url": "https://deepmind.google/models/model-cards/",
+            "date": null,
+            "last_updated": "2026-05-20",
+            "source": "web"
+          },
+          {
+            "id": 7,
+            "snippet": "The original framework specified: model details, intended use, factors (relevant demographic or contextual factors), metrics, evaluation data, training data, quantitative analyses, ethical considerations, and caveats and recommendations.\nIn practice, model cards from the major AI labs have evolved beyond this template, but the core purpose remains: honest documentation of a model’s capabilities, limitations, and appropriate use cases, written by the people who know the model best.\n...\nFor every AI deployment at your company, one person should read the model card.\nCompletely.\nNot skimming.\nNot the executive summary.\nThe full document.\nThat person should translate the model card’s technical assessments into three operational documents:\n**A capability assessment** that states, in plain language, what the model can and cannot do for your specific use case, based on the model card’s benchmarks and limitations.\n**A risk register** that maps the model card’s safety evaluations and known limitations to your specific deployment context, identifying which risks are relevant, which mitigations are needed, and which residual risks must be accepted.\n**A monitoring plan** that specifies how you will verify, in production, that the model’s actual performance matches the model card’s documented performance — because models can degrade, use cases can drift, and the only check on the model card’s claims is your own observation.",
+            "title": "The Model Card Nobody Reads — Bluewaves Boutique",
+            "url": "https://bluewaves.boutique/notes/the-model-card-nobody-reads/",
+            "date": "2025-12-23",
+            "last_updated": "2026-04-08",
+            "source": "web"
+          },
+          {
+            "id": 8,
+            "snippet": "This is the paper that started it all.\nMargaret Mitchell and her team at Google Research introduced model cards as a practical solution to the black box problem in machine learning.\nDrawing inspiration from electronics datasheets and nutrition labels, this foundational research presents a standardized framework for documenting ML models that goes far beyond technical specifications.\nThe paper doesn't just propose an abstract concept—it demonstrates model cards in action with real examples from Google's own models, showing how transparent documentation can reveal performance disparities across demographic groups and highlight ethical considerations that might otherwise remain hidden.\n...\nModel cards fill this gap by providing a standardized format that makes critical information accessible to both technical and non-technical stakeholders.",
+            "title": "Model Cards for Model Reporting | KI-Governance-Bibliothek",
+            "url": "https://verifywise.ai/de/ai-governance-library/transparency-and-documentation/model-cards-paper",
+            "date": "2019-01-01",
+            "last_updated": "2026-04-01",
+            "source": "web"
+          },
+          {
+            "id": 9,
+            "snippet": "Dans cet article, nous proposons un cadre que\nnous appelons fiches de modèle, afin d'encourager une telle transparence dans la documentation des modèles.\nLes fiches de modèle sont de courts documents accompagnant les modèles d'apprentissage\nautomatique entraînés, qui fournissent une évaluation comparative dans une variété\nde conditions, notamment selon différents groupes culturels, démographiques ou phé-\nnotypiques (p. ex., origine ethnique, localisation géographique, sexe, type de peau selon\nFitzpatrick [15]) et groupes intersectionnels (p. ex., âge et origine ethnique, ou sexe et\ntype de peau selon Fitzpatrick) pertinents pour les domaines d'application\nvisés.\nLes fiches de modèle divulguent également le contexte dans lequel les modèles\nsont censés être utilisés, les détails des procédures d'évaluation des\nperformances, et d'autres informations pertinentes.\nBien que nous nous concentrions principalement\nsur les modèles d'apprentissage automatique centrés sur l'humain dans les domaines\nd'application de la vision par ordinateur et du traitement du langage naturel, ce\ncadre peut être utilisé pour documenter tout modèle d'apprentissage automatique\nentraîné.\n...\nComme étape vers cet objectif, nous proposons que les modèles d'apprentissage\nautomatique publiés soient accompagnés de courts documents (d'une à deux pages)\nque nous appelons fiches de modèle.\nLes fiches de modèle (pour la documentation des modèles) sont com-\n...\nse concentrent sur les caractéristiques du modèle entraîné, telles que le type de modèle,\nles cas d'usage prévus, les informations sur les attributs pour lesquels les performances\ndu modèle peuvent varier, et les mesures de performance du modèle.\n...\nOutre les résultats d'évaluation du modèle, les fiches\nde modèle devraient détailler la motivation derrière le choix des métriques de\nperformance, les définitions des groupes et d'autres facteurs pertinents.\n...\nLes fiches de modèle fournissent une\n...\n4\nSECTIONS DE LA FICHE DE MODÈLE\nLes fiches de modèle servent à divulguer des informations sur un modèle\nd'apprentissage automatique entraîné.\nCela comprend la manière dont il a été construit, les hypothèses\nformulées lors de son développement, le type de comportement du modèle que\ndifférents groupes de population culturels, démographiques ou phénotypiques\npeuvent rencontrer, et une évaluation de la qualité des performances du modèle\nà l'égard de ces groupes.\n...\n– Facteurs pertinents\n– Facteurs d'évaluation\n• Métriques.\nLes métriques doivent être choisies pour refléter les impacts\npotentiels du modèle dans le monde réel.\n– Mesures de performance du modèle\n– Seuils de décision\n– Approches de variation\n• Données d'évaluation.\nDétails sur le ou les jeux de données utilisés pour les\nanalyses quantitatives de la fiche.",
+            "title": "[PDF] Fiches de modèle pour la documentation des modèles - arXiv",
+            "url": "https://arxiv.org/pdf/1810.03993",
+            "date": null,
+            "last_updated": "2026-05-19",
+            "source": "web"
+          },
+          {
+            "id": 10,
+            "snippet": "Model cards provides a standardized structure for conveying key information about AI models.\nGrounded in academic literature [7] and official guidelines from Hugging Face [17], model cards conventionally comprise sections such as Training, Evaluation, Uses, Limitations, Environmental Impact, Citation, and How to Start.\nAs illustrated in Fig. 1d, these sections represent the essential constituents of a comprehensive model card.\n...\nFurthermore, model cards also have the potential to assist in regulatory compliance by offering a structured framework for documenting and communicating key information about a model’s performance, training, and evaluation process [9, 6, 60, 61].\n...\nThe structure of model cards plays a crucial role in conveying key information.\nDrawing from academic literature [7] and Hugging Face’s official guidelines, model cards typically include sections such as Training, Evaluation, Uses, Limitations, Environmental Impact, Citation, and How to Start.",
+            "title": "What's documented in AI? Systematic Analysis of 32K AI Model Cards",
+            "url": "https://arxiv.org/html/2402.05160v1",
+            "date": "2020-08-27",
+            "last_updated": "2026-02-18",
+            "source": "web"
+          },
+          {
+            "id": 11,
+            "snippet": "In this paper, we propose a framework that Fairness, Accountability, and Transparency, January 29–31, 2019, Atlanta, GA, we call model cards, to encourage such transparent model reporting.\n…\nModel cards are short documents accompanying trained machine 3287596 learning models that provide benchmarked evaluation in a variety of conditions, such as across different cultural, demographic, or phe- 1 INTRODUCTION notypic groups (e.g., race, geographic location, sex, Fitzpatrick skin Currently, there are no standardized documentation procedures to type [15]) and intersectional groups (e.g., age and race, or sex and communicate the performance characteristics of trained machine Fitzpatrick skin type) that are relevant to the intended application learning (ML) and artificial intelligence (AI) models.\n...\nModel cards also disclose the context in which models documentation is especially problematic when models are used in are intended to be used, details of the performance evaluation pro- applications that have serious impacts on people’s lives, such as in cedures, and other relevant information.\n...\nAs a step towards this goal, we propose that released machine learning models be accompanied by short (one to two page) records Permission to make digital or hard copies of all or part of this work for personal or we call model cards.\n...\n• Quantitative Analyses – Unitary results4 MODEL CARD SECTIONS – Intersectional resultsModel cards serve to disclose information about a trained machine • Ethical Considerationslearning model.\nThis includes how it was built, what assumptions • Caveats and Recommendationswere made during its development, what type of model behaviordifferent cultural, demographic, or phenotypic population groups Figure 1: Summary of model card sections and suggestedmay experience, and an evaluation of how well the model performs prompts for each.with respect to those groups.\n...\nModel cards include information about the contextin the previous sections.",
+            "title": "Model Cards For Model Reporting | PDF | Machine Learning - Scribd",
+            "url": "https://www.scribd.com/document/588702829/1810-03993",
+            "date": "2025-09-06",
+            "last_updated": "2026-01-19",
+            "source": "web"
+          }
+        ],
+        "type": "search_results",
+        "queries": [
+          "model card definition machine learning",
+          "model card intended use limitations evaluation",
+          "Mitchell model cards paper 2019"
+        ]
+      },
+      {
+        "id": "msg_41254287-8054-4973-a3a4-7e5fb617eea4",
+        "content": [
+          {
+            "text": "A model card is a short, structured document that accompanies a trained machine‑learning or large language model and explains how it was built, how it performs, where it should and should not be used, and known risks or limitations.[web:4][web:9][web:10] It plays a similar role to a product spec sheet or nutrition label, but for AI systems.[web:2][web:4]\n\n## What a model card is\n\n- A **model** card is documentation shipped with an AI model that summarizes key technical, ethical, and practical details in a human-readable way.[web:4][web:9]  \n- It is meant for both technical and non‑technical stakeholders, so they can understand intended use cases, behavior, and trade‑offs of the model before deployment.[web:2][web:4][web:8]\n\n## Typical sections: high level\n\nMany templates exist, but most modern model cards for LLMs include recurring sections.[web:7][web:9][web:10]\n\n- Model details (name, version, developer, architecture, date, license).[web:7][web:9]  \n- Uses/intended use and out‑of‑scope uses.[web:4][web:9][web:10]  \n- Training and data sources.[web:9][web:10]  \n- Evaluation setup and metrics.[web:1][web:9][web:10]  \n- Limitations, biases, and ethical considerations.[web:2][web:7][web:9]  \n- Caveats, recommendations, and how to get started (API, examples).[web:7][web:9][web:10]\n\nFor your question, the four core sections are usually: intended use, training data, limitations, and evaluation.[web:9][web:10]\n\n## Intended use section\n\nThis section defines where the model is appropriate and where it is not.[web:2][web:4][web:9]\n\nTypical contents:\n\n- **Intended users and domains**: For example, “researchers and engineers building conversational assistants” or “classification of English news text.”[web:4][web:9]  \n- Supported use cases: Tasks like code generation, summarization, or translation that the model is designed and tested for.[web:1][web:6][web:10]  \n- Out‑of‑scope use: Explicit warnings against high‑risk contexts such as medical diagnosis, legal advice, biometric identification, or automated decision‑making without human review.[web:4][web:7][web:9]\n\nFor large language models, this section helps prevent over‑reliance on the model in safety‑critical or highly regulated settings.[web:1][web:4]\n\n## Training data section\n\nThis section describes what data the model learned from, usually at an aggregate level rather than listing every dataset.[web:9][web:10]\n\nTypical contents:\n\n- **Data sources and types**: High‑level description of web text, code repositories, books, forums, or proprietary corpora used.[web:9][web:10]  \n- Temporal and language coverage: Time span of data collection, languages included, and major domains (e.g., news vs. social media).[web:9][web:10]  \n- Preprocessing and filtering: How data was cleaned, deduplicated, or filtered for safety, hate speech, or personal information.[web:9][web:10]  \n- Known gaps or biases in data: For example, over‑representation of English or certain regions, and under‑representation of minority languages or dialects.[web:8][web:9]\n\nFor LLMs, training data descriptions are crucial to interpret why a model is strong in some languages or topics and weak in others.[web:8][web:10]\n\n## Limitations section\n\nThis section explicitly states what the model cannot reliably do and known failure modes.[web:2][web:7][web:9]\n\nTypical contents:\n\n- **Capability limits**: Issues like hallucinations (fabricated facts), poor reasoning on long chains, weak performance on low‑resource languages, or lack of up‑to‑date knowledge beyond a cutoff date.[web:7][web:9][web:10]  \n- Safety and bias concerns: Propensity to reproduce harmful stereotypes, toxic or unsafe content, or unfair performance across demographic groups.[web:1][web:8][web:9]  \n- Operational limits: Maximum context length, latency considerations, and scenarios where performance degrades (noisy input, adversarial prompts).[web:6][web:10]  \n- Dependency on user behavior: Notes that the model is sensitive to prompt phrasing and may be misused through prompt engineering.[web:7][web:9]\n\nThis section usually pairs limitations with recommendations such as human review, domain‑specific fine‑tuning, or additional guardrails.[web:7][web:9]\n\n## Evaluation section\n\nThe evaluation section documents how performance was measured and what the results were.[web:1][web:9][web:10]\n\nTypical contents:\n\n- **Benchmarks and tasks**: Lists of datasets or benchmark suites, such as question‑answering, reasoning, coding, or toxicity detection tests for LLMs.[web:1][web:9][web:10]  \n- Metrics: Accuracy, F1, BLEU, perplexity, safety scores, robustness metrics, or human evaluation ratings, chosen to reflect real‑world impact.[web:1][web:9][web:10]  \n- Conditions and subgroups: Performance broken down by language, topic domain, demographic attributes, or other relevant factors to reveal disparities.[web:1][web:8][web:9]  \n- Evaluation procedure: How data was split, decision thresholds, and any notable experimental assumptions.[web:9][web:11]\n\nFor large language models, this section often includes both capability benchmarks (e.g., reasoning and coding tests) and safety evaluations (e.g., red‑teaming or harmful content benchmarks).[web:1][web:6][web:10]",
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": []
+          }
+        ],
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "status": "completed",
+    "error": null,
+    "usage": {
+      "input_tokens": 6852,
+      "output_tokens": 1316,
+      "total_tokens": 8168,
+      "cost": {
+        "currency": "USD",
+        "input_cost": 0.00409,
+        "output_cost": 0.01316,
+        "total_cost": 0.0202,
+        "cache_creation_cost": null,
+        "cache_read_cost": 0.00045,
+        "tool_calls_cost": 0.0025
+      },
+      "input_tokens_details": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 3584,
+        "cached_tokens": 3584
+      },
+      "tool_calls_details": {
+        "search_web": {
+          "invocation": 1
+        }
+      },
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      }
+    },
+    "background": false,
+    "completed_at": 1779391825,
+    "frequency_penalty": 0,
+    "incomplete_details": null,
+    "instructions": "## Abstract\n<role>\nYou are an AI assistant developed by Perplexity AI. Given a user's query, your goal is to generate an expert, useful, factually correct, and contextually relevant response by leveraging available tools and conversation history. First, you will receive the tools you can call iteratively to gather the necessary knowledge for your response. You need to use these tools rather than using internal knowledge. Second, you will receive guidelines to format your response for clear and effective presentation. Third, you will receive guidelines for citation practices to maintain factual accuracy and credibility.\n</role>\n\n## Instructions\n<tools_workflow>\nBegin each turn with tool calls to gather information. You must call at least one tool before answering, even if information exists in your knowledge base. Decompose complex user queries into discrete tool calls for accuracy and parallelization. After each tool call, assess if your output fully addresses the query and its subcomponents. Continue until the user query is resolved or until the <tool_call_limit> below is reached. End your turn with a comprehensive response. Never mention tool calls in your final response as it would badly impact user experience.\n\n<tool_call_limit> Make at most three tool calls before concluding.</tool_call_limit>\n</tools_workflow>\n\n## Citation Instructions\n<citation_instructions>\nYour response must include at least 1 citation. Add a citation to every sentence that includes information derived from tool outputs.\nTool results are provided using `id` in the format `type:index`. `type` is the data source or context. `index` is the unique identifier per citation.\n<common_source_types> are included below.\n\n<common_source_types>\n- `web`: Internet sources\n- `page`: Full web page content\n- `conversation_history`: past queries and answers from your interaction with the user\n</common_source_types>\n\n<formatting_citations>\nUse brackets to indicate citations like this: [type:index]. Commas, dashes, or alternate formats are not valid citation formats. If citing multiple sources, write each citation in a separate bracket like [web:1][web:2][web:3].\n\nCorrect: \"The Eiffel Tower is in Paris [web:3].\"\nIncorrect: \"The Eiffel Tower is in Paris [web-3].\"\n</formatting_citations>\n\nYour citations must be inline - not in a separate References or Citations section. Cite the source immediately after each sentence containing referenced information. If your response presents a markdown table with referenced information from `web`, `memory`, `attached_file`, or `calendar_event` tool result, cite appropriately within table cells directly after relevant data instead in of a new column. Do not cite `generated_image` or `generated_video` inside table cells.\n\n## Response Guidelines\n<response_guidelines>\nResponses are displayed on web interfaces where users should not need to scroll extensively. Limit responses to 5 sections maximum. Users can ask follow-up questions if they need additional detail. Prioritize the most relevant information for the initial query.\n\n### Answer Formatting\n- Begin with a direct 1-2 sentence answer to the core question.\n- Organize the rest of your answer into sections led with Markdown headers (using ##, ###) when appropriate to ensure clarity (e.g. entity definitions, biographies, and wikis).\n- Your answer should be at least 3 sentences long.\n- Each Markdown header should be concise (less than 6 words) and meaningful.\n- Markdown headers should be plain text, not numbered.\n- Between each Markdown header is a section consisting of 2-3 well-cited sentences.\n- When comparing entities with multiple dimensions, use a markdown table to show differences (instead of lists).\n- Whenever possible, present information as bullet point lists to improve readability.\n- You are allowed to bold at most one word (**example**) per paragraph. You can't bold consecutive words.\n- For grouping multiple related items, present the information with a mix of paragraphs and bullet point lists. Do not nest lists within other lists.\n\n### Tone\n<tone>\nExplain clearly using plain language. Use active voice and vary sentence structure to sound natural. Ensure smooth transitions between sentences. Avoid personal pronouns like \"I\". Keep explanations direct; use examples or metaphors only when they meaningfully clarify complex concepts that would otherwise be unclear.\n</tone>\n\n### Lists and Paragraphs\n<lists_and_paragraphs>\nUse lists for: multiple facts/recommendations, steps, features/benefits, comparisons, or biographical information.\n\nAvoid repeating content in both intro paragraphs and list items. Keep intros minimal. Either start directly with a header and list, or provide 1 sentence of context only.\n\nList formatting:\n- Use numbers when sequence matters; otherwise bullets (-) with a space after the dash.\n- Use numbers when sequence matters; otherwise bullets (-).\n- No whitespace before bullets (i.e. no indenting), one item per line.\n- Sentence capitalization; periods only for complete sentences.\n\nParagraphs:\n- Use for brief context (2-3 sentences max) or simple answers\n- Separate with blank lines\n- If exceeding 3 consecutive sentences, consider restructuring as a list\n</lists_and_paragraphs>\n\n### Summaries and Conclusions\n<summaries_and_conclusions>\nAvoid summaries and conclusions. They are not needed and are repetitive. Markdown tables are not for summaries. For comparisons, provide a table to compare, but avoid labeling it as 'Comparison/Key Table', provide a more meaningful title.\n</summaries_and_conclusions>\n\n## Prohibited Meta-Commentary\n<prohibited_commentary>\n- Never reference your information gathering process in your final answer.\n- Do not use phrases such as:\n- \"Based on my search results...\"\n- \"Now I have gathered comprehensive information...\"\n- \"According to my research...\"\n- \"My search revealed...\"\n- \"I found information about...\"\n- \"Let me provide a detailed answer...\"\n- \"Let me compile this information...\"\n- \"Short Answer: ...\"\n- Begin answers immediately with factual content that directly addresses the user's query.\n</prohibited_commentary>\n\n<copyright_requirements>\n- Never reproduce copyrighted content (text, lyrics, etc.)\n- You may share public domain content (expired copyrights, traditional works)\n- When copyright status is uncertain, treat as copyrighted\n- Keep summaries brief (under 30 words) and original — don't reconstruct sources\n- Brief factual statements (names, dates, facts) are always acceptable\n</copyright_requirements>\n\nCurrent date: Thursday, May 21, 2026\n\n",
+    "max_output_tokens": 8192,
+    "max_tool_calls": null,
+    "metadata": {},
+    "parallel_tool_calls": true,
+    "presence_penalty": 0,
+    "previous_response_id": null,
+    "prompt_cache_key": null,
+    "reasoning": null,
+    "safety_identifier": null,
+    "service_tier": "default",
+    "store": true,
+    "temperature": 1,
+    "text": {
+      "format": {
+        "type": "text"
+      }
+    },
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "type": "web_search"
+      },
+      {
+        "type": "fetch_url"
+      }
+    ],
+    "top_logprobs": 0,
+    "top_p": 1,
+    "truncation": "disabled",
+    "user": null
+  }
+  ```
+</Accordion>
+
+<div id="error-handling">
+  ### Gestion des erreurs
+</div>
+
+Gérez les erreurs de manière robuste pendant le streaming :
+
+<CodeGroup>
+  ```python Python SDK theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  try:
+      stream = client.responses.create(
+          preset="fast",
+          input="What is the FOMC, how often does it meet, and what tools (federal funds rate, balance sheet) does it use to influence the economy?",
+          stream=True
+      )
+      
+      for event in stream:
+          if event.type == "response.output_text.delta":
+              print(event.delta, end="")
+          elif event.type == "response.completed":
+              print(f"\n\nCompleted: {event.response.usage}")
+              
+  except perplexity.APIConnectionError as e:
+      print(f"Network connection failed: {e}")
+  except perplexity.RateLimitError as e:
+      print(f"Rate limit exceeded, please retry later: {e}")
+  except perplexity.APIStatusError as e:
+      print(f"API error {e.status_code}: {e.response}")
+  ```
+
+  ```typescript TypeScript SDK theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  try {
+    const stream = await client.responses.create({
+      preset: "fast",
+      input: "What is the FOMC, how often does it meet, and what tools (federal funds rate, balance sheet) does it use to influence the economy?",
+      stream: true
+    });
+
+    for await (const chunk of stream) {
+      if (chunk.type === "response.output_text.delta") {
+        process.stdout.write((chunk as any).delta);
+      }
+    }
+  } catch (error) {
+    if (error instanceof Perplexity.APIConnectionError) {
+      console.error("Network connection failed:", (error as any).cause);
+    } else if (error instanceof Perplexity.RateLimitError) {
+      console.error("Rate limit exceeded, please retry later");
+    } else if (error instanceof Perplexity.APIError) {
+      console.error(`API error ${error.status}: ${error.message}`);
+    }
+  }
+  ```
+</CodeGroup>
+
+<Accordion title="Réponse">
+  ```json theme={null}
+  {
+    "id": "resp_bc5efb99-19ca-4185-87fa-890f2276edd7",
+    "created_at": 1779391925,
+    "model": "openai/gpt-5.1",
+    "object": "response",
+    "output": [
+      {
+        "results": [
+          {
+            "id": 1,
+            "snippet": "The Federal Reserve controls the three tools of monetary policy--open market operations, the discount rate, and reserve requirements.\nThe Board of Governors of the Federal Reserve System is responsible for the discount rate and reserve requirements, and the Federal Open Market Committee is responsible for open market operations.\n...\n#### Structure of the FOMCurThe Federal Open Market Committee (FOMC) consists of twelve members--the seven members of the Board of Governors of the Federal Reserve System; the president of the Federal Reserve Bank of New York; and four of the remaining eleven Reserve Bank presidents, who serve one-year terms on a rotating basis.\nThe rotating seats are filled from the following four groups of Banks, one Bank president from each group: Boston, Philadelphia, and Richmond; Cleveland and Chicago; Atlanta, St.\nLouis, and Dallas; and Minneapolis, Kansas City, and San Francisco.\nNonvoting Reserve Bank presidents attend the meetings of the Committee, participate in the discussions, and contribute to the Committee's assessment of the economy and policy options.\nThe FOMC holds eight regularly scheduled meetings per year.\nAt these meetings, the Committee reviews economic and financial conditions, determines the appropriate stance of monetary policy, and assesses the risks to its long-run goals of price stability and sustainable economic growth.",
+            "title": "The Fed - Federal Open Market Committee",
+            "url": "https://www.federalreserve.gov/monetarypolicy/fomc.htm",
+            "date": "2026-04-29",
+            "last_updated": "2026-05-12",
+            "source": "web"
+          },
+          {
+            "id": 2,
+            "snippet": "What does “FOMC” stand for?\nThe Federal Open Market Committee, or FOMC, is the Fed’s chief body for monetary policy.\nIts voting membership combines the seven members of the Board of Governors, the president of the Federal Reserve Bank of New York, and four other Reserve Bank presidents, who serve one-year terms on a rotating basis with the other Reserve Bank presidents.\nAll Reserve Bank presidents attend FOMC meetings, even when they are not designated voting members.\nBy tradition, the Chair of the FOMC is also the Chair of the Board of Governors.\nThe president of the Federal Reserve Bank of New York and members of the Board of Governors are permanent voting members.\nMost Reserve Bank presidents serve one-year terms on a three-year rotating schedule; the presidents of the Cleveland and Chicago Feds serve on a two-year rotating schedule.\n...\n## How Often the FOMC MeetsC The FOMC typically meets eight times a year in the Board Room at the Eccles Building in Washington, D.C., but when necessary, members will meet by a teleconference.\nIf economic conditions require additional meetings, the FOMC can and does meet more often.\n...\nArmed with this wealth of up-to-date national, international, and regional information, the FOMC discusses the monetary policy options that would best move the economy toward the “dual mandate” objectives given to the Fed by Congress: maximum employment and price stability.\nThe FOMC meeting concludes with a decision on the stance of policy.",
+            "title": "Introduction to the FOMC (Federal Open Market Committee)",
+            "url": "https://www.stlouisfed.org/in-plain-english/introduction-to-the-fomc",
+            "date": null,
+            "last_updated": "2026-05-12",
+            "source": "web"
+          },
+          {
+            "id": 3,
+            "snippet": "The Federal Open Market Committee (FOMC) is the monetary policymaking body of the Federal Reserve System.\nThe FOMC is composed of 12 members--the seven members of the Board of Governors and five of the 12 Reserve Bank presidents.\nThe Board chair serves as the Chair of the FOMC; the president of the Federal Reserve Bank of New York is a permanent member of the Committee and serves as the Vice Chair of the Committee.\nThe presidents of the other Reserve Banks fill the remaining four voting positions on the FOMC on a rotating basis.\nAll of the Reserve Bank presidents, including those who are not voting members, attend FOMC meetings, participate in the discussions, and contribute to the assessment of the economy and policy options.\n...\nThe FOMC schedules eight meetings per year, one about every six weeks or so.\nThe Committee may also hold unscheduled meetings as necessary to review economic and financial developments.\nThe FOMC issues a policy statement following each regular meeting that summarizes the Committee's economic outlook and the policy decision at that meeting.\n...\nBy law, the Federal Reserve conducts monetary policy to achieve its macroeconomic objectives of maximum employment and stable prices.\nUsually, the FOMC conducts policy by adjusting the level of short-term interest rates in response to changes in the economic outlook.\nSince 2008, the FOMC has also used large-scale purchases of Treasury securities and securities that were issued or guaranteed by federal agencies as a policy tool in an effort to lower longer-term interest rates and thereby improve financial conditions and so support the economic recovery.",
+            "title": "What is the FOMC and when does it meet? - Federal Reserve",
+            "url": "https://www.federalreserve.gov/faqs/about_12844.htm",
+            "date": "2019-01-30",
+            "last_updated": "2026-03-30",
+            "source": "web"
+          },
+          {
+            "id": 4,
+            "snippet": "The **Federal Open Market Committee** (**FOMC**) is a committee within the Federal Reserve System (colloquially \"the Fed\") that is charged under United States law with overseeing the nation's open market operations (e.g., the Fed's buying and selling of United States Treasury securities).\nThis Federal Reserve committee makes key decisions about interest rates and the growth of the United States money supply.\n...\nThe FOMC is the principal organ of United States national monetary policy.\nThe committee sets monetary policy by specifying the short-term objective for the Fed's open market operations, which is usually a target level for the federal funds rate (the rate that commercial banks charge between themselves for overnight loans).\nThe FOMC also directs operations undertaken by the Federal Reserve System in foreign exchange markets, although any intervention in foreign exchange markets is coordinated with the U.S. Treasury, which has responsibility for formulating U.S. policies regarding the exchange value of the dollar.\n...\nThe committee consists of the seven members of the Federal Reserve Board, the president of the New York Fed, and four of the other eleven regional Federal Reserve Bank presidents, serving one-year terms.\nThe chair of the Federal Reserve has been invariably appointed by the committee as its chair since 1935, solidifying the perception of the two roles as one.\nThe Federal Open Market Committee was formed by the Banking Act of 1933 (codified at 12 U.S.C.\n§ 263) and did not include voting rights for the Federal Reserve Board of Governors.\nThe Banking Act of 1935 revised these protocols to include the Board of Governors and to closely resemble the present-day FOMC and was amended in 1942 to give the current structure of twelve voting members.\n...\nAll of the Reserve Bank presidents, even those who are not currently voting members of the FOMC, attend committee meetings, participate in discussions, and contribute to the committee's assessment of the economy and policy options.\nThe committee meets eight times a year, approximately once every six weeks.\n...\nBy law, the FOMC must meet at least four times each year in Washington, D.C. Since 1981, eight regularly scheduled meetings have been held each year at intervals of five to eight weeks.",
+            "title": "Federal Open Market Committee - Wikipedia",
+            "url": "https://en.wikipedia.org/wiki/Federal_Open_Market_Committee",
+            "date": "2004-04-13",
+            "last_updated": "2026-03-31",
+            "source": "web"
+          },
+          {
+            "id": 5,
+            "snippet": "\"The committee meets eight times a year, or about once every six weeks,\" writes Kiplinger contributor Dan Burrows in his feature, \"When Is the Next Fed Meeting?\".\nThe Federal Open Market Committee \"is required to meet at least four times a year and may convene additional meetings if necessary,\" Burrows adds, noting that \"the convention of meeting eight times per year dates back to the market stresses of 1981.\"\nFed meetings last two days and wrap up with the release of a policy decision at 2 pm Eastern Standard Time.\nThis is typically followed by the Fed chair's press conference at 2:30 pm.",
+            "title": "April Fed Meeting: Live Updates and Commentary | Kiplinger",
+            "url": "https://www.kiplinger.com/news/live/fed-meeting-updates-and-commentary-april-2026",
+            "date": "2026-04-29",
+            "last_updated": "2026-05-21",
+            "source": "web"
+          },
+          {
+            "id": 6,
+            "snippet": "The Fed’s dual mandate requires it to ensure both stable prices and maximum employment.",
+            "title": "Tracker: The Federal Reserve's Balance Sheet Assets - AAF",
+            "url": "https://www.americanactionforum.org/insight/tracker-the-federal-reserves-balance-sheet/",
+            "date": "2026-05-14",
+            "last_updated": "2026-05-16",
+            "source": "web"
+          },
+          {
+            "id": 7,
+            "snippet": "The Federal Open Market Committee (FOMC) meeting is a regular session held by the members of the Federal Open Market Committee, a branch of the Federal Reserve that decides on the monetary policy of the United States.\nAfter deliberating on short-term monetary policy, the FOMC will decide on a target **federal funds rate** that they believe will achieve their aims.\n...\nThe FOMC will typically meet eight times a year, although there is scope for additional meetings if required.\nWhile any policy changes are announced immediately, the meetings are always secret, with minutes released three weeks after each session.\n...\nThe FOMC can include up to seven members of the Federal Reserve Board, plus five regional Federal Reserve Bank presidents.\nThe seven board members are all appointed by the US president, and the board chair usually serves as the chair of the FOMC.\nThe five bank presidents consist of the president of the Federal Reserve Bank of New York – who also serves as the FOMC vice-chair – plus four others, rotated on a yearly basis.",
+            "title": "When is the FOMC Meeting and Announcement? - IG",
+            "url": "https://www.ig.com/en-ch/financial-events/fomc-meeting-announcement",
+            "date": "2019-06-28",
+            "last_updated": "2026-05-21",
+            "source": "web"
+          },
+          {
+            "id": 8,
+            "snippet": "The Federal Reserve (Fed) influences borrowing costs, savings returns, and overall financial conditions across the economy.\n...\n### Why does the Federal Reserve raise or lower interest rates?\naThe Federal Reserve’s Federal Open Market Committee sets a target interest rate policy for the federal funds rate.\nThis is the rate at which commercial banks borrow and lend excess reserves to other banks on an overnight basis.\nThe Fed raises or lowers the rate to impact underlying economic conditions.",
+            "title": "Federal Reserve Monetary Policy | U.S. Bank",
+            "url": "https://www.usbank.com/investing/financial-perspectives/market-news/federal-reserve-tapering-asset-purchases.html",
+            "date": "2026-05-01",
+            "last_updated": "2026-05-11",
+            "source": "web"
+          }
+        ],
+        "type": "search_results",
+        "queries": [
+          "FOMC purpose and structure",
+          "FOMC meeting schedule eight times a year",
+          "FOMC policy tools federal funds rate balance sheet"
+        ]
+      },
+      {
+        "id": "msg_6e56cea0-aee5-4b0c-a952-31a48542f67f",
+        "content": [
+          {
+            "text": "The Federal Open Market Committee (FOMC) is the Federal Reserve’s main monetary policymaking body, and it typically meets eight times per year—about once every six weeks, with extra meetings if needed.[web:1][web:2][web:3] It influences the economy primarily by setting the target range for the federal funds rate and by adjusting the size and composition of the Federal Reserve’s balance sheet through open market operations and asset purchases or sales.[web:1][web:3][web:4]  \n\n## What the FOMC is  \n\n- The FOMC is the **monetary** policymaking arm of the Federal Reserve System, responsible for decisions that guide U.S. interest rates and money supply.[web:3][web:4]  \n- It oversees open market operations, including the buying and selling of U.S. Treasury and agency securities, which are central to how monetary policy is implemented.[web:1][web:4]  \n\n## How often it meets  \n\n- The FOMC schedules eight regular meetings each year, roughly one every six weeks, and is legally required to meet at least four times annually.[web:1][web:3][web:4]  \n- It can hold additional unscheduled meetings when economic or financial conditions warrant a faster policy response.[web:2][web:3]  \n\n## Federal funds rate tool  \n\n- The committee sets a target level or range for the federal funds rate, the overnight interest rate at which banks lend reserves to each other.[web:3][web:4][web:8]  \n- By raising this target range, the FOMC tightens financial conditions to cool inflation and economic activity; by lowering it, the FOMC aims to stimulate borrowing, spending, and employment.[web:3][web:8]  \n\n## Balance sheet and open market operations  \n\n- Through open market operations, the FOMC directs the purchase or sale of Treasury and agency securities, which changes the amount of reserves in the banking system and affects interest rates.[web:1][web:4]  \n- Since 2008, the FOMC has also used large‑scale asset purchases (expanding the Fed’s **balance** sheet) or allowing assets to run off/shrink to influence longer‑term interest rates and broader financial conditions.[web:3][web:6]  \n\n## Other policy tools in the background  \n\n- In addition to the federal funds rate and balance sheet policies, the broader Federal Reserve toolkit includes the discount rate and reserve requirements, though open market operations are specifically under the FOMC’s direction.[web:1]  \n- Together, these tools are used to pursue the Fed’s dual mandate of maximum employment and stable prices in the U.S. economy.[web:3][web:6]",
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": []
+          }
+        ],
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "status": "completed",
+    "error": null,
+    "usage": {
+      "input_tokens": 6315,
+      "output_tokens": 631,
+      "total_tokens": 6946,
+      "cost": {
+        "currency": "USD",
+        "input_cost": 0.00341,
+        "output_cost": 0.00631,
+        "total_cost": 0.01267,
+        "cache_creation_cost": null,
+        "cache_read_cost": 0.00045,
+        "tool_calls_cost": 0.0025
+      },
+      "input_tokens_details": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 3584,
+        "cached_tokens": 3584
+      },
+      "tool_calls_details": {
+        "search_web": {
+          "invocation": 1
+        }
+      },
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      }
+    },
+    "background": false,
+    "completed_at": 1779391925,
+    "frequency_penalty": 0,
+    "incomplete_details": null,
+    "instructions": "## Abstract\n<role>\nYou are an AI assistant developed by Perplexity AI. Given a user's query, your goal is to generate an expert, useful, factually correct, and contextually relevant response by leveraging available tools and conversation history. First, you will receive the tools you can call iteratively to gather the necessary knowledge for your response. You need to use these tools rather than using internal knowledge. Second, you will receive guidelines to format your response for clear and effective presentation. Third, you will receive guidelines for citation practices to maintain factual accuracy and credibility.\n</role>\n\n## Instructions\n<tools_workflow>\nBegin each turn with tool calls to gather information. You must call at least one tool before answering, even if information exists in your knowledge base. Decompose complex user queries into discrete tool calls for accuracy and parallelization. After each tool call, assess if your output fully addresses the query and its subcomponents. Continue until the user query is resolved or until the <tool_call_limit> below is reached. End your turn with a comprehensive response. Never mention tool calls in your final response as it would badly impact user experience.\n\n<tool_call_limit> Make at most three tool calls before concluding.</tool_call_limit>\n</tools_workflow>\n\n## Citation Instructions\n<citation_instructions>\nYour response must include at least 1 citation. Add a citation to every sentence that includes information derived from tool outputs.\nTool results are provided using `id` in the format `type:index`. `type` is the data source or context. `index` is the unique identifier per citation.\n<common_source_types> are included below.\n\n<common_source_types>\n- `web`: Internet sources\n- `page`: Full web page content\n- `conversation_history`: past queries and answers from your interaction with the user\n</common_source_types>\n\n<formatting_citations>\nUse brackets to indicate citations like this: [type:index]. Commas, dashes, or alternate formats are not valid citation formats. If citing multiple sources, write each citation in a separate bracket like [web:1][web:2][web:3].\n\nCorrect: \"The Eiffel Tower is in Paris [web:3].\"\nIncorrect: \"The Eiffel Tower is in Paris [web-3].\"\n</formatting_citations>\n\nYour citations must be inline - not in a separate References or Citations section. Cite the source immediately after each sentence containing referenced information. If your response presents a markdown table with referenced information from `web`, `memory`, `attached_file`, or `calendar_event` tool result, cite appropriately within table cells directly after relevant data instead in of a new column. Do not cite `generated_image` or `generated_video` inside table cells.\n\n## Response Guidelines\n<response_guidelines>\nResponses are displayed on web interfaces where users should not need to scroll extensively. Limit responses to 5 sections maximum. Users can ask follow-up questions if they need additional detail. Prioritize the most relevant information for the initial query.\n\n### Answer Formatting\n- Begin with a direct 1-2 sentence answer to the core question.\n- Organize the rest of your answer into sections led with Markdown headers (using ##, ###) when appropriate to ensure clarity (e.g. entity definitions, biographies, and wikis).\n- Your answer should be at least 3 sentences long.\n- Each Markdown header should be concise (less than 6 words) and meaningful.\n- Markdown headers should be plain text, not numbered.\n- Between each Markdown header is a section consisting of 2-3 well-cited sentences.\n- When comparing entities with multiple dimensions, use a markdown table to show differences (instead of lists).\n- Whenever possible, present information as bullet point lists to improve readability.\n- You are allowed to bold at most one word (**example**) per paragraph. You can't bold consecutive words.\n- For grouping multiple related items, present the information with a mix of paragraphs and bullet point lists. Do not nest lists within other lists.\n\n### Tone\n<tone>\nExplain clearly using plain language. Use active voice and vary sentence structure to sound natural. Ensure smooth transitions between sentences. Avoid personal pronouns like \"I\". Keep explanations direct; use examples or metaphors only when they meaningfully clarify complex concepts that would otherwise be unclear.\n</tone>\n\n### Lists and Paragraphs\n<lists_and_paragraphs>\nUse lists for: multiple facts/recommendations, steps, features/benefits, comparisons, or biographical information.\n\nAvoid repeating content in both intro paragraphs and list items. Keep intros minimal. Either start directly with a header and list, or provide 1 sentence of context only.\n\nList formatting:\n- Use numbers when sequence matters; otherwise bullets (-) with a space after the dash.\n- Use numbers when sequence matters; otherwise bullets (-).\n- No whitespace before bullets (i.e. no indenting), one item per line.\n- Sentence capitalization; periods only for complete sentences.\n\nParagraphs:\n- Use for brief context (2-3 sentences max) or simple answers\n- Separate with blank lines\n- If exceeding 3 consecutive sentences, consider restructuring as a list\n</lists_and_paragraphs>\n\n### Summaries and Conclusions\n<summaries_and_conclusions>\nAvoid summaries and conclusions. They are not needed and are repetitive. Markdown tables are not for summaries. For comparisons, provide a table to compare, but avoid labeling it as 'Comparison/Key Table', provide a more meaningful title.\n</summaries_and_conclusions>\n\n## Prohibited Meta-Commentary\n<prohibited_commentary>\n- Never reference your information gathering process in your final answer.\n- Do not use phrases such as:\n- \"Based on my search results...\"\n- \"Now I have gathered comprehensive information...\"\n- \"According to my research...\"\n- \"My search revealed...\"\n- \"I found information about...\"\n- \"Let me provide a detailed answer...\"\n- \"Let me compile this information...\"\n- \"Short Answer: ...\"\n- Begin answers immediately with factual content that directly addresses the user's query.\n</prohibited_commentary>\n\n<copyright_requirements>\n- Never reproduce copyrighted content (text, lyrics, etc.)\n- You may share public domain content (expired copyrights, traditional works)\n- When copyright status is uncertain, treat as copyrighted\n- Keep summaries brief (under 30 words) and original — don't reconstruct sources\n- Brief factual statements (names, dates, facts) are always acceptable\n</copyright_requirements>\n\nCurrent date: Thursday, May 21, 2026\n\n",
+    "max_output_tokens": 8192,
+    "max_tool_calls": null,
+    "metadata": {},
+    "parallel_tool_calls": true,
+    "presence_penalty": 0,
+    "previous_response_id": null,
+    "prompt_cache_key": null,
+    "reasoning": null,
+    "safety_identifier": null,
+    "service_tier": "default",
+    "store": true,
+    "temperature": 1,
+    "text": {
+      "format": {
+        "type": "text"
+      }
+    },
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "type": "web_search"
+      },
+      {
+        "type": "fetch_url"
+      }
+    ],
+    "top_logprobs": 0,
+    "top_p": 1,
+    "truncation": "disabled",
+    "user": null
+  }
+  ```
+</Accordion>
+
+<Warning>
+  Si votre interface utilisateur doit afficher les résultats de recherche immédiatement, privilégiez les requêtes sans streaming pour les cas d&#39;usage où l&#39;affichage des résultats est essentiel à l&#39;expérience utilisateur en temps réel.
+</Warning>
+
+<div id="background-runs">
+  ## Exécutions en arrière-plan
+</div>
+
+Le streaming maintient une connexion ouverte pendant toute la durée de l&#39;exécution. Pour les exécutions qui durent plusieurs minutes — recherche approfondie, traitements lourds dans le sandbox —, soumettez plutôt la requête avec `background: true`, puis récupérez le résultat par interrogation périodique de son ID. L&#39;exécution se poursuit côté serveur, même si votre client se déconnecte.
+
+<Tip>
+  Pour le cycle de vie complet d&#39;une exécution en arrière-plan — soumission, interrogation jusqu&#39;au statut terminal, streaming avec reconnexion et annulation —, consultez [Mode arrière-plan](/fr/docs/agent-api/background-mode).
+</Tip>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Produce a competitive landscape report for the EV charging market.",
+      tools=[{"type": "web_search"}, {"type": "sandbox"}],
+      background=True,
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(get_output_text(response))
+  ```
+
+  ```bash cURL theme={null}
+  # 1. Soumettre en arrière-plan
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Produce a competitive landscape report for the EV charging market.",
+      "tools": [{ "type": "web_search" }, { "type": "sandbox" }],
+      "background": true
+    }'
+
+  # 2. Interroger par id jusqu'à ce que le statut soit completed, failed, cancelled ou incomplete
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+Les exécutions en arrière-plan sont durables : vous pouvez donc aussi en diffuser une en direct et vous reconnecter après une coupure. Appelez `GET /v1/agent/{id}?stream=true&starting_after=N` pour reprendre à partir de l&#39;événement suivant le numéro de séquence `N`. La reconnexion n&#39;est possible que pendant la fenêtre de reconnexion de la réponse ; une fois cette fenêtre expirée, le point de terminaison renvoie `400` et vous devez vous rabattre sur un simple `GET /v1/agent/{id}` pour obtenir l&#39;instantané final. Consultez la [référence de l&#39;Agent API](/fr/api-reference/agent-post).
+
+<div id="structured-outputs">
+  ## Sorties structurées
+</div>
+
+Les sorties structurées vous permettent d&#39;imposer des formats de réponse précis aux modèles de Perplexity, garantissant des données cohérentes et lisibles par une machine, directement intégrables à vos applications sans analyse manuelle.
+
+Nous prenons actuellement en charge les sorties structurées au format **JSON Schema**. Pour les activer, ajoutez un champ `response_format` à votre requête :
+
+```json theme={null}
+{
+  "response_format": {
+    "type": "json_schema",
+    "json_schema": {
+      "name": "your_schema_name",
+      "schema": { /* votre objet JSON Schema */ }
+    }
+  }
+}
+```
+
+Le champ `name` est obligatoire et doit contenir de 1 à 64 caractères alphanumériques. Le schéma doit être un objet JSON Schema valide. Les réponses du LLM respecteront le format spécifié, sauf si la sortie dépasse `max_tokens`.
+
+Les propriétés listées dans le tableau `required` du schéma sont obligatoires dans la sortie. Toute propriété déclarée mais absente de `required` reste facultative et peut être résolue en `null` JSON. Si `required` est omis ou vide, toutes les propriétés déclarées sont facultatives. Ce comportement est identique pour les requêtes en streaming et hors streaming, aussi bien sur `/v1/agent` que sur son alias de compatibilité `/v1/responses`.
+
+<Tip>
+  **Améliorer la conformité au schéma** : donnez au LLM des indications sur le format de sortie dans vos prompts afin de renforcer le respect du format structuré. Par exemple, incluez des formulations telles que « Veuillez retourner les données sous forme d&#39;objet JSON avec la structure suivante... » ou « Extrayez les informations et formatez-les comme spécifié dans le schéma. »
+</Tip>
+
+<Info>
+  La première requête utilisant un nouveau JSON Schema est susceptible d&#39;entraîner un délai sur le premier token. La préparation du nouveau schéma prend généralement de 10 à 30 secondes et peut provoquer des erreurs de dépassement de délai. Une fois le schéma préparé, les requêtes suivantes ne subissent plus ce délai.
+</Info>
+
+<div id="example">
+  ### Exemple
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+  from typing import List, Optional
+  from pydantic import BaseModel
+
+  class FinancialMetrics(BaseModel):
+      company: str
+      quarter: str
+      revenue: float
+      net_income: float
+      eps: float
+      revenue_growth_yoy: Optional[float] = None
+      key_highlights: List[str]
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="low",
+      input="Explain the structure of an SEC Form 10-K filing: what each major item (Item 1 Business, Item 1A Risk Factors, Item 7 MD&A, Item 8 Financial Statements) typically contains.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "financial_metrics",
+              "schema": {
+                  **FinancialMetrics.model_json_schema(),
+                  "additionalProperties": False,
+              }
+          }
+      }
+  )
+
+  metrics = FinancialMetrics.model_validate_json(response.output_text)
+  print(f"Revenue: ${metrics.revenue}B")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  interface FinancialMetrics {
+    company: string;
+    quarter: string;
+    revenue: number;
+    net_income: number;
+    eps: number;
+    revenue_growth_yoy?: number;
+    key_highlights: string[];
+  }
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    preset: 'low',
+    input: 'Explain the structure of an SEC Form 10-K filing: what each major item (Item 1 Business, Item 1A Risk Factors, Item 7 MD&A, Item 8 Financial Statements) typically contains.',
+    response_format: {
+      type: 'json_schema',
+      json_schema: {
+        name: 'financial_metrics',
+        schema: {
+          type: 'object',
+          properties: {
+            company: { type: 'string' },
+            quarter: { type: 'string' },
+            revenue: { type: 'number' },
+            net_income: { type: 'number' },
+            eps: { type: 'number' },
+            revenue_growth_yoy: { anyOf: [{ type: 'number' }, { type: 'null' }] },
+            key_highlights: { anyOf: [{ type: 'array', items: { type: 'string' } }, { type: 'null' }] }
+          },
+          required: ['company', 'quarter', 'revenue', 'net_income', 'eps', 'key_highlights'],
+          additionalProperties: false
+        }
+      }
+    }
+  });
+
+  const metrics: FinancialMetrics = JSON.parse(response.output_text ?? '{}');
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "low",
+      "input": "Explain the structure of an SEC Form 10-K filing: what each major item (Item 1 Business, Item 1A Risk Factors, Item 7 MD&A, Item 8 Financial Statements) typically contains.",
+      "response_format": {
+        "type": "json_schema",
+        "json_schema": {
+          "name": "financial_metrics",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "company": {"type": "string"},
+              "quarter": {"type": "string"},
+              "revenue": {"type": "number"},
+              "net_income": {"type": "number"},
+              "eps": {"type": "number"},
+              "revenue_growth_yoy": {"type": "number"},
+              "key_highlights": {
+                "type": "array",
+                "items": {"type": "string"}
+              }
+            },
+            "required": ["company", "quarter", "revenue", "net_income", "eps", "key_highlights"]
+          }
+        }
+      }
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Réponse">
+  ```json theme={null}
+  {
+    "id": "resp_04a4e751-4810-40c2-a92e-ffcab3e11d77",
+    "created_at": 1779391825,
+    "model": "openai/gpt-5.1",
+    "object": "response",
+    "output": [
+      {
+        "results": [
+          {
+            "id": 1,
+            "snippet": "(d) En réponse au point 1, Activités, un tel déclarant n’a qu’à fournir une brève\ndescription des activités exercées par le déclarant et ses filiales au cours du\ndernier exercice qui, de l’avis de la direction, indiquera la nature et la portée\ngénérales des activités du déclarant et de ses filiales, et\nen réponse au point 2, Propriétés, un tel déclarant n’a qu’à fournir une brève\ndescription des propriétés importantes du déclarant et de ses filiales dans la\nmesure où, de l’avis de la direction, cela est nécessaire à la compréhension des\nactivités exercées par le déclarant et ses filiales.\n...\nPARTIE I \n[Voir l’instruction générale G(2)] \nPoint 1.\nActivités.\nFournir les informations requises par le point 101 du règlement S-K (§ 229.101 du présent chapitre) \nsauf que l’exposé sur le développement des activités du déclarant ne doit inclure que\nles développements survenus depuis le début de l’exercice pour lequel ce rapport est déposé.\nPoint 1A.\nFacteurs de risque.\nExposer, sous l’intitulé « Facteurs de risque », le cas échéant, les facteurs de risque décrits au \npoint 105 du règlement S-K (§ 229.105 du présent chapitre) applicables au déclarant.\nPrésenter tout\nexposé des facteurs de risque en langage clair conformément à la règle 421(d) du Securities Act de \n1933 (§ 230.421(d) du présent chapitre).\nLes petites sociétés déclarantes ne sont pas tenues de fournir les \ninformations requises par ce point.\nPoint 1B.",
+            "title": "[PDF] Formulaire 10-K - SEC.gov",
+            "url": "https://www.sec.gov/files/form10-k.pdf",
+            "date": null,
+            "last_updated": "2025-06-03",
+            "source": "web"
+          },
+          {
+            "id": 2,
+            "snippet": "Ce rapport offre une vue d’ensemble de la situation financière d’une entreprise ainsi que des informations complémentaires sur ses activités, telles que les principaux détails opérationnels, les états financiers audités, les risques de marché et la gouvernance d’entreprise.",
+            "title": "Comment s’y retrouver dans les formulaires 10-K, 10-Q, 20-F, 40-F, 8-K et 6-K",
+            "url": "https://www.toppanmerrill.com/blog/how-to-navigate-forms-10-k-10-q-20-f-40-f-8-k-and-6-k/",
+            "date": "2025-03-19",
+            "last_updated": "2026-05-16",
+            "source": "web"
+          },
+          {
+            "id": 3,
+            "snippet": "La SEC divise le formulaire 10-K en quatre parties :\n### Partie I\n- Point 1 : « Activités »\n- Point 1A : « Facteurs de risque »\n- Point 1B : « Commentaires non résolus du personnel »\n- Point 2 : « Propriétés »\n...\nPour analyser une entreprise à l’aide du formulaire 10-K, consultez toujours le « Point 1 », qui présente un aperçu des activités.\nÀ titre d’exemple, examinons TSLA.\nL’aperçu énumère tous les modèles de voitures, les nouveaux modèles potentiels et d’autres développements au sein de l’entreprise, comme d’éventuelles usines.\nCela vous donne une bonne idée de ce qui attend la production future de l’entreprise.",
+            "title": "Ce qu’est le formulaire 10-K et comment le comprendre pour l’utiliser",
+            "url": "https://thecollegeinvestor.com/32956/form-10-k/",
+            "date": "2024-02-27",
+            "last_updated": "2025-04-18",
+            "source": "web"
+          },
+          {
+            "id": 4,
+            "snippet": "#### Point 1 – Activités\nCette section décrit les activités de l’entreprise : qui elle est et ce qu’elle fait, quelles filiales elle détient et sur quels marchés elle opère.\nElle peut aussi inclure les événements récents, la concurrence, la réglementation et les questions de main-d’œuvre.\n(Certains secteurs sont fortement réglementés et ont des exigences complexes en matière de main-d’œuvre, ce qui a des effets importants sur l’activité.)\nD’autres sujets de cette section peuvent inclure des coûts d’exploitation particuliers, des facteurs saisonniers ou des questions d’assurance.",
+            "title": "Formulaire 10-K - Wikipédia",
+            "url": "https://en.wikipedia.org/wiki/Form_10-K",
+            "date": "2005-02-23",
+            "last_updated": "2026-03-31",
+            "source": "web"
+          },
+          {
+            "id": 5,
+            "snippet": "Le règlement S-K, point 105, exige des déclarants qu’ils fournissent « un exposé des\nfacteurs importants qui rendent un investissement dans le déclarant ou dans l’offre\nspéculatif ou risqué ».\nCertains indicateurs de risque peuvent figurer dans les\nnotes aux états financiers, dans le rapport de gestion (MD&A) ou ailleurs dans les\nprésentations aux investisseurs ou d’autres dépôts périodiques.",
+            "title": "3.3 Informations à fournir sur les risques | DART – Deloitte Accounting Research ...",
+            "url": "https://dart.deloitte.com/USDART/home/publications/deloitte/additional-deloitte-guidance/roadmap-sec-comment-letter-considerations/chapter-3-sec-disclosure-topics/3-3-disclosures-about-risk",
+            "date": null,
+            "last_updated": "2026-03-31",
+            "source": "web"
+          },
+          {
+            "id": 6,
+            "snippet": "Si le déclarant ou l’une de ses filiales consolidées a réalisé l’acquisition ou \nla cession d’un montant important d’actifs, autrement que dans le cours normal des affaires, ou \nl’acquisition ou la cession d’un montant important d’actifs constituant une exploitation \nimmobilière au sens du § 210.3-14(a)(2), communiquer les informations suivantes :\n(a) la date de réalisation de l’opération ; \n(b) une brève description des actifs concernés ; \n(c) l’identité de la ou des personnes auprès desquelles les actifs ont été acquis ou auxquelles ils ont été \nvendus et la nature de toute relation importante, autre qu’au titre de l’opération, entre \nces personnes et le déclarant ou l’une de ses sociétés affiliées, ou tout administrateur ou dirigeant du\n...\n(1) \n...\nnature de toute clause de recours permettant au déclarant de se retourner contre des tiers ; ",
+            "title": "[PDF] Formulaire 8-K - SEC.gov",
+            "url": "https://www.sec.gov/files/form8-k.pdf",
+            "date": null,
+            "last_updated": "2025-04-11",
+            "source": "web"
+          },
+          {
+            "id": 7,
+            "snippet": "#### Partie I : Aperçu des activités et risques\n- Point 1 - Activités :\n- Décrit les principales activités de l’entreprise, y compris ses principaux produits et services, ses filiales et ses opérations de marché.\n- Aborde le paysage concurrentiel, l’environnement réglementaire et tout développement commercial important survenu au cours de l’année.",
+            "title": "Le formulaire 10-K : explications",
+            "url": "https://unlevered.ai/blog/10-k/",
+            "date": "2024-08-21",
+            "last_updated": "2024-10-17",
+            "source": "web"
+          },
+          {
+            "id": 8,
+            "snippet": "- **Point 1 : Activités**\n...\n## Point 1 - ActivitésneLes entreprises définissent généralement leurs activités dans cette section d’ouverture du rapport 10-K.\nElles décrivent leurs différentes gammes de produits et segments d’activité.\nElles énumèrent les contrats, les matières premières utilisées et les circuits d’approvisionnement ou de distribution.\nElles évoquent la concurrence et les facteurs concurrentiels du marché.\nSi la recherche et développement ou les questions de propriété intellectuelle sont importantes pour les activités de l’entreprise, elles y figurent.\nLes réglementations gouvernementales sont abordées.\nEnfin, plusieurs pages sont consacrées à l’exposé des facteurs de risque à prendre en compte pour évaluer les activités de l’entreprise.",
+            "title": "Le 10-K - Dépôts auprès de la SEC - Guides de recherche du Baruch College",
+            "url": "https://guides.newman.baruch.cuny.edu/c.php?g=188202&p=1244183",
+            "date": "2009-11-02",
+            "last_updated": "2026-05-09",
+            "source": "web"
+          },
+          {
+            "id": 9,
+            "snippet": "- **Point 1A : Facteurs de risque :** Une lecture absolument essentielle.\nCette **section** énumère les risques et incertitudes les plus importants susceptibles d’affecter de manière significative les activités de l’entreprise, sa **situation financière** ou ses résultats d’exploitation.\nUne **analyse efficace des facteurs de risque du 10-K** est primordiale pour les **investisseurs**.\nRecherchez des risques précis et quantifiables, et non de simples avertissements standardisés.\nLes outils d’IA peuvent être particulièrement utiles pour suivre l’évolution de cette section au fil du temps.\n- **Point 1B : Commentaires non résolus du personnel de la SEC :** Détaille tout commentaire écrit en suspens du personnel de la SEC concernant les dépôts antérieurs de l’entreprise.\n- **Point 2 : Propriétés :** Informations sur les biens physiques importants de l’entreprise, comme les usines de fabrication ou le siège social.\n- **Point 3 : Procédures judiciaires :** Décrit tout litige important en cours ou toute autre action en justice impliquant l’entreprise.\n...\nUn rapport 10-K se divise globalement en : Partie I (présentation des activités, facteurs de risque, procédures judiciaires), Partie II (données financières, dont le MD&A, le compte de résultat, le bilan, le tableau des flux de trésorerie et les notes), Partie III (gouvernance d’entreprise, rémunération des dirigeants, principaux actionnaires) et Partie IV (annexes et tableaux des états financiers).\nChaque partie offre des éclairages différents mais essentiels sur les activités et la santé financière de l’entreprise.",
+            "title": "Comment lire un rapport 10-K avec l’IA | Guide complet d’analyse des dépôts SEC",
+            "url": "https://www.v7labs.com/blog/how-to-read-a-10k-report-ai-sec-filings-guide",
+            "date": "2025-06-11",
+            "last_updated": "2026-05-16",
+            "source": "web"
+          },
+          {
+            "id": 10,
+            "snippet": "Les sections supplémentaires du présent formulaire 10-K qui devraient faciliter la lecture de notre discussion et analyse comprennent les suivantes : (i) une description des services que nous fournissons, par segment, figurant aux points\n1 et 2 « Activités et propriétés » — « Services fournis » ; (ii) une description de notre stratégie commerciale figurant aux points 1 et 2 « Activités et propriétés » — « Notre stratégie » ; et (iii) une description des\nfacteurs de risque nous affectant, ainsi que nos activités, figurant au point 1A « Facteurs de risque ».",
+            "title": "Formulaire 10-K, point 7. Discussion et analyse de la direction",
+            "url": "https://www.sec.gov/Archives/edgar/data/1449732/000119312512289206/d374099dex993.htm",
+            "date": "2012-03-29",
+            "last_updated": "2025-09-23",
+            "source": "web"
+          },
+          {
+            "id": 11,
+            "snippet": "Dans cette section du 10-K, les entreprises fournissent une description de leurs activités, notamment ce que fait l’entreprise, ses différentes lignes d’activité et clients, ses concurrents et les lieux où elle opère, entre autres.",
+            "title": "Formulaire 10-K : une vue d’ensemble complète - Corporate Finance Institute",
+            "url": "https://corporatefinanceinstitute.com/resources/accounting/form-10-k/",
+            "date": "2024-04-18",
+            "last_updated": "2026-02-04",
+            "source": "web"
+          },
+          {
+            "id": 12,
+            "snippet": "Contrairement au 10-Q trimestriel, le 10-K comprend\ndes **états financiers audités** et de longues sections narratives couvrant le modèle économique, le paysage concurrentiel et les facteurs de risque.\n...\n#### Point 1 : Activités\nOpérations principales, produits, concurrence\n💡 À lire en premier pour une vue d’ensemble de l’entreprise\n#### Point 1A : Facteurs de risque\n...\n💡 Souvent plus de 20 pages de scénarios catastrophes",
+            "title": "Formulaire 10-K de la SEC : guide complet des rapports annuels",
+            "url": "https://secwhisperer.com/learn/sec-form-10k",
+            "date": "2025-10-28",
+            "last_updated": "2025-12-23",
+            "source": "web"
+          }
+        ],
+        "type": "search_results",
+        "queries": [
+          "description des activités au point 1 du formulaire 10-K de la SEC",
+          "description des facteurs de risque au point 1A du formulaire 10-K de la SEC",
+          "contenu du MD&A au point 7 du formulaire 10-K de la SEC",
+          "contenu des états financiers au point 8 du formulaire 10-K de la SEC",
+          "aperçu de la liste des points du formulaire 10-K de la SEC"
+        ]
+      },
+      {
+        "id": "msg_e2eaeb8f-a3ef-47ac-b50a-e5da20409664",
+        "content": [
+          {
+            "text": "Le formulaire 10-K de la SEC est un rapport annuel standardisé comportant des « points » précis qui remplissent chacun une fonction distincte ; les points 1, 1A, 7 et 8 expliquent ensemble ce que fait l’entreprise, ce qui pourrait mal tourner, comment la direction interprète les chiffres, et présentent les états financiers audités eux-mêmes.[web:1][web:4] Comprendre le contenu typique de chacun de ces points facilite grandement la lecture du dépôt de n’importe quelle entreprise.[web:8]  \n\n## Point 1 – Activités  \n\nLe point 1 « Activités » décrit les opérations **principales** du déclarant et de ses filiales, notamment ce que fait l’entreprise, ses principaux produits et services, ainsi que les marchés et zones géographiques où elle opère.[web:1][web:4][web:11] Il comprend souvent une discussion des segments d’activité, des principaux clients, des canaux de distribution et des contrats ou accords d’approvisionnement importants.[web:8][web:11]  \n\nLes entreprises traitent généralement aussi de leur environnement concurrentiel, de leurs principaux concurrents et des bases de la concurrence (prix, technologie, marque, service).[web:4][web:8] Selon le secteur, cette section peut aborder les exigences réglementaires, la saisonnalité de l’activité, la recherche et le développement, la propriété intellectuelle, la dépendance aux matières premières et les ressources en capital humain, comme les employés et les relations de travail.[web:4][web:7][web:8]  \n\n## Point 1A – Facteurs de risque  \n\nLe point 1A « Facteurs de risque » présente les risques importants susceptibles de nuire aux activités de l’entreprise, à sa situation financière ou à ses résultats d’exploitation, présentés comme des facteurs rendant un investissement spéculatif ou risqué.[web:1][web:5][web:9] Ces facteurs de risque doivent porter sur des risques spécifiques et significatifs pour le déclarant, et non sur des formulations génériques standardisées, et doivent être rédigés dans un style simple et clair.[web:1][web:5]  \n\nLes catégories typiques incluent les risques commerciaux et opérationnels (par exemple, perturbation de la chaîne d’approvisionnement, concurrence), les risques financiers (liquidité, endettement, crédit), les risques juridiques et réglementaires, les risques de cybersécurité et de confidentialité des données, ainsi que les risques macroéconomiques ou géopolitiques.[web:7][web:9] La section explique généralement comment chaque risque pourrait affecter l’entreprise (par exemple, baisse des revenus, hausse des coûts ou dépréciation d’actifs) et peut signaler les interdépendances entre les risques.[web:7][web:9]  \n\n## Point 7 – MD&A  \n\nLe point 7 « Discussion et analyse par la direction de la situation financière et des résultats d’exploitation » (MD&A) est l’endroit où la direction explique, sous forme narrative, les facteurs à l’origine des résultats financiers historiques ainsi que la liquidité et les ressources en capital de l’entreprise.[web:1][web:9][web:11] Il passe généralement en revue les variations d’une année sur l’autre du chiffre d’affaires, des marges, des charges et des postes clés, en les reliant à des causes sous-jacentes telles que le volume, les prix, le mix, les acquisitions, les changes ou les initiatives de réduction des coûts.[web:9][web:10][web:11]  \n\nLe MD&A traite également de la liquidité (flux de trésorerie, dispositifs d’endettement, lignes de crédit), des dépenses d’investissement et des tendances, demandes, engagements ou incertitudes connus raisonnablement susceptibles d’affecter la performance future.[web:1][web:9] Les entreprises discutent souvent des mesures non conformes aux PCGR, des estimations comptables critiques et de la sensibilité aux risques de marché tels que les taux d’intérêt ou les changes, avec des renvois aux états financiers et aux facteurs de risque.[web:9][web:10][web:11]  \n\n## Point 8 – États financiers  \n\nLe point 8 contient les états financiers annuels audités de l’entreprise et les informations connexes.[web:1][web:2][web:12] Cette section comprend généralement le rapport de l’auditeur indépendant, le bilan, le compte de résultat, le tableau des flux de trésorerie, l’état des variations des capitaux propres et les notes annexes aux états financiers.[web:2][web:9][web:12]  \n\nLes notes fournissent des informations détaillées sur les méthodes comptables, la comptabilisation des revenus, les segments, la dette, les contrats de location, les passifs éventuels, les impôts sur le résultat, les retraites, la rémunération à base d’actions et d’autres questions importantes.[web:2][web:12] Le point 8 peut également inclure des tableaux annexes aux états financiers et toute donnée supplémentaire requise venant appuyer ou compléter les états financiers principaux.[web:1][web:12]",
+            "type": "output_text",
+            "annotations": [],
+            "logprobs": []
+          }
+        ],
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "status": "completed",
+    "error": null,
+    "usage": {
+      "input_tokens": 6393,
+      "output_tokens": 944,
+      "total_tokens": 7337,
+      "cost": {
+        "currency": "USD",
+        "input_cost": 0.00351,
+        "output_cost": 0.00944,
+        "total_cost": 0.0159,
+        "cache_creation_cost": null,
+        "cache_read_cost": 0.00045,
+        "tool_calls_cost": 0.0025
+      },
+      "input_tokens_details": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 3584,
+        "cached_tokens": 3584
+      },
+      "tool_calls_details": {
+        "search_web": {
+          "invocation": 1
+        }
+      },
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      }
+    },
+    "background": false,
+    "completed_at": 1779391825,
+    "frequency_penalty": 0,
+    "incomplete_details": null,
+    "instructions": "## Abstract\n<role>\nYou are an AI assistant developed by Perplexity AI. Given a user's query, your goal is to generate an expert, useful, factually correct, and contextually relevant response by leveraging available tools and conversation history. First, you will receive the tools you can call iteratively to gather the necessary knowledge for your response. You need to use these tools rather than using internal knowledge. Second, you will receive guidelines to format your response for clear and effective presentation. Third, you will receive guidelines for citation practices to maintain factual accuracy and credibility.\n</role>\n\n## Instructions\n<tools_workflow>\nBegin each turn with tool calls to gather information. You must call at least one tool before answering, even if information exists in your knowledge base. Decompose complex user queries into discrete tool calls for accuracy and parallelization. After each tool call, assess if your output fully addresses the query and its subcomponents. Continue until the user query is resolved or until the <tool_call_limit> below is reached. End your turn with a comprehensive response. Never mention tool calls in your final response as it would badly impact user experience.\n\n<tool_call_limit> Make at most three tool calls before concluding.</tool_call_limit>\n</tools_workflow>\n\n## Citation Instructions\n<citation_instructions>\nYour response must include at least 1 citation. Add a citation to every sentence that includes information derived from tool outputs.\nTool results are provided using `id` in the format `type:index`. `type` is the data source or context. `index` is the unique identifier per citation.\n<common_source_types> are included below.\n\n<common_source_types>\n- `web`: Internet sources\n- `page`: Full web page content\n- `conversation_history`: past queries and answers from your interaction with the user\n</common_source_types>\n\n<formatting_citations>\nUse brackets to indicate citations like this: [type:index]. Commas, dashes, or alternate formats are not valid citation formats. If citing multiple sources, write each citation in a separate bracket like [web:1][web:2][web:3].\n\nCorrect: \"The Eiffel Tower is in Paris [web:3].\"\nIncorrect: \"The Eiffel Tower is in Paris [web-3].\"\n</formatting_citations>\n\nYour citations must be inline - not in a separate References or Citations section. Cite the source immediately after each sentence containing referenced information. If your response presents a markdown table with referenced information from `web`, `memory`, `attached_file`, or `calendar_event` tool result, cite appropriately within table cells directly after relevant data instead in of a new column. Do not cite `generated_image` or `generated_video` inside table cells.\n\n## Response Guidelines\n<response_guidelines>\nResponses are displayed on web interfaces where users should not need to scroll extensively. Limit responses to 5 sections maximum. Users can ask follow-up questions if they need additional detail. Prioritize the most relevant information for the initial query.\n\n### Answer Formatting\n- Begin with a direct 1-2 sentence answer to the core question.\n- Organize the rest of your answer into sections led with Markdown headers (using ##, ###) when appropriate to ensure clarity (e.g. entity definitions, biographies, and wikis).\n- Your answer should be at least 3 sentences long.\n- Each Markdown header should be concise (less than 6 words) and meaningful.\n- Markdown headers should be plain text, not numbered.\n- Between each Markdown header is a section consisting of 2-3 well-cited sentences.\n- When comparing entities with multiple dimensions, use a markdown table to show differences (instead of lists).\n- Whenever possible, present information as bullet point lists to improve readability.\n- You are allowed to bold at most one word (**example**) per paragraph. You can't bold consecutive words.\n- For grouping multiple related items, present the information with a mix of paragraphs and bullet point lists. Do not nest lists within other lists.\n\n### Tone\n<tone>\nExplain clearly using plain language. Use active voice and vary sentence structure to sound natural. Ensure smooth transitions between sentences. Avoid personal pronouns like \"I\". Keep explanations direct; use examples or metaphors only when they meaningfully clarify complex concepts that would otherwise be unclear.\n</tone>\n\n### Lists and Paragraphs\n<lists_and_paragraphs>\nUse lists for: multiple facts/recommendations, steps, features/benefits, comparisons, or biographical information.\n\nAvoid repeating content in both intro paragraphs and list items. Keep intros minimal. Either start directly with a header and list, or provide 1 sentence of context only.\n\nList formatting:\n- Use numbers when sequence matters; otherwise bullets (-) with a space after the dash.\n- Use numbers when sequence matters; otherwise bullets (-).\n- No whitespace before bullets (i.e. no indenting), one item per line.\n- Sentence capitalization; periods only for complete sentences.\n\nParagraphs:\n- Use for brief context (2-3 sentences max) or simple answers\n- Separate with blank lines\n- If exceeding 3 consecutive sentences, consider restructuring as a list\n</lists_and_paragraphs>\n\n### Summaries and Conclusions\n<summaries_and_conclusions>\nAvoid summaries and conclusions. They are not needed and are repetitive. Markdown tables are not for summaries. For comparisons, provide a table to compare, but avoid labeling it as 'Comparison/Key Table', provide a more meaningful title.\n</summaries_and_conclusions>\n\n## Prohibited Meta-Commentary\n<prohibited_commentary>\n- Never reference your information gathering process in your final answer.\n- Do not use phrases such as:\n- \"Based on my search results...\"\n- \"Now I have gathered comprehensive information...\"\n- \"According to my research...\"\n- \"My search revealed...\"\n- \"I found information about...\"\n- \"Let me provide a detailed answer...\"\n- \"Let me compile this information...\"\n- \"Short Answer: ...\"\n- Begin answers immediately with factual content that directly addresses the user's query.\n</prohibited_commentary>\n\n<copyright_requirements>\n- Never reproduce copyrighted content (text, lyrics, etc.)\n- You may share public domain content (expired copyrights, traditional works)\n- When copyright status is uncertain, treat as copyrighted\n- Keep summaries brief (under 30 words) and original — don't reconstruct sources\n- Brief factual statements (names, dates, facts) are always acceptable\n</copyright_requirements>\n\nCurrent date: Thursday, May 21, 2026\n\n",
+    "max_output_tokens": 8192,
+    "max_tool_calls": null,
+    "metadata": {},
+    "parallel_tool_calls": true,
+    "presence_penalty": 0,
+    "previous_response_id": null,
+    "prompt_cache_key": null,
+    "reasoning": null,
+    "safety_identifier": null,
+    "service_tier": "default",
+    "store": true,
+    "temperature": 1,
+    "text": {
+      "format": {
+        "type": "text"
+      }
+    },
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "type": "web_search"
+      },
+      {
+        "type": "fetch_url"
+      }
+    ],
+    "top_logprobs": 0,
+    "top_p": 1,
+    "truncation": "disabled",
+    "user": null
+  }
+  ```
+</Accordion>
+
+<Warning>
+  **Liens dans les réponses JSON** : demander des liens dans une réponse JSON n&#39;est pas toujours fiable et peut donner lieu à des hallucinations ou à des liens brisés. Les modèles peuvent générer des URL invalides lorsqu&#39;ils sont contraints d&#39;inclure directement des liens dans des sorties structurées.
+
+  Pour garantir la validité de tous les liens, utilisez ceux renvoyés dans les champs `citations` ou `search_results` de la réponse de l&#39;API. Ne comptez jamais sur le modèle pour renvoyer des liens valides directement dans le contenu de la réponse JSON.
+</Warning>
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Structurer la sortie" icon="list-details" href="/fr/docs/agent-api/building-agents/shape-output">
+    Retour au flux de développement : imposez un JSON structuré que votre code peut analyser.
+  </Card>
+
+  <Card title="Modèles de l'Agent API" icon="brain" href="/fr/docs/agent-api/models">
+    Découvrez la sélection directe de modèle et les modèles tiers.
+  </Card>
+</CardGroup>

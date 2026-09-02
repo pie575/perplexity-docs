@@ -1,0 +1,520 @@
+---
+title: "Compétences"
+description: "Offrez à l'agent une expertise métier à la demande grâce aux compétences intégrées, en ligne et personnalisées."
+---
+
+Les compétences confèrent à l&#39;agent une expertise métier à la demande. Le modèle voit le nom et la description de chaque compétence, et n&#39;en charge les instructions complètes que lorsqu&#39;il juge nécessaire de le faire — un modèle de divulgation progressive décrit dans [Designing, Refining, and Maintaining Agent Skills](https://research.perplexity.ai/articles/designing-refining-and-maintaining-agent-skills-at-perplexity).
+
+<div id="why-use-skills">
+  ## Pourquoi utiliser les compétences
+</div>
+
+* **Spécialiser.** Ajoutez la génération de documents et des workflows métier au prompting de base.
+* **Ne payer le contexte qu&#39;à l&#39;usage.** Tant qu&#39;une compétence n&#39;est pas chargée, elle ne coûte que son nom et sa description.
+* **Composer.** Combinez des compétences intégrées et des instructions en ligne dans une même requête.
+* **Réutiliser.** Téléversez une compétence personnalisée une seule fois, puis référencez-la par son ID dans n&#39;importe quelle requête.
+
+<div id="how-skills-work">
+  ## Fonctionnement des compétences
+</div>
+
+Vous transmettez un tableau `skills` dans la requête. Chaque entrée est soit une sélection **intégrée** issue du catalogue, soit une compétence **inline** que vous définissez pour la requête, soit une compétence **personnalisée** que vous avez créée et téléversée sur Perplexity.
+Vous pouvez combiner jusqu&#39;à **16 compétences** de n&#39;importe quel type dans une même requête.
+
+| Étape      | Ce que voit le modèle                                                                                                                                                       |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Découverte | Un index du nom et de la description de chaque compétence.                                                                                                                       |
+| Chargement | Le corps complet de la compétence, renvoyé lorsque le modèle appelle `load_skill`.                                                                                               |
+| Fichiers   | Les compétences intégrées et personnalisées montent leurs fichiers d&#39;appui dans le sandbox au chargement. Les compétences inline renvoient leurs instructions et ne montent rien. |
+
+La description sert de déclencheur de routage. Rédigez-la de façon à indiquer au modèle quand charger la compétence.
+
+Charger une compétence coûte une étape : le modèle consacre un tour à appeler `load_skill` et à lire le corps, et n&#39;agit qu&#39;aux tours suivants.
+Une requête adressée directement à un modèle sans [`max_steps`](/fr/docs/agent-api/building-agents/define-the-run#customize-the-loop-max-steps) s&#39;exécute en une seule étape : le modèle peut donc charger une compétence sans jamais l&#39;exploiter.
+Fixez `max_steps` à une valeur suffisante pour couvrir le chargement et le travail proprement dit.
+
+<div id="built-in-skills">
+  ## Compétences intégrées
+</div>
+
+Sélectionnez une compétence intégrée avec un seul objet JSON : `{ "type": "builtin", "name": "office/pdf" }`.
+
+<Tabs>
+  <Tab title="office">
+    <Card title="Office">
+      Générez des documents PDF, Word, PowerPoint et Excel de toutes pièces, avec validation structurelle et contrôle qualité visuel. Sélectionnez une feuille précise, ou sélectionnez `office` pour accorder les quatre d&#39;un coup et laisser le model choisir le format.
+    </Card>
+
+    | Nom           | Description                                                                               | Sélection                                      |
+    | ------------- | ----------------------------------------------------------------------------------------- | ---------------------------------------------- |
+    | `office`      | Ensemble global qui accorde les quatre feuilles ci-dessous.                               | `{ "type": "builtin", "name": "office" }`      |
+    | `office/pdf`  | Créer des documents PDF avec un contrôle qualité visuel page par page.                    | `{ "type": "builtin", "name": "office/pdf" }`  |
+    | `office/docx` | Créer des documents Word modifiables (OOXML).                                             | `{ "type": "builtin", "name": "office/docx" }` |
+    | `office/pptx` | Créer des présentations PowerPoint avec un contrôle qualité visuel diapo par diapo.       | `{ "type": "builtin", "name": "office/pptx" }` |
+    | `office/xlsx` | Créer des classeurs Excel avec formules vérifiées, graphiques et contrôle qualité visuel. | `{ "type": "builtin", "name": "office/xlsx" }` |
+
+    <Note>
+      Les compétences Office créent des documents de toutes pièces. Elles ne modifient pas les fichiers que vous téléversez.
+    </Note>
+  </Tab>
+</Tabs>
+
+<div id="inline-skills">
+  ## Compétences inline
+</div>
+
+Utilisez les compétences inline pour des consignes ponctuelles ou propres à un compte que le model doit charger à la demande : guides de style, playbooks, design systems, règles internes.
+
+| Champ          | Description                                                                                        |
+| -------------- | -------------------------------------------------------------------------------------------------- |
+| `type`         | Obligatoire. Doit valoir `"inline"`.                                                               |
+| `name`         | Obligatoire. 1 à 64 caractères ; lettres ASCII minuscules, chiffres et traits d&#39;union simples. |
+| `description`  | Obligatoire. 1 à 1 024 octets. Rédigée comme le déclencheur de routage.                            |
+| `instructions` | Obligatoire. 1 à 65 536 octets. Le corps de la compétence que le model lit au chargement.          |
+
+```json theme={null}
+{
+  "type": "inline",
+  "name": "design-system",
+  "description": "Load when creating documents that must follow the house design system.",
+  "instructions": "Model: a 1970s letterpress broadsheet financial page. Paper #EDE9DE; body ink #232220; ..."
+}
+```
+
+Les compétences inline n&#39;ont ni fichiers, ni dépendances, ni montages sandbox, ni bibliothèque réutilisable, et ne sont jamais renvoyées dans la réponse.
+
+<div id="example-one-off-inline-skill">
+  ### Exemple : compétence inline ponctuelle
+</div>
+
+Combinez `office/pdf` avec une compétence `design-system` inline pour générer un rapport boursier d&#39;une page sur le secteur de l&#39;IA, aux couleurs de votre charte graphique.
+Utilisez cette forme tant que les consignes restent propres à la requête ; une fois qu&#39;elles se stabilisent, téléversez-les en tant que [compétence personnalisée](#custom-skills) et référencez-les par leur ID.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  design_book = """
+  Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.
+
+  Colors
+  - Paper #EDE9DE; tinted boxes and alternating table rows #E3DFD2.
+  - Body ink #232220 — soft, never hard black (ink spread on newsprint).
+  - Headlines and rules may deepen to #141311; faded ink #5C5850 for captions and secondary text.
+  - No second color anywhere. Up moves: bold with a ▲. Down moves: parentheses with a ▼.
+
+  Typography
+  - Body: low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated.
+  - Headlines: bold condensed serif with a smaller deck beneath.
+  - Kickers and table headers: condensed grotesque caps (Franklin Gothic or Oswald), letterspaced.
+  - Tables: agate style — 7-8pt condensed, tabular figures.
+
+  Layout
+  - One page, ~18mm margins.
+  - Nameplate in blackletter or heavy serif, with a folio line (date, edition, price) set between an Oxford rule (thick over hairline).
+  - Ticker summary as a boxed agate strip below the nameplate.
+  - News timeline in 3-4 narrow justified columns divided by hairline column rules; each item opens with a bold caps dateline ('LONDON, JULY 17 —').
+  - Data table ruled with hairlines only.
+  - Pack the page — separate blocks with cutoff rules, not white space.
+
+  Imagery
+  - Grayscale halftone only, with a hairline keyline and an italic caption.
+
+  Avoid
+  - Second colors, gradients, shadows, rounded corners, sans-serif body text, and generous white space.
+  """
+
+  response = client.responses.create(
+      preset="xhigh",
+      background=True,
+      skills=[
+          {
+              "type": "inline",
+              "name": "design-system",
+              "description": "Load when creating documents that must follow the house design system.",
+              "instructions": design_book,
+          },
+          {"type": "builtin", "name": "office/pdf"},
+      ],
+      input=(
+          "Create a one-page AI-industry stock report. Include NVDA, MSFT, "
+          "GOOGL, AMD, and AVGO with latest price and weekly move. Include "
+          "this week's key AI news, labeled by date and tagged to the ticker "
+          "it moved. Follow the design-system skill."
+      ),
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(response.status)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const designBook = `
+  Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.
+
+  Colors
+  - Paper #EDE9DE; tinted boxes and alternating table rows #E3DFD2.
+  - Body ink #232220 — soft, never hard black (ink spread on newsprint).
+  - Headlines and rules may deepen to #141311; faded ink #5C5850 for captions and secondary text.
+  - No second color anywhere. Up moves: bold with a ▲. Down moves: parentheses with a ▼.
+
+  Typography
+  - Body: low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated.
+  - Headlines: bold condensed serif with a smaller deck beneath.
+  - Kickers and table headers: condensed grotesque caps (Franklin Gothic or Oswald), letterspaced.
+  - Tables: agate style — 7-8pt condensed, tabular figures.
+
+  Layout
+  - One page, ~18mm margins.
+  - Nameplate in blackletter or heavy serif, with a folio line (date, edition, price) set between an Oxford rule (thick over hairline).
+  - Ticker summary as a boxed agate strip below the nameplate.
+  - News timeline in 3-4 narrow justified columns divided by hairline column rules; each item opens with a bold caps dateline ('LONDON, JULY 17 —').
+  - Data table ruled with hairlines only.
+  - Pack the page — separate blocks with cutoff rules, not white space.
+
+  Imagery
+  - Grayscale halftone only, with a hairline keyline and an italic caption.
+
+  Avoid
+  - Second colors, gradients, shadows, rounded corners, sans-serif body text, and generous white space.
+  `;
+
+  let response = await client.responses.create({
+    preset: 'xhigh',
+    background: true,
+    skills: [
+      {
+        type: 'inline',
+        name: 'design-system',
+        description: 'Load when creating documents that must follow the house design system.',
+        instructions: designBook,
+      },
+      { type: 'builtin', name: 'office/pdf' },
+    ],
+    input:
+      'Create a one-page AI-industry stock report. Include NVDA, MSFT, ' +
+      'GOOGL, AMD, and AVGO with latest price and weekly move. Include ' +
+      'this week\'s key AI news, labeled by date and tagged to the ticker ' +
+      'it moved. Follow the design-system skill.',
+  });
+
+  while (response.status === 'queued' || response.status === 'in_progress') {
+    await new Promise((r) => setTimeout(r, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(response.status);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "xhigh",
+      "background": true,
+      "skills": [
+        {
+          "type": "inline",
+          "name": "design-system",
+          "description": "Load when creating documents that must follow the house design system.",
+          "instructions": "Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.\nColors: paper #EDE9DE (tinted boxes and alternating table rows #E3DFD2); body ink #232220 (soft, never hard black); headlines and rules may deepen to #141311; faded ink #5C5850 for captions. No second color. Up moves: bold + ▲; down moves: parentheses + ▼.\nTypography: body low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated; headlines bold condensed serif with a smaller deck; kickers and table headers condensed grotesque caps (Franklin Gothic or Oswald), letterspaced; tables agate 7-8pt condensed with tabular figures.\nLayout: one page, ~18mm margins; blackletter or heavy-serif nameplate with a folio line (date, edition, price) between an Oxford rule (thick over hairline); boxed agate ticker strip below; news timeline in 3-4 narrow justified columns with hairline column rules, items opening with bold caps datelines ('LONDON, JULY 17 —'); data table ruled with hairlines only. Pack the page — cutoff rules, not padding.\nImagery: grayscale halftone with hairline keyline and italic caption.\nAvoid: second colors, gradients, shadows, rounded corners, sans body text, generous white space."
+        },
+        { "type": "builtin", "name": "office/pdf" }
+      ],
+      "input": "Create a one-page AI-industry stock report. Include NVDA, MSFT, GOOGL, AMD, and AVGO with latest price and weekly move. Include this week'\''s key AI news, labeled by date and tagged to the ticker it moved. Follow the design-system skill."
+    }' | jq
+  ```
+</CodeGroup>
+
+Récupérez le contenu binaire des fichiers via les endpoints de fichiers décrits dans [Travailler avec les fichiers](/fr/docs/agent-api/working-with-files).
+
+<div id="custom-skills">
+  ## Compétences personnalisées
+</div>
+
+Une compétence personnalisée est une compétence que vous créez et téléversez sur Perplexity : un ensemble versionné d&#39;instructions et de fichiers associés, géré dans l&#39;[API Portal](https://console.perplexity.ai/project/skills) et référencé par son ID depuis n&#39;importe quelle requête.
+Les compétences personnalisées reposent sur le format ouvert [Agent Skills](https://agentskills.io/specification).
+
+Chaque compétence personnalisée est rattachée à un seul [Project](/fr/docs/getting-started/projects#what-is-a-project), au sein duquel elle réside.
+Le Project est propriétaire de la compétence : toute API key de ce Project peut la référencer, contrairement aux clés d&#39;autres Projects.
+Elles sont conçues pour exécuter l&#39;Agent API dans votre propre harness : la compétence porte la procédure et le contrat de sortie attendus par votre pipeline, versionnés indépendamment de votre code.
+
+Un bundle ne se limite pas à du texte. Outre les instructions, vous pouvez y inclure des scripts `.py` et `.sh`, que le model exécute dans le [Sandbox](/fr/docs/agent-api/tools/sandbox) — une compétence peut ainsi porter non seulement le *comment* réaliser la tâche, mais aussi le code exact qui l&#39;accomplit, ainsi que tous les fichiers de référence que le model consulte à la demande.
+
+<div id="parameters">
+  ### Paramètres
+</div>
+
+| Champ     | Type   | Requis | Description                                                                                  |
+| --------- | ------ | ------ | -------------------------------------------------------------------------------------------- |
+| `type`    | string | Oui    | Doit valoir `"custom"`.                                                                      |
+| `id`      | string | Oui    | L&#39;identifiant de la compétence copié depuis l&#39;API Portal, sous la forme `skill_...`. |
+| `version` | string | Non    | La version à charger, ou `"latest"`. En cas d&#39;omission, `"latest"` est utilisée.         |
+
+Le nom et la description de la compétence proviennent du bundle stocké.
+
+<div id="create-a-custom-skill-bundle">
+  ### Créer un bundle de compétence personnalisée
+</div>
+
+Un bundle de compétence est une archive ZIP comportant un seul dossier racine, qui contient lui-même un unique fichier `SKILL.md` :
+
+```text theme={null}
+fact-check/
+├── SKILL.md
+├── scripts/
+│   └── check_factcheck.py
+└── references/
+    └── verification-rubric.md
+```
+
+<Card title="Télécharger le bundle d'exemple" icon="download" horizontal="True" href="/fr/docs/assets/skills/fact-check.zip">
+  `fact-check.zip` — ce bundle exact, prêt à être téléversé dans l&#39;API Portal.
+</Card>
+
+`SKILL.md` commence par un [frontmatter YAML](https://agentskills.io/specification#frontmatter) qui définit la façon dont le modèle découvre la compétence, suivi du corps de la compétence :
+
+<Accordion title="Exemple de SKILL.md">
+  ```markdown theme={null}
+  ---
+  name: fact-check
+  description: Load before answering a question whose answer contains factual claims — dates, numbers, names, prices, or events — to verify them before responding. Do not load for opinions, code, or creative writing.
+  ---
+
+  You are the verification gate of an answer pipeline. Verify your own draft
+  before it reaches the user.
+
+  Use the `web_search` tool for every lookup. Do not run searches or fetch
+  pages from inside the sandbox; reserve the sandbox for writing and validating
+  `fact_check.json`.
+
+  1. Draft the answer, then extract every factual claim from it: dates,
+     numbers, names, prices, events.
+  2. Verify each claim with the `web_search` tool, following
+     `references/verification-rubric.md` from this skill's folder.
+  3. Correct the draft wherever a claim fails verification.
+  4. Write the audit trail to `fact_check.json` with exactly these fields:
+     `claims` (list of objects with `claim`, `verdict`, `source_url`) and
+     `corrections` (integer).
+  5. Run `python scripts/check_factcheck.py fact_check.json` from this
+     skill's folder and fix every violation it reports until it passes.
+  6. Once the check passes, give the corrected answer.
+  ```
+</Accordion>
+
+La description fait aussi office de garde-fou : elle indique au modèle quand **ne pas** charger la compétence, ce qui préserve le budget d&#39;étapes de la requête.
+
+| Champ         | Règles                                                                                                                 |
+| ------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `name`        | Requis. 1 à 64 caractères ; lettres minuscules, chiffres et traits d&#39;union simples.                                |
+| `description` | Requis. 1 à 1 024 octets. Le déclencheur de routage — rédigez-le de façon à indiquer au modèle quand charger la compétence. |
+
+Les autres clés du [frontmatter](https://agentskills.io/specification#frontmatter) sont ignorées.
+Tout ce qui suit le frontmatter constitue le corps de la compétence, renvoyé au modèle lorsqu&#39;il charge celle-ci.
+
+Un bundle peut contenir n&#39;importe quel type de fichier : des documents de référence que le modèle consulte à la demande, et des scripts `.py` ou `.sh` qu&#39;il exécute dans le [Sandbox](/fr/docs/agent-api/tools/sandbox), qui dispose d&#39;un accès réseau et installe des paquets avec `pip`.
+Les fichiers annexes ne coûtent aucun token tant que le modèle ne les lit pas.
+Référencez-les depuis le corps de la compétence avec des chemins relatifs, comme dans l&#39;exemple ci-dessus.
+
+<div id="manage-custom-skills">
+  ### Gérer les compétences personnalisées
+</div>
+
+1. Ouvrez [Compétences dans l&#39;API Portal](https://console.perplexity.ai/project/skills).
+2. Sélectionnez **Créer une compétence** et téléversez le bundle sous forme de fichier `.zip` — le nom et la description sont lus depuis `SKILL.md`.
+   Un fichier `SKILL.md` seul n&#39;est pas accepté.
+3. Copiez l&#39;identifiant de la compétence (`skill_...`) dans le tableau.
+
+Seul un administrateur peut créer, mettre à jour ou supprimer des compétences.
+Toute API key du [projet](/fr/docs/getting-started/projects) peut les utiliser dans ses requêtes.
+Le menu d&#39;actions de chaque compétence permet également de choisir **Mettre à jour la compétence** (téléverser de nouveaux fichiers en tant que nouvelle version), **Download files** (pour n&#39;importe quelle version) et **Supprimer la compétence** (action définitive, qui supprime toutes les versions).
+
+<div id="use-a-custom-skill">
+  ### Utiliser une compétence personnalisée
+</div>
+
+Les compétences personnalisées sont conçues pour exécuter l&#39;Agent API au sein de votre propre pipeline : la compétence contient une procédure que le modèle doit suivre et une auto-vérification qu&#39;il doit réussir, versionnée indépendamment de vos prompts.
+La requête suivante pose une question factuelle et demande au modèle de vérifier sa propre réponse à l&#39;aide de la compétence `fact-check` du bundle ci-dessus.
+Remplacez `YOUR_SKILL_ID` par l&#39;ID que vous avez copié depuis l&#39;API Portal.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      max_steps=10,
+      tools=[{"type": "web_search"}],
+      skills=[{"type": "custom", "id": "YOUR_SKILL_ID"}],
+      input=(
+          "What were NVIDIA's total revenue and data center revenue in its "
+          "latest reported quarter? Use the fact-check skill to verify your "
+          "answer before responding."
+      ),
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    max_steps: 10,
+    tools: [{ type: 'web_search' }],
+    skills: [{ type: 'custom', id: 'YOUR_SKILL_ID' }],
+    input:
+      "What were NVIDIA's total revenue and data center revenue in its " +
+      'latest reported quarter? Use the fact-check skill to verify your ' +
+      'answer before responding.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "max_steps": 10,
+      "tools": [ { "type": "web_search" } ],
+      "skills": [
+        { "type": "custom", "id": "YOUR_SKILL_ID" }
+      ],
+      "input": "What were NVIDIAs total revenue and data center revenue in its latest reported quarter? Use the fact-check skill to verify your answer before responding."
+    }' | jq
+  ```
+</CodeGroup>
+
+Le modèle rédige la réponse, vérifie chaque affirmation par une recherche web, corrige ce qui ne passe pas, puis écrit `fact_check.json` et exécute le validateur fourni dans le sandbox — il doit réussir cette auto-vérification avant de répondre.
+
+Le tableau `output` de la réponse consigne la compétence chargée sous la forme d&#39;un élément `skill_loaded`, suivi des étapes du sandbox effectuées pendant l&#39;exécution — lecture du fichier de référence de la compétence, écriture de `fact_check.json` et exécution du validateur — et se termine par le `message` de l&#39;assistant :
+
+<Accordion title="Sortie de la réponse (tronquée)">
+  ```json theme={null}
+  [
+    { "type": "skill_loaded", "name": "fact-check" },
+    {
+      "type": "sandbox_read_file",
+      "call_id": "call_...",
+      "file_path": "/home/user/workspace/skills/fact-check/references/verification-rubric.md",
+      "start_line": 1,
+      "total_lines": 22,
+      "content": "# Verification rubric\n..."
+    },
+    {
+      "type": "sandbox_write_file",
+      "call_id": "call_...",
+      "file_path": "/home/user/workspace/fact_check.json",
+      "size_bytes": 939
+    },
+    {
+      "type": "sandbox_results",
+      "call_id": "call_...",
+      "container_id": "01a0...",
+      "language": "python",
+      "code": "python scripts/check_factcheck.py fact_check.json",
+      "status": "completed",
+      "results": [
+        { "status": "completed", "exit_code": 0, "duration_ms": 1023, "stdout": "OK: fact_check.json satisfies the contract.\n", "stderr": "" }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_...",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        { "type": "output_text", "text": "NVIDIA's latest reported quarter was Q2 fiscal 2027, ended July 26, 2026 ...", "annotations": [] }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+En streaming, chaque chargement de compétence émet également un événement `response.skill.loaded`.
+Le tableau `skills` transmis dans la requête n&#39;est pas renvoyé dans l&#39;objet de réponse.
+
+<div id="versioning">
+  ### Gestion des versions
+</div>
+
+Chaque téléversement d&#39;une compétence personnalisée crée une nouvelle version.
+Chaque version est un instantané complet et immuable du bundle — et non un delta.
+
+Omettre `version` (ou passer `"latest"`) sélectionne la version la plus récente, résolue une seule fois au moment où la requête est acceptée : un téléversement effectué en cours d&#39;exécution ne change pas ce que charge une réponse déjà en cours.
+
+Épinglez le trafic de production sur une version précise :
+
+```json theme={null}
+{ "type": "custom", "id": "YOUR_SKILL_ID", "version": "2" }
+```
+
+Une `version` épinglée charge toujours le même bundle immuable et ne change jamais ; seul `"latest"` évolue — une version téléversée par n&#39;importe quel administrateur modifie immédiatement ce qu&#39;exécutent vos requêtes `"latest"`.
+Consultez l&#39;historique des versions et téléchargez n&#39;importe quelle version dans l&#39;[API Portal](https://console.perplexity.ai/project/skills).
+
+<div id="error-handling">
+  ### Gestion des erreurs
+</div>
+
+Les références à des compétences personnalisées sont validées au moment de la soumission de la requête.
+Une référence incorrecte fait échouer l&#39;intégralité de la requête avec une erreur HTTP 400, avant même le début de l&#39;exécution :
+
+| Message                                                  | Signification                                                                                                                                           | Traitement suggéré                                                                                      |
+| -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `A requested skill does not exist or is not accessible.` | L&#39;identifiant ne correspond à aucune compétence de votre projet — faute de frappe, compétence supprimée ou clé provenant d&#39;un autre projet.     | Copiez l&#39;identifiant depuis l&#39;API Portal et vérifiez que la clé appartient bien au même projet. |
+| `A requested skill is invalid.`                          | L&#39;identifiant ou le champ `version` est mal formé. `version` doit être une chaîne contenant un numéro de version, par exemple `"2"`, ou `"latest"`. | Corrigez la référence.                                                                                  |
+| `A requested skill conflicts with a built-in skill.`     | Le nom de la compétence (issu de `SKILL.md`) correspond au nom d&#39;une compétence intégrée.                                                           | Renommez la compétence dans une nouvelle version.                                                       |
+| `Two requested skills resolve to the same name.`         | Deux entrées de `skills` portent le même nom — par exemple une compétence personnalisée et une compétence en ligne.                                     | Supprimez ou renommez l&#39;une des deux.                                                               |
+
+Les échecs survenant après le début de l&#39;exécution sont, eux, traités en cours d&#39;exécution : si une compétence ne peut pas être chargée en cours de route, l&#39;erreur est renvoyée au model, qui poursuit sans cette compétence, et la réponse aboutit malgré tout.
+
+<Note>
+  Un élément de sortie `skill_loaded` consigne la tentative de chargement et apparaît même en cas d&#39;échec ; le texte de l&#39;erreur est transmis au model, et non intégré à la réponse.
+</Note>
+
+<div id="limits">
+  ### Limites
+</div>
+
+Le bundle doit respecter les limites suivantes, vérifiées au moment de l&#39;envoi :
+
+* **32 Mio** au total — appliqué aussi bien au ZIP envoyé qu&#39;à son contenu décompressé.
+* **100 fichiers** maximum.
+* Exactement **un dossier racine** et **un `SKILL.md`**.
+* Aucun nom de fichier ou de dossier de plus de **255 caractères**.
+* Jusqu&#39;à **500 compétences personnalisées par projet**.
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Cookbook des compétences d'agent" icon="book-open" href="/fr/docs/cookbook/articles/agent-skills/README">
+    Guide complet du PDF quotidien d&#39;actualités boursières généré par IA, incluant le téléchargement du fichier et l&#39;intégralité du design book.
+  </Card>
+
+  <Card title="Travailler avec les fichiers" icon="file" href="/fr/docs/agent-api/working-with-files" />
+
+  <Card title="Mode arrière-plan" icon="clock" href="/fr/docs/agent-api/background-mode" />
+
+  <Card title="Référence de l'Agent API" icon="code" href="/fr/api-reference/agent-post" />
+</CardGroup>

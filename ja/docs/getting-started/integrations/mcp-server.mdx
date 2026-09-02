@@ -1,0 +1,385 @@
+---
+title: "Perplexity API MCP サーバー"
+sidebarTitle: "Perplexity API MCP"
+description: "Model Context Protocol (MCP) を使用して、AI アシスタントを Perplexity の検索機能と推論機能に接続します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+Perplexity MCP Server を使うと、AI アシスタントがワークフロー内から Perplexity の強力な検索・推論機能に直接アクセスできます。Model Context Protocol (MCP) を利用すれば、リアルタイムのウェブ検索、対話型 AI、高度な推論を MCP 対応クライアントに組み込めます。
+
+接続方法は 2 つあります。
+
+* **リモート MCP サーバー (推奨) :** Perplexity が `https://api.perplexity.ai/mcp` でホストしています。インストールも更新も不要で、リモート MCP サーバーに対応するあらゆるクライアントで利用できます。
+* **ローカル MCP サーバー:** オープンソースのサーバーを自分のマシン上で stdio 経由で実行します。クライアントが stdio サーバーのみに対応している場合や、バージョンを固定したい場合に利用してください。
+
+どちらも公開されるツールは同じで、動作も同一です。
+
+<Info>
+  **Model Context Protocol (MCP)&#x20;**&#x20;は、AI アシスタントと外部のデータソースやツールを接続するためのオープン標準です。詳細は [modelcontextprotocol.io](https://modelcontextprotocol.io/introduction) をご覧ください。
+</Info>
+
+<Note>
+  このページでは、Claude Code、Cursor、VS Code、Claude Desktop などのクライアントに Perplexity を MCP ツールとして追加する方法を説明します。アプリケーションコードから Perplexity API を呼び出す場合は、[クイックスタート](/ja/docs/getting-started/quickstart)から始めてください。Agent API 経由で Claude の model を選択する場合は、[Agent API models](/ja/docs/agent-api/models) に記載の Anthropic の model ID を使用してください。
+</Note>
+
+<div id="remote-mcp-server">
+  ## リモート MCP サーバー
+</div>
+
+`https://api.perplexity.ai/mcp` (Streamable HTTP) に接続し、API キー をベアラー token として指定して認証します。
+
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+<Card title="API キーを生成" icon="key" arrow="True" horizontal="True" iconType="solid" cta="キーを取得" href="https://console.perplexity.ai/project/keys">
+  API ポータルにアクセスし、新しいキーを生成します。
+</Card>
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash theme={null}
+    claude mcp add --transport http perplexity https://api.perplexity.ai/mcp --header "Authorization: Bearer YOUR_API_KEY"
+    ```
+  </Tab>
+
+  <Tab title="Cursor">
+    [ワンクリックでCursorにインストール](https://cursor.com/install-mcp?name=perplexity\&config=eyJ1cmwiOiJodHRwczovL2FwaS5wZXJwbGV4aXR5LmFpL21jcCIsImhlYWRlcnMiOnsiQXV0aG9yaXphdGlvbiI6IkJlYXJlciBZT1VSX0FQSV9LRVkifX0%3D)し、`YOUR_API_KEY` を自分のキーに置き換えてください。
+
+    または、`~/.cursor/mcp.json` に手動で追加します:
+
+    ```json theme={null}
+    {
+      "mcpServers": {
+        "perplexity": {
+          "url": "https://api.perplexity.ai/mcp",
+          "headers": {
+            "Authorization": "Bearer YOUR_API_KEY"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="VS Code">
+    [ワンクリックで VS Code にインストール](https://vscode.dev/redirect/mcp/install?name=perplexity\&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapi.perplexity.ai%2Fmcp%22%2C%22headers%22%3A%7B%22Authorization%22%3A%22Bearer%20%24%7Binput%3Aperplexity-api-key%7D%22%7D%7D\&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22perplexity-api-key%22%2C%22description%22%3A%22Perplexity%20API%20Key%22%2C%22password%22%3Atrue%7D%5D) すると、VS Code がキーの入力を求めます。
+
+    または、`.vscode/mcp.json` に手動で追加します。`inputs` ブロックを指定すると、キーをコミットされるファイルに保存せず、VS Code が (マスクされた状態で) キーの入力を求めるようになります:
+
+    ```json theme={null}
+    {
+      "inputs": [
+        {
+          "type": "promptString",
+          "id": "perplexity-api-key",
+          "description": "Perplexity API Key",
+          "password": true
+        }
+      ],
+      "servers": {
+        "perplexity": {
+          "type": "http",
+          "url": "https://api.perplexity.ai/mcp",
+          "headers": {
+            "Authorization": "Bearer ${input:perplexity-api-key}"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Anthropic API">
+    MCP コネクタを使用して、Messages API リクエストで Perplexity のツールを利用します。
+
+    ```bash theme={null}
+    curl https://api.anthropic.com/v1/messages \
+      -H "content-type: application/json" \
+      -H "x-api-key: $ANTHROPIC_API_KEY" \
+      -H "anthropic-version: 2023-06-01" \
+      -H "anthropic-beta: mcp-client-2025-11-20" \
+      -d '{
+        "model": "claude-opus-5",
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": "What happened in AI this week?"}],
+        "mcp_servers": [{
+          "type": "url",
+          "url": "https://api.perplexity.ai/mcp",
+          "name": "perplexity",
+          "authorization_token": "YOUR_PERPLEXITY_API_KEY"
+        }],
+        "tools": [{
+          "type": "mcp_toolset",
+          "mcp_server_name": "perplexity"
+        }]
+      }'
+    ```
+
+    `authorization_token` には Perplexity API key をそのまま指定できます (OAuth は不要です) 。この値はベアラー token として当社のサーバーに送信されます。Anthropic は Messages リクエストを通常どおり課金し、Perplexity のツール呼び出しはお使いの Perplexity API key に課金されます。
+
+    model が呼び出せるツールを制限するには、ツールをデフォルトで無効にし、必要なものだけを有効にします。
+
+    ```json theme={null}
+    "tools": [{
+      "type": "mcp_toolset",
+      "mcp_server_name": "perplexity",
+      "default_config": {"enabled": false},
+      "configs": {
+        "perplexity_search": {"enabled": true}
+      }
+    }]
+    ```
+  </Tab>
+
+  <Tab title="その他のクライアント">
+    Streamable HTTP 経由のリモート MCP サーバーに対応しているクライアントであれば、次の設定で接続できます。
+
+    | 設定      | 値                                    |
+    | ------- | ------------------------------------ |
+    | URL     | `https://api.perplexity.ai/mcp`      |
+    | トランスポート | Streamable HTTP                      |
+    | ヘッダー    | `Authorization: Bearer YOUR_API_KEY` |
+
+    クライアントが stdio サーバーのみに対応している場合は、以下の[ローカル MCP サーバー](#local-mcp-server)を使用してください。
+
+    <Note>
+      claude.ai (Web) のカスタムコネクタは現在 OAuth が必須で、静的な API key ヘッダーを送信できません。代わりに Claude Code、Claude Desktop、または Anthropic API を使用してください。
+    </Note>
+  </Tab>
+</Tabs>
+
+<Note>
+  ツール呼び出しは、接続に使用した API キー に標準の API 料金で課金されます。そのキーに設定されている既存のレート制限が適用されます。
+</Note>
+
+<div id="local-mcp-server">
+  ## ローカル MCP サーバー
+</div>
+
+同じサーバーを stdio 経由でローカルに実行します。
+
+<div id="one-click-install">
+  ### ワンクリックインストール
+</div>
+
+<CardGroup cols={2}>
+  <Card
+    title="Cursor にインストール"
+    icon={
+<svg
+xmlns="http://www.w3.org/2000/svg"
+viewBox="0 0 466.73 532.09"
+>
+<path
+d="M457.43 125.94 244.42 2.96a22.127 22.127 0 0 0-22.12 0L9.3 125.94C3.55 129.26 0 135.4 0 142.05v247.99c0 6.65 3.55 12.79 9.3 16.11l213.01 122.98a22.127 22.127 0 0 0 22.12 0l213.01-122.98c5.75-3.32 9.3-9.46 9.3-16.11V142.05c0-6.65-3.55-12.79-9.3-16.11h-.01Zm-13.38 26.05L238.42 508.15c-1.39 2.4-5.06 1.42-5.06-1.36V273.58c0-4.66-2.49-8.97-6.53-11.31L24.87 145.67c-2.4-1.39-1.42-5.06 1.36-5.06h411.26c5.84 0 9.49 6.33 6.57 11.39h-.01Z"
+style={{ fill: "var(--color-foreground)" }}
+/>
+</svg>
+}
+    href="https://cursor.com/en/install-mcp?name=perplexity&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBwZXJwbGV4aXR5LWFpL21jcC1zZXJ2ZXIiXSwiZW52Ijp7IlBFUlBMRVhJVFlfQVBJX0tFWSI6IiJ9fQ=="
+  >
+    ワンクリックで Cursor に Perplexity MCP サーバーを自動設定します。
+  </Card>
+
+  <Card
+    title="VS Code にインストール"
+    icon={
+<svg
+xmlns="http://www.w3.org/2000/svg"
+viewBox="0 0 100 100"
+>
+<path
+d="M70.912 99.572a6.193 6.193 0 0 0 4.96-.191l20.588-9.958a6.285 6.285 0 0 0 3.54-5.661V16.239a6.286 6.286 0 0 0-3.54-5.662L75.873.62a6.2 6.2 0 0 0-7.104 1.216L29.355 37.98l-17.168-13.1a4.146 4.146 0 0 0-5.318.238l-5.506 5.035a4.205 4.205 0 0 0-.004 6.194L16.247 50 1.36 63.654a4.205 4.205 0 0 0 .004 6.194l5.506 5.034a4.145 4.145 0 0 0 5.318.238l17.168-13.1L68.77 98.166a6.205 6.205 0 0 0 2.143 1.407Zm4.103-72.39L45.11 50 75.015 72.82V27.18Z"
+fillRule="evenodd"
+style={{ fill: "var(--color-foreground)" }}
+/>
+</svg>
+}
+    href="https://vscode.dev/redirect/mcp/install?name=perplexity&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22%22%7D%7D"
+  >
+    ワンクリックで VS Code に Perplexity MCP サーバーを自動設定します。
+  </Card>
+</CardGroup>
+
+<div id="agent-plugin-install">
+  ### Agent Plugin のインストール
+</div>
+
+ローカルサーバーは [Agent Plugin](https://agent-plugins.org) としてもパッケージ化されているため、この標準に対応したクライアントであれば [`perplexityai/modelcontextprotocol`](https://github.com/perplexityai/modelcontextprotocol) リポジトリから直接インストールできます。プラグイン形式にはシークレットが含まれないため、インストール後にクライアントのプラグイン設定または MCP 設定で `PERPLEXITY_API_KEY` 環境変数を設定してください。
+
+<div id="manual-setup">
+  ### 手動セットアップ
+</div>
+
+<Steps>
+  <Step title="API キーを取得する">
+    <Card title="API キーを生成" icon="key" arrow="True" horizontal="True" iconType="solid" cta="キーを取得" href="https://console.perplexity.ai/project/keys">
+      API ポータルにアクセスし、新しいキーを生成します。
+    </Card>
+  </Step>
+
+  <Step title="クライアントを設定する">
+    クライアントの設定に MCP サーバーを追加します。
+
+    <Tabs>
+      <Tab title="Claude Code">
+        **オプション 1: CLI コマンド (推奨)&#x20;**
+
+        最も手軽に始められる方法です。
+
+        ```bash theme={null}
+        claude mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
+        ```
+
+        **オプション 2: プラグインでインストール**
+
+        プラグイン経由でインストールします。
+
+        ```bash theme={null}
+        export PERPLEXITY_API_KEY="your_key_here"
+        claude
+        # 次に実行: /plugin marketplace add perplexityai/modelcontextprotocol
+        # 次に実行: /plugin install perplexity
+        ```
+
+        **オプション 3: 手動で設定**
+
+        `claude.json` に以下を追加します。
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "type": "stdio",
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Cursor">
+        Cursor で MCP サーバーをセットアップする場合は、上記のワンクリックインストールをおすすめします。
+
+        手動で設定したい場合は、`mcp.json` に以下を追加してください。
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Codex">
+        ```bash theme={null}
+        codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
+        ```
+      </Tab>
+
+      <Tab title="その他のクライアント">
+        ほとんどの MCP 対応クライアント (Claude Desktop、VS Code、Windsurf など) は `mcpServers` 形式を使用します。設定ファイルの場所は次のとおりです。
+
+        | クライアント             | 設定ファイル                                  |
+        | ------------------ | --------------------------------------- |
+        | Cursor             | `~/.cursor/mcp.json`                    |
+        | VS Code            | `.vscode/mcp.json`                      |
+        | Claude Desktop     | `claude_desktop_config.json`            |
+        | Windsurf           | `~/.codeium/windsurf/mcp_config.json`   |
+        | Google Antigravity | `~/.gemini/antigravity/mcp_config.json` |
+
+        **標準の `mcpServers` 形式:**
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+
+        **VS Code の形式は少し異なります:**
+
+        ```json theme={null}
+        {
+          "servers": {
+            "perplexity": {
+              "type": "stdio",
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+
+        これらの形式で動作しないクライアントの場合は、そのクライアントのドキュメントで正しいラッパー形式を確認してください。
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="使い始める">
+    MCP クライアントを再起動し、AI ワークフローで Perplexity のツールを活用しましょう。
+  </Step>
+</Steps>
+
+<div id="available-tools">
+  ## 利用可能なツール
+</div>
+
+<CardGroup cols={2}>
+  <Card title="perplexity_search" icon="search">
+    Perplexity Search API を使った直接的なウェブ検索。タイトル、URL、スニペット、メタデータ付きのランク付けされた検索結果を返します。
+
+    **最適な用途:** 最新情報、ニュース、事実、特定のウェブコンテンツを探す場合。
+  </Card>
+
+  <Card title="perplexity_ask" icon="message">
+    リアルタイムのウェブ検索を備えた汎用の対話型 AI。[Agent API](/ja/docs/agent-api/quickstart) の `fast` preset を基盤としています。
+
+    **最適な用途:** 手軽な質問、日常的な検索、ウェブ上の文脈が役立つ対話型のクエリ。
+  </Card>
+
+  <Card title="perplexity_research" icon="book">
+    Agent API の `high` preset を基盤とした、深く包括的なリサーチ。引用付きで徹底した分析を提供します。
+
+    **最適な用途:** 詳細な調査を要する複雑なトピック、包括的なレポート、掘り下げた分析。
+  </Card>
+
+  <Card title="perplexity_reason" icon="brain">
+    Agent API の `medium` preset を基盤とした、高度な推論と問題解決。
+
+    **最適な用途:** 論理的な問題、複雑な分析、意思決定、段階的な推論を要するタスク。
+  </Card>
+</CardGroup>
+
+<Info>
+  詳しいセットアップ手順、トラブルシューティング、プロキシ設定については、[GitHub リポジトリ](https://github.com/perplexityai/modelcontextprotocol)をご覧ください。
+</Info>

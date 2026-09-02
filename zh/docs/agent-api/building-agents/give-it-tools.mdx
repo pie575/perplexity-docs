@@ -1,0 +1,371 @@
+---
+title: "为它配备工具"
+description: "在 tools 数组中启用内置工具和你自己的自定义工具，让模型决定何时调用它们，并从响应中读取结果。"
+---
+
+模型仅凭自身只能基于已有知识作答。工具则让智能体突破这一限制——搜索实时网络、抓取页面、运行代码，或接入你自己的系统。只需在 `tools` 数组中列出工具即可启用，模型会根据你的提示词决定何时调用哪个工具。本页介绍如何接入工具并读取其输出。如需了解某个工具的完整设置，请点击链接查看对应的参考页面。
+
+<div id="three-kinds-of-tools">
+  ## 三类工具
+</div>
+
+| 类型      | 工作方式                                                                                                    |
+| ------- | ------------------------------------------------------------------------------------------------------- |
+| 内置工具    | 由 Perplexity 托管的能力：网页搜索、URL 抓取、人物与财经搜索，以及代码 sandbox。通过 `type` 逐个启用，由 Perplexity 负责执行并将结果内联返回。           |
+| MCP 服务器 | 你自己的远程 [MCP](/zh/docs/agent-api/tools/mcp) 服务器。模型会像调用内置工具一样自动发现并调用该服务器上的工具——Perplexity 会把每次调用转发到你的服务器。 |
+| 自定义工具   | 自带工具，即由你掌控的函数。你负责声明 schema；当 模型调用某个函数时，运行会暂停并把参数交给你执行，待你返回结果后再继续。                                   |
+
+<div id="enable-built-in-tools">
+  ## 启用内置工具
+</div>
+
+按 `type` 将各个工具添加到 `tools` 数组中。大多数内置工具只需指定类型即可使用——部分工具还支持可选配置 (详见各自的参考页面) 。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="What are the leading approaches to grid-scale energy storage, and how do they compare?",
+      tools=[
+          {"type": "web_search"},
+          {"type": "fetch_url"},
+      ],
+      max_steps=10,
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'What are the leading approaches to grid-scale energy storage, and how do they compare?',
+    tools: [
+      { type: 'web_search' as const },
+      { type: 'fetch_url' as const },
+    ],
+    max_steps: 10,
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "What are the leading approaches to grid-scale energy storage, and how do they compare?",
+      "tools": [
+        { "type": "web_search" },
+        { "type": "fetch_url" }
+      ],
+      "max_steps": 10
+    }' | jq
+  ```
+</CodeGroup>
+
+以下为各内置工具，每个工具都有独立的参考页面，介绍完整配置、响应结构和定价：
+
+| 工具                                                           | `type`           | 用途                                                             |
+| ------------------------------------------------------------ | ---------------- | -------------------------------------------------------------- |
+| [Sandbox](/zh/docs/agent-api/tools/sandbox)                     | `sandbox`        | 在隔离容器中运行代码——参见[运行代码](/zh/docs/agent-api/building-agents/run-code) |
+| [Web Search](/zh/docs/agent-api/tools/web-search)               | `web_search`     | 实时搜索网络，支持域名/日期/地区筛选                                            |
+| [Fetch URL Content](/zh/docs/agent-api/tools/fetch-url-content) | `fetch_url`      | 抓取并提取指定 URL 的内容                                                |
+| [People Search](/zh/docs/agent-api/tools/people-search)         | `people_search`  | 查找专业人士及人物信息                                                    |
+| [Finance Search](/zh/docs/agent-api/tools/finance-search)       | `finance_search` | 获取结构化的金融与市场数据                                                  |
+
+<Tip>
+  把选择权交给模型。你只需启用工具，模型会根据 `input` 和 `instructions` 自行判断是否调用、何时调用。
+</Tip>
+
+<div id="connect-an-mcp-server">
+  ## 连接 MCP 服务器
+</div>
+
+你无需自行托管每个工具，只需用 `type: mcp` 连接远程 [Model Context Protocol](/zh/docs/agent-api/tools/mcp) (MCP) 服务器即可。请求启动时，Agent API 会自动发现该服务器提供的工具，模型会像调用内置工具那样自动调用它们——每次调用都无需你亲自处理。下面的示例连接到公开的 [DeepWiki](https://deepwiki.com) MCP 服务器，该服务器无需认证。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Use DeepWiki to explain what the perplexityai/perplexity-py repository does.",
+      tools=[
+          {
+              "type": "mcp",
+              "server_label": "deepwiki",
+              "server_url": "https://mcp.deepwiki.com/mcp",
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Use DeepWiki to explain what the perplexityai/perplexity-py repository does.',
+    tools: [
+      {
+        type: 'mcp',
+        server_label: 'deepwiki',
+        server_url: 'https://mcp.deepwiki.com/mcp',
+      },
+    ] as any, // 当前 SDK 类型定义尚未包含 MCP 工具。
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Use DeepWiki to explain what the perplexityai/perplexity-py repository does.",
+      "tools": [
+        {
+          "type": "mcp",
+          "server_label": "deepwiki",
+          "server_url": "https://mcp.deepwiki.com/mcp"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+有关认证、响应项以及完整的工具设置，请参阅 [MCP 参考文档](/zh/docs/agent-api/tools/mcp)。
+
+<div id="add-your-custom-tool">
+  ## 添加你的自定义工具
+</div>
+
+自定义工具 (`type: function`) 让智能体能够调用由你掌控的代码——比如你的数据库或内部 API。声明时需要提供 `name`、`description`，以及描述 `parameters` 的 JSON Schema。模型负责填入参数，函数则由你来执行。智能体正是借此获取它自身无从得知的数据——这里指的就是内部系统中某个订单的当前状态。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  tools = [
+      {
+          "type": "function",
+          "name": "get_order_status",
+          "description": "Look up the current status of an internal order by its order ID.",
+          "parameters": {
+              "type": "object",
+              "properties": {"order_id": {"type": "string"}},
+              "required": ["order_id"],
+          },
+          "strict": True,
+      }
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="What's the status of order ORD-10042?",
+      tools=tools,
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const tools = [
+    {
+      type: 'function' as const,
+      name: 'get_order_status',
+      description: 'Look up the current status of an internal order by its order ID.',
+      parameters: {
+        type: 'object',
+        properties: { order_id: { type: 'string' } },
+        required: ['order_id'],
+      },
+      strict: true,
+    },
+  ];
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: "What's the status of order ORD-10042?",
+    tools,
+  });
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "What is the status of order ORD-10042?",
+      "tools": [
+        {
+          "type": "function",
+          "name": "get_order_status",
+          "description": "Look up the current status of an internal order by its order ID.",
+          "parameters": {
+            "type": "object",
+            "properties": { "order_id": { "type": "string" } },
+            "required": ["order_id"]
+          },
+          "strict": true
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+模型永远不会运行你的函数——API 无法执行你的代码。实际情况是，本次运行会暂停，并把这次调用交回给你：响应的 `output` 数组中会包含一个 `function_call` 项，其中带有函数名以及模型填入的参数。
+
+```json theme={null}
+{
+  "type": "function_call",
+  "id": "fc_abc123",
+  "call_id": "call_xyz789",
+  "name": "get_order_status",
+  "arguments": "{\"order_id\":\"ORD-10042\"}"
+}
+```
+
+从响应中取出该项，在你自己这一侧执行该函数，然后把结果回传以继续本次运行。后续请求会重放此前的完整对话——原始问题、模型发出的 `function_call`，以及在同一 `call_id` 下携带你的执行结果的 `function_call_output`：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+
+  function_call = next(item for item in response.output if item.type == "function_call")
+
+  def get_order_status(order_id: str) -> dict:
+      orders = {"ORD-10042": {"status": "in_transit", "carrier": "DHL", "eta": "2026-06-23"}}
+      return orders.get(order_id, {"error": "order not found"})
+
+  result = get_order_status(**json.loads(function_call.arguments))
+
+  followup = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input=[
+          {"role": "user", "content": "What's the status of order ORD-10042?"},
+          {
+              "type": "function_call",
+              "call_id": function_call.call_id,
+              "name": function_call.name,
+              "arguments": function_call.arguments,
+          },
+          {
+              "type": "function_call_output",
+              "call_id": function_call.call_id,
+              "output": json.dumps(result),
+          },
+      ],
+      tools=tools,
+  )
+
+  print(followup.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  const functionCall = response.output.find((item) => item.type === 'function_call');
+  if (functionCall?.type !== 'function_call') throw new Error('No function call returned.');
+
+  function getOrderStatus(orderId: string) {
+    const orders: Record<string, unknown> = {
+      'ORD-10042': { status: 'in_transit', carrier: 'DHL', eta: '2026-06-23' },
+    };
+    return orders[orderId] ?? { error: 'order not found' };
+  }
+
+  const args = JSON.parse(functionCall.arguments) as { order_id: string };
+  const result = getOrderStatus(args.order_id);
+
+  const followup = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: [
+      { type: 'message', role: 'user', content: "What's the status of order ORD-10042?" },
+      {
+        type: 'function_call',
+        call_id: functionCall.call_id,
+        name: functionCall.name,
+        arguments: functionCall.arguments,
+      },
+      {
+        type: 'function_call_output',
+        call_id: functionCall.call_id,
+        output: JSON.stringify(result),
+      },
+    ],
+    tools,
+  });
+
+  console.log(followup.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": [
+        { "role": "user", "content": "What is the status of order ORD-10042?" },
+        {
+          "type": "function_call",
+          "call_id": "call_xyz789",
+          "name": "get_order_status",
+          "arguments": "{\"order_id\":\"ORD-10042\"}"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_xyz789",
+          "output": "{\"status\": \"in_transit\", \"carrier\": \"DHL\", \"eta\": \"2026-06-23\"}"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Note>
+  `call_id` 是关联键：模型发出的 `function_call` 与你返回的 `function_call_output` 必须使用相同的值。在自定义工具上设置 `strict: true`，即可强制校验参数 schema。要继续本次运行，需在 `input` 数组中重放此前的条目——将 `function_call` 及其 `function_call_output` 一并传入，让模型既能看到自己发出的请求，也能看到你返回的结果。
+</Note>
+
+<div id="read-tool-results">
+  ## 读取工具结果
+</div>
+
+内置工具会把输出附加到响应的 `output` 数组中，与 `message` 项并列——例如 `search_results`、`finance_results` 或 `sandbox_results` 项，具体取决于运行的是哪个工具。遍历该数组即可提取引用、生成的文件或计算结果。每个工具的参考页面都记录了其具体的结果结构——例如可参见 [Web Search → 响应结构](/zh/docs/agent-api/tools/web-search#response-shape)。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="运行代码" icon="terminal" href="/zh/docs/agent-api/building-agents/run-code">
+    为智能体提供 sandbox，用于计算精确结果并返回文件。
+  </Card>
+
+  <Card title="规范输出格式" icon="list-details" href="/zh/docs/agent-api/building-agents/shape-output">
+    强制返回代码可直接解析的结构化 JSON。
+  </Card>
+</CardGroup>

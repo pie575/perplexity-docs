@@ -1,0 +1,378 @@
+---
+title: "複数プロバイダーのモデル比較"
+description: "PerplexityのAgent APIを通じて同じプロンプトを複数のAIモデルに送信し、応答品質・レイテンシー・コストを比較するCLIツール"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="multi-provider-model-comparison">
+  # 複数プロバイダーのモデル比較
+</div>
+
+同一のプロンプトを Perplexity の Agent API 経由で複数の AI モデルに送信し、応答品質・レイテンシー・コストを並べて比較できるコマンドラインツールです。どの モデル が自分のユースケースに最適かを見極める際に役立ちます。
+
+<div id="features">
+  ## 機能
+</div>
+
+* 複数のプロバイダーにまたがる 5 つの モデル に、同一のプロンプトを 1 回の実行で送信
+* 実時間 (wall-clock) 計測によるレスポンスのレイテンシー測定
+* `response.usage.cost.total_cost` フィールドからリクエストごとのコストを抽出
+* レスポンス長・レイテンシー・コストを比較する表形式の出力
+* 高可用性ワークフロー向けに、`models=[...]` パラメーターによる モデル のフォールバックチェーンをサポート
+* コマンドライン引数またはファイルでプロンプト入力を設定可能
+
+<div id="supported-models">
+  ## サポートされているモデル
+</div>
+
+デフォルトの比較セットは、5つのプロバイダーのモデルを対象としています。
+
+| モデル                            | プロバイダー     |
+| ------------------------------ | ---------- |
+| `openai/gpt-5.4`               | OpenAI     |
+| `anthropic/claude-sonnet-4-6`  | Anthropic  |
+| `google/gemini-3.1-flash-lite` | Google     |
+| `xai/grok-4.20-non-reasoning`  | xAI        |
+| `perplexity/sonar`             | Perplexity |
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+pip install perplexityai
+```
+
+<div id="api-key-setup">
+  ## API keyの設定
+</div>
+
+Perplexity API keyを環境変数に設定してください。SDKが自動的に読み込みます。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Info>
+  PerplexityのAgent APIでは、単一のAPI keyで複数プロバイダーのモデルを利用できます。OpenAI、Anthropic、Google、xAIそれぞれのAPI keyを個別に用意する必要はありません。
+</Info>
+
+<div id="usage">
+  ## 使い方
+</div>
+
+<div id="compare-models-with-a-prompt">
+  ### プロンプトで モデル を比較する
+</div>
+
+```bash theme={null}
+python model_comparison.py "Explain the CAP theorem in distributed systems"
+```
+
+<div id="read-the-prompt-from-a-file">
+  ### ファイルからプロンプトを読み込む
+</div>
+
+```bash theme={null}
+python model_comparison.py --file prompt.txt
+```
+
+<div id="use-a-custom-set-of-models">
+  ### カスタムのモデルセットを使用する
+</div>
+
+```bash theme={null}
+python model_comparison.py "What is quantum entanglement?" \
+  --models openai/gpt-5.4 anthropic/claude-sonnet-4-6 perplexity/sonar
+```
+
+<div id="export-results-as-json">
+  ### 結果を JSON としてエクスポートする
+</div>
+
+```bash theme={null}
+python model_comparison.py "Summarize recent AI safety research" --json > results.json
+```
+
+<div id="use-model-fallback-chain">
+  ### モデルのフォールバックチェーンを使用する
+</div>
+
+モデルを比較する代わりに、フォールバックチェーン機能を試すこともできます。API は、いずれかが成功するまで各モデルを順番に試行します。
+
+```bash theme={null}
+python model_comparison.py "Latest AI news" --fallback
+```
+
+<div id="how-it-works">
+  ## 仕組み
+</div>
+
+1. CLI はプロンプトと、任意で モデル のリストを受け取ります。
+2. 各 モデル について、開始タイムスタンプを記録し、`client.responses.create(model=..., input=...)` を呼び出したうえで、終了タイムスタンプを記録します。
+3. 各レスポンスからリクエストのコストとして `response.usage.cost.total_cost` を抽出し、経過実時間をレイテンシーとして算出します。
+4. 収集した結果は、レイテンシー順に並べ替えた比較表として表示されます。
+5. フォールバックモードでは、`models=[...]` を指定した 1 回のリクエストを送信し、最終的にどの モデル が使用されたかを報告します。
+
+<Tip>
+  `response.usage.cost` オブジェクトには、`input_cost`、`output_cost`、`total_cost` が米ドル単位で含まれます。そのため、特定のプロンプトに対する各 モデル の実際のコストを手軽に比較できます。
+</Tip>
+
+<div id="full-code">
+  ## コード全文
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import sys
+  import json
+  import time
+  import argparse
+  from typing import List, Optional
+  from perplexity import Perplexity
+
+  DEFAULT_MODELS = [
+      "openai/gpt-5.4",
+      "anthropic/claude-sonnet-4-6",
+      "google/gemini-3.1-flash-lite",
+      "xai/grok-4.20-non-reasoning",
+      "perplexity/sonar",
+  ]
+
+
+  def compare_models(prompt: str, models: List[str]) -> List[dict]:
+      """Send the same prompt to each model and collect metrics."""
+      client = Perplexity()
+      results = []
+
+      for model in models:
+          print(f"  Querying {model}...")
+          try:
+              start = time.time()
+              response = client.responses.create(
+                  model=model,
+                  input=prompt,
+                  max_output_tokens=1024,
+              )
+              elapsed = time.time() - start
+
+              output_text = response.output_text
+              total_cost = response.usage.cost.total_cost
+              input_tokens = response.usage.input_tokens
+              output_tokens = response.usage.output_tokens
+
+              results.append({
+                  "model": model,
+                  "status": "success",
+                  "latency_s": round(elapsed, 2),
+                  "response_length": len(output_text),
+                  "input_tokens": input_tokens,
+                  "output_tokens": output_tokens,
+                  "cost_usd": total_cost,
+                  "preview": output_text[:120].replace("\n", " "),
+              })
+          except Exception as e:
+              results.append({
+                  "model": model,
+                  "status": "error",
+                  "error": str(e),
+                  "latency_s": None,
+                  "response_length": 0,
+                  "input_tokens": 0,
+                  "output_tokens": 0,
+                  "cost_usd": None,
+                  "preview": "",
+              })
+
+      return results
+
+
+  def run_fallback(prompt: str, models: List[str]) -> dict:
+      """Send a single request with a model fallback chain."""
+      client = Perplexity()
+
+      print(f"  Sending request with fallback chain: {models}")
+      start = time.time()
+      response = client.responses.create(
+          models=models,
+          input=prompt,
+          max_output_tokens=1024,
+      )
+      elapsed = time.time() - start
+
+      return {
+          "requested_models": models,
+          "model_used": response.model,
+          "latency_s": round(elapsed, 2),
+          "response_length": len(response.output_text),
+          "cost_usd": response.usage.cost.total_cost,
+          "preview": response.output_text[:200].replace("\n", " "),
+      }
+
+
+  def format_table(results: List[dict]) -> str:
+      """Format comparison results as a text table."""
+      # レイテンシ順にソート（成功したレスポンスを先に）
+      successful = [r for r in results if r["status"] == "success"]
+      failed = [r for r in results if r["status"] != "success"]
+      successful.sort(key=lambda r: r["latency_s"])
+
+      lines = []
+      header = f"{'Model':<42} {'Latency':>8} {'Length':>8} {'Tokens':>8} {'Cost':>10}"
+      lines.append(header)
+      lines.append("-" * len(header))
+
+      for r in successful:
+          tokens = f"{r['input_tokens']}+{r['output_tokens']}"
+          cost = f"${r['cost_usd']:.5f}"
+          lines.append(
+              f"{r['model']:<42} {r['latency_s']:>7.2f}s {r['response_length']:>8} {tokens:>8} {cost:>10}"
+          )
+
+      for r in failed:
+          lines.append(f"{r['model']:<42} {'FAILED':>8} {'-':>8} {'-':>8} {'-':>10}")
+
+      return "\n".join(lines)
+
+
+  def main():
+      parser = argparse.ArgumentParser(
+          description="Multi-Provider Model Comparison"
+      )
+      parser.add_argument("prompt", nargs="?", help="The prompt to send")
+      parser.add_argument("--file", help="Read prompt from a file")
+      parser.add_argument(
+          "--models",
+          nargs="+",
+          default=DEFAULT_MODELS,
+          help="Models to compare",
+      )
+      parser.add_argument(
+          "--fallback",
+          action="store_true",
+          help="Use model fallback chain instead of comparing",
+      )
+      parser.add_argument(
+          "--json", action="store_true", help="Output results as JSON"
+      )
+      args = parser.parse_args()
+
+      # プロンプトを決定する
+      if args.file:
+          with open(args.file, "r") as f:
+              prompt = f.read().strip()
+      elif args.prompt:
+          prompt = args.prompt
+      else:
+          print("Error: Provide a prompt or use --file.", file=sys.stderr)
+          sys.exit(1)
+
+      print(f"Prompt: {prompt[:80]}{'...' if len(prompt) > 80 else ''}\n")
+
+      if args.fallback:
+          print("Running model fallback chain...\n")
+          result = run_fallback(prompt, args.models)
+          if args.json:
+              print(json.dumps(result, indent=2))
+          else:
+              print(f"Fallback chain: {' -> '.join(result['requested_models'])}")
+              print(f"Model used:     {result['model_used']}")
+              print(f"Latency:        {result['latency_s']}s")
+              print(f"Response length: {result['response_length']} chars")
+              print(f"Cost:           ${result['cost_usd']:.5f}")
+              print(f"\nPreview: {result['preview']}")
+      else:
+          print(f"Comparing {len(args.models)} models...\n")
+          results = compare_models(prompt, args.models)
+          if args.json:
+              print(json.dumps(results, indent=2))
+          else:
+              print(format_table(results))
+              print(f"\nComparison complete. {len(results)} models evaluated.")
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## 出力例
+</div>
+
+比較を実行すると、次のように出力されます。
+
+```bash theme={null}
+python model_comparison.py "Explain the CAP theorem in distributed systems"
+```
+
+次のような出力が得られます。
+
+```
+Prompt: Explain the CAP theorem in distributed systems
+
+Comparing 5 models...
+
+  Querying openai/gpt-5.4...
+  Querying anthropic/claude-sonnet-4-6...
+  Querying google/gemini-3.1-flash-lite...
+  Querying xai/grok-4.20-non-reasoning...
+  Querying perplexity/sonar...
+
+Model                                      Latency   Length   Tokens       Cost
+------------------------------------------------------------------------------
+xai/grok-4.20-non-reasoning              1.24s     1842    18+312  $0.00048
+google/gemini-3.1-flash-lite                      1.87s     2105    18+356  $0.00031
+perplexity/sonar                             2.13s     1654    18+280  $0.00034
+openai/gpt-5.4                               3.41s     2487    18+421  $0.00438
+anthropic/claude-sonnet-4-6                  3.78s     2301    18+389  $0.00527
+
+Comparison complete. 5 models evaluated.
+```
+
+フォールバックチェーンを使用して実行した場合:
+
+```bash theme={null}
+python model_comparison.py "Latest AI news" --fallback
+```
+
+```
+Prompt: Latest AI news
+
+Running model fallback chain...
+
+  Sending request with fallback chain: ['openai/gpt-5.4', ...]
+
+Fallback chain: openai/gpt-5.4 -> anthropic/claude-sonnet-4-6 -> google/gemini-3.1-flash-lite -> xai/grok-4.20-non-reasoning -> perplexity/sonar
+Model used:     openai/gpt-5.4
+Latency:        3.12s
+Response length: 2034 chars
+Cost:           $0.00415
+
+Preview: The AI landscape continues to evolve rapidly in 2025...
+```
+
+<Info>
+  モデルフォールバックは、モデルの選択よりも可用性が重視される本番システムで有用です。API は `models` 配列内のモデルを順に試行し、最初に成功したレスポンスを返します。詳細は[モデルフォールバックガイド](/ja/docs/agent-api/model-fallback)を参照してください。
+</Info>
+
+<div id="tips-for-meaningful-comparisons">
+  ## 有意義な比較を行うためのヒント
+</div>
+
+1. **すべてのモデルで同じ `max_output_tokens` を使用する** — 出力の長さを比較可能に保ちます。
+2. **複数回試行して結果を平均する** — 負荷によってリクエストごとにレイテンシーが変動するためです。
+3. 一般的な質問ではなく、**実際のユースケースに即したプロンプトでテストする**。
+4. 総コストだけでなく、**トークンあたりのコストも考慮する**。特に大量利用のアプリケーションでは重要です。
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+* レイテンシーの測定値は、ネットワークの往復を含むエンドツーエンドの実時間であり、純粋なモデルの推論時間ではありません。
+* コスト値はAPIレスポンスから取得され、呼び出し時点のリクエスト単位の価格を反映しています。
+* レスポンスの品質は主観的なものであり、定量的な指標だけでは測れません。定性的に評価するには、実際の出力テキストを確認してください。
+* レート制限はモデルやプロバイダーによって異なります。需要の高いモデルでは、順次実行する比較リクエストがレート制限の影響を受けることがあります。

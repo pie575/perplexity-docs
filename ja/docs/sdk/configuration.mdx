@@ -1,0 +1,649 @@
+---
+title: "設定"
+description: "Perplexity SDK でリトライ、タイムアウト、プロキシ、および高度な HTTP クライアントのカスタマイズを設定する方法を説明します。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+Perplexity SDK には、さまざまな環境やユースケースに応じてクライアントの動作をカスタマイズできる、豊富な設定オプションが用意されています。このガイドでは、リトライ設定、タイムアウト設定、カスタム HTTP クライアントの構成について説明します。
+
+<div id="retries-and-timeouts">
+  ## リトライとタイムアウト
+</div>
+
+<div id="basic-retry-configuration">
+  ### 基本的なリトライ設定
+</div>
+
+失敗したリクエストを SDK がどのように処理するかを設定します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+  import httpx
+
+  client = Perplexity(
+      max_retries=3,  # デフォルトは 2
+      timeout=httpx.Timeout(30.0, read=10.0, write=5.0, connect=2.0)
+  )
+
+  # リクエストごとの設定
+  search = client.with_options(max_retries=5).search.create(
+      query="example"
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity({
+      maxRetries: 3, // デフォルトは 2
+      timeout: 30000, // 30 秒（ミリ秒単位）
+  });
+
+  // リクエストごとの設定
+  const search = await client.withOptions({ maxRetries: 5 }).search.create({
+      query: "example"
+  });
+  ```
+</CodeGroup>
+
+<div id="advanced-timeout-configuration">
+  ### 高度なタイムアウト設定
+</div>
+
+リクエストのフェーズごとに、きめ細かなタイムアウト制御を設定します:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity
+
+  # 詳細なタイムアウト設定
+  timeout_config = httpx.Timeout(
+      connect=5.0,    # 接続確立までの時間
+      read=30.0,      # レスポンス読み取りの時間
+      write=10.0,     # リクエスト送信の時間
+      pool=10.0       # プールから接続を取得するまでの時間
+  )
+
+  client = Perplexity(timeout=timeout_config)
+
+  # 長時間実行される処理向け
+  long_timeout = httpx.Timeout(
+      connect=5.0,
+      read=120.0,  # 複雑なクエリ向けに2分
+      write=10.0,
+      pool=10.0
+  )
+
+  client_long = Perplexity(timeout=long_timeout)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // 基本的なタイムアウト(リクエスト全体に適用)
+  const client = new Perplexity({
+      timeout: 30000  // 30秒
+  });
+
+  // 長時間実行される処理向け
+  const clientLong = new Perplexity({
+      timeout: 120000  // 複雑なクエリ向けに2分
+  });
+
+  // リクエスト単位でのタイムアウトの上書き
+  const result = await client.withOptions({ 
+      timeout: 60000  // このリクエストのみ1分
+  }).responses.create({
+      preset: "low",
+      input: "Complex research query..."
+  });
+  ```
+</CodeGroup>
+
+<div id="custom-http-client">
+  ## カスタムHTTPクライアント
+</div>
+
+<div id="proxy-configuration">
+  ### プロキシの設定
+</div>
+
+社内プロキシ環境で動作するようにSDKを設定します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # HTTPプロキシ
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="http://proxy.company.com:8080"
+      )
+  )
+
+  # 認証付きHTTPSプロキシ
+  client_auth = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="http://username:password@proxy.company.com:8080"
+      )
+  )
+
+  # SOCKSプロキシ
+  client_socks = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="socks5://proxy.company.com:1080"
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import { HttpsProxyAgent } from 'https-proxy-agent';
+  import { SocksProxyAgent } from 'socks-proxy-agent';
+
+  // HTTP/HTTPSプロキシ
+  const client = new Perplexity({
+      httpAgent: new HttpsProxyAgent('http://proxy.company.com:8080')
+  } as any);
+
+  // 認証付きプロキシ
+  const clientAuth = new Perplexity({
+      httpAgent: new HttpsProxyAgent('http://username:password@proxy.company.com:8080')
+  } as any);
+
+  // SOCKSプロキシ
+  const clientSocks = new Perplexity({
+      httpAgent: new SocksProxyAgent('socks5://proxy.company.com:1080')
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="custom-headers-and-user-agent">
+  ### カスタムヘッダーとユーザーエージェント
+</div>
+
+すべてのリクエストにカスタムヘッダーを追加します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # カスタムヘッダー
+  headers = {
+      "User-Agent": "MyApp/1.0",
+      "X-Custom-Header": "custom-value"
+  }
+
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          headers=headers
+      )
+  )
+
+  # HTTP クライアントの高度な設定
+  transport = httpx.HTTPTransport(
+      local_address="0.0.0.0",  # 特定のインターフェースにバインド
+      verify=True,              # SSL 検証
+      cert=None,                # クライアント証明書
+      http2=True               # HTTP/2 を有効化
+  )
+
+  client_advanced = Perplexity(
+      http_client=DefaultHttpxClient(
+          transport=transport,
+          headers=headers
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // カスタムヘッダー
+  const client = new Perplexity({
+      defaultHeaders: {
+          "User-Agent": "MyApp/1.0",
+          "X-Custom-Header": "custom-value"
+      }
+  });
+
+  // fetch の高度な設定
+  const clientAdvanced = new Perplexity({
+      fetch: (url, options) => {
+          return fetch(url, {
+              ...options,
+              headers: {
+                  ...options?.headers,
+                  "User-Agent": "MyApp/1.0",
+                  "X-Custom-Header": "custom-value"
+              }
+          });
+      }
+  });
+  ```
+</CodeGroup>
+
+<div id="ssltls-configuration">
+  ### SSL/TLS の設定
+</div>
+
+SSL 検証と証明書を設定します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  import ssl
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # SSL 検証を無効化する(本番環境では非推奨)
+  client_no_ssl = Perplexity(
+      http_client=DefaultHttpxClient(
+          verify=False
+      )
+  )
+
+  # カスタム SSL コンテキスト
+  ssl_context = ssl.create_default_context()
+  ssl_context.check_hostname = False
+  ssl_context.verify_mode = ssl.CERT_NONE
+
+  client_custom_ssl = Perplexity(
+      http_client=DefaultHttpxClient(
+          verify=ssl_context
+      )
+  )
+
+  # クライアント証明書による認証
+  client_cert = Perplexity(
+      http_client=DefaultHttpxClient(
+          cert=("client.crt", "client.key")
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // SSL オプションを指定したカスタム HTTPS エージェント
+  const httpsAgent = new https.Agent({
+      rejectUnauthorized: false, // SSL 検証を無効化する(非推奨)
+      keepAlive: true,
+      maxSockets: 50
+  });
+
+  const client = new Perplexity({
+      httpAgent: httpsAgent
+  } as any);
+
+  // カスタム CA 証明書を使用する Node.js 環境向け
+  const httpsAgentCA = new https.Agent({
+      ca: ['/* your CA certificate PEM */'],
+      cert: '/* client certificate PEM */',
+      key: '/* client private key PEM */',
+  } as any);
+
+  const clientCert = new Perplexity({
+      httpAgent: httpsAgentCA
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="connection-pooling">
+  ## コネクションプーリング
+</div>
+
+コネクションプーリングによってパフォーマンスを最適化します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # コネクション数の上限を設定
+  limits = httpx.Limits(
+      max_keepalive_connections=20,  # キープアライブ接続数
+      max_connections=100,           # 総接続数
+      keepalive_expiry=30.0         # キープアライブのタイムアウト
+  )
+
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          limits=limits
+      )
+  )
+
+  # 高スループットなアプリケーション向け
+  high_throughput_limits = httpx.Limits(
+      max_keepalive_connections=100,
+      max_connections=500,
+      keepalive_expiry=60.0
+  )
+
+  client_high_throughput = Perplexity(
+      http_client=DefaultHttpxClient(
+          limits=high_throughput_limits
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // エージェントプールの設定
+  const httpsAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 30000,  // 30秒
+      maxSockets: 50,         // ホストあたりの最大接続数
+      maxFreeSockets: 10,     // ホストあたりの最大アイドル接続数
+      timeout: 60000          // ソケットのタイムアウト
+  });
+
+  const client = new Perplexity({
+      httpAgent: httpsAgent
+  } as any);
+
+  // 高スループットなアプリケーション向け
+  const highThroughputAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 60000,
+      maxSockets: 200,
+      maxFreeSockets: 50,
+      timeout: 120000
+  });
+
+  const clientHighThroughput = new Perplexity({
+      httpAgent: highThroughputAgent
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="environment-specific-configuration">
+  ## 環境別の設定
+</div>
+
+<div id="development-configuration">
+  ### 開発向け設定
+</div>
+
+開発とデバッグに最適化した設定です。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # 開発向け設定
+  dev_client = Perplexity(
+      max_retries=1,           # 開発中は早期に失敗させる
+      timeout=httpx.Timeout(10.0),  # 短いタイムアウト
+      http_client=DefaultHttpxClient(
+          # 詳細なログ出力を有効化
+          event_hooks={
+              'request': [lambda request: print(f"Request: {request.method} {request.url}")],
+              'response': [lambda response: print(f"Response: {response.status_code}")]
+          }
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // 開発向け設定
+  const devClient = new Perplexity({
+      maxRetries: 1,     // 開発中は早期に失敗させる
+      timeout: 10000,    // 10秒のタイムアウト
+      
+      // ログ出力付きのカスタム fetch
+      fetch: (url, options) => {
+          console.log(`Request: ${options?.method || 'GET'} ${url}`);
+          return fetch(url, options).then(response => {
+              console.log(`Response: ${response.status}`);
+              return response;
+          });
+      }
+  });
+  ```
+</CodeGroup>
+
+<div id="production-configuration">
+  ### 本番環境向け設定
+</div>
+
+本番環境向けに最適化された設定は次のとおりです。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # 本番環境向け設定
+  prod_limits = httpx.Limits(
+      max_keepalive_connections=50,
+      max_connections=200,
+      keepalive_expiry=60.0
+  )
+
+  prod_timeout = httpx.Timeout(
+      connect=5.0,
+      read=60.0,
+      write=10.0,
+      pool=10.0
+  )
+
+  prod_client = Perplexity(
+      max_retries=3,
+      timeout=prod_timeout,
+      http_client=DefaultHttpxClient(
+          limits=prod_limits,
+          verify=True,  # 本番環境では必ずSSLを検証する
+          http2=True    # パフォーマンス向上のためHTTP/2を有効化
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // 本番環境向け設定
+  const prodAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 60000,
+      maxSockets: 100,
+      maxFreeSockets: 20,
+      timeout: 60000
+  });
+
+  const prodClient = new Perplexity({
+      maxRetries: 3,
+      timeout: 60000,
+      httpAgent: prodAgent
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="configuration-patterns">
+  ## 設定パターン
+</div>
+
+<div id="environment-based-configuration">
+  ### 環境変数ベースの設定
+</div>
+
+環境変数を使ってクライアントを設定します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  def create_client():
+      # 基本設定
+      timeout = httpx.Timeout(
+          connect=float(os.getenv('PERPLEXITY_CONNECT_TIMEOUT', '5.0')),
+          read=float(os.getenv('PERPLEXITY_READ_TIMEOUT', '30.0')),
+          write=float(os.getenv('PERPLEXITY_WRITE_TIMEOUT', '10.0'))
+      )
+      
+      max_retries = int(os.getenv('PERPLEXITY_MAX_RETRIES', '3'))
+      
+      # プロキシ設定（任意）
+      proxy = os.getenv('PERPLEXITY_PROXY')
+      http_client_kwargs = {}
+      if proxy:
+          http_client_kwargs['proxy'] = proxy
+      
+      return Perplexity(
+          max_retries=max_retries,
+          timeout=timeout,
+          http_client=DefaultHttpxClient(**http_client_kwargs)
+      )
+
+  client = create_client()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import { HttpsProxyAgent } from 'https-proxy-agent';
+
+  function createClient(): Perplexity {
+      const maxRetries = parseInt(process.env.PERPLEXITY_MAX_RETRIES || '3');
+      const timeout = parseInt(process.env.PERPLEXITY_TIMEOUT || '30000');
+      
+      const config: any = {
+          maxRetries,
+          timeout
+      };
+      
+      // プロキシ設定（任意）
+      if (process.env.PERPLEXITY_PROXY) {
+          config.httpAgent = new HttpsProxyAgent(process.env.PERPLEXITY_PROXY);
+      }
+      
+      return new Perplexity(config);
+  }
+
+  const client = createClient();
+  ```
+</CodeGroup>
+
+<div id="configuration-factory">
+  ### 設定ファクトリ
+</div>
+
+再利用可能な設定パターンを作成します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  class PerplexityClientFactory:
+      @staticmethod
+      def development():
+          return Perplexity(
+              max_retries=1,
+              timeout=httpx.Timeout(10.0)
+          )
+      
+      @staticmethod
+      def production():
+          return Perplexity(
+              max_retries=3,
+              timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0),
+              http_client=DefaultHttpxClient(
+                  limits=httpx.Limits(
+                      max_keepalive_connections=50,
+                      max_connections=200
+                  )
+              )
+          )
+      
+      @staticmethod
+      def high_throughput():
+          return Perplexity(
+              max_retries=2,
+              timeout=httpx.Timeout(connect=2.0, read=30.0, write=5.0),
+              http_client=DefaultHttpxClient(
+                  limits=httpx.Limits(
+                      max_keepalive_connections=100,
+                      max_connections=500
+                  )
+              )
+          )
+
+  # 使用例
+  client = PerplexityClientFactory.production()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  class PerplexityClientFactory {
+      static development(): Perplexity {
+          return new Perplexity({
+              maxRetries: 1,
+              timeout: 10000
+          });
+      }
+      
+      static production(): Perplexity {
+          const agent = new https.Agent({
+              keepAlive: true,
+              maxSockets: 100,
+              timeout: 60000
+          });
+          
+          return new Perplexity({
+              maxRetries: 3,
+              timeout: 60000,
+              httpAgent: agent
+          } as any);
+      }
+      
+      static highThroughput(): Perplexity {
+          const agent = new https.Agent({
+              keepAlive: true,
+              maxSockets: 500,
+              maxFreeSockets: 100,
+              timeout: 30000
+          });
+          
+          return new Perplexity({
+              maxRetries: 2,
+              timeout: 30000,
+              httpAgent: agent
+          } as any);
+      }
+  }
+
+  // 使用例
+  const client = PerplexityClientFactory.production();
+  ```
+</CodeGroup>
+
+<div id="related-resources">
+  ## 関連リソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="エラーハンドリング" icon="alert-triangle" href="/ja/docs/sdk/error-handling">
+    タイムアウトや接続エラーに対処する
+  </Card>
+
+  <Card title="パフォーマンス" icon="bolt" href="/ja/docs/sdk/performance">
+    非同期処理とコネクションプーリングを最適化する
+  </Card>
+</CardGroup>

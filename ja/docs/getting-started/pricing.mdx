@@ -1,0 +1,290 @@
+---
+title: "料金"
+description: "Perplexity API の料金体系、モデルごとの単価、リクエスト料金、請求の設定、レート制限のリファレンスについて解説します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+import PricingCalculator from "/snippets/ja/pricing-calculator.mdx";
+
+<Info>
+  このページでは、API のコストを把握するための**料金情報**を紹介します。
+
+  **請求の設定**、支払い方法、使用状況の監視については、[管理セクション](/ja/docs/getting-started/projects)をご覧ください。**レート制限**については、[レート制限と使用ティア](/ja/docs/admin/rate-limits-usage-tiers)のページを参照してください。
+</Info>
+
+<div id="estimate-your-cost">
+  ## コストを見積もる
+</div>
+
+<PricingCalculator />
+
+<div id="router-api-pricing">
+  ## Router API の料金
+</div>
+
+Router API の利用料金は、各 model の公開レートに基づき token 単位で課金され、リクエストごとの手数料は発生しません。model ごとに入力レートと出力レートが設定されており、キャッシュ読み取りは該当 model の割引されたキャッシュ読み取りレート、推論 token は出力レートで課金されます。リクエストがどのように処理された場合でも、常にリクエストした model のレートで課金されます。
+
+キャッシュ書き込みレートやロングコンテキストの料金を含む model ごとの詳細なレート表については、[Router Models &amp; Pricing](/ja/docs/router/models) を参照してください。
+
+<div id="agent-api-pricing">
+  ## Agent API の料金
+</div>
+
+Agent API では、OpenAI、Anthropic、Google、xAI、Z.AI、Moonshot AI、NVIDIA といったプロバイダーのサードパーティ製 model を利用できます。料金は**透明性の高い token ベース**で、プロバイダーの料金がそのまま適用され、上乗せは一切ありません。
+
+<div id="model-pricing">
+  ### モデルの料金
+</div>
+
+Agent API の料金はプロバイダーと model によって異なり、各プロバイダーは複数の model をそれぞれ異なる価格帯で提供しています。
+
+<Card title="サードパーティ製モデルの料金一覧を見る" icon="table" href="/ja/docs/agent-api/models">
+  OpenAI、Anthropic、Google、xAI、Z.AI、Moonshot AI、NVIDIA が提供する利用可能なすべての model について、料金の詳細に加え、キャッシュ料率やプロバイダーのドキュメントへのリンクを [Agent API モデルのページ](/ja/docs/agent-api/models)でご確認いただけます。
+</Card>
+
+<div id="tool-pricing">
+  ### ツールの料金
+</div>
+
+Agent API でツールを使用する場合:
+
+| ツール                  |          価格         | 説明                                                                                                                                                                                       |
+| -------------------- | :-----------------: | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`web_search`**     | 1 回の呼び出しあたり $0.0025 | 最新情報を取得するためにウェブ検索を実行します                                                                                                                                                                  |
+| **`fetch_url`**      | 1 回の呼び出しあたり $0.0005 | 特定の URL からコンテンツを取得して抽出します                                                                                                                                                                |
+| **`people_search`**  |  1 回の呼び出しあたり $0.005 | 専門家、従業員、人物を検索します。ツール呼び出し 1,000 回あたり $5                                                                                                                                                   |
+| **`finance_search`** |  1 回の呼び出しあたり $0.005 | 金融データや市場情報を取得します。ツール呼び出し 1,000 回あたり $5                                                                                                                                                   |
+| **`sandbox`**        |   1 セッションあたり $0.03  | Agent API リクエスト中にコードを実行するための隔離されたコンテナです。課金上、1 セッションは最大 20 分間のアクティブな利用を対象とします — これは課金の対象期間であり、実行時間の上限ではありません。sandbox 内から実行された SDK の検索クエリは、1 リクエストあたり $0.0025 で課金されます (`web_search` と同額) 。 |
+
+<Note>
+  ほとんどのツールの料金は呼び出しごとに発生します。`sandbox` はコンテナのセッション単位 (コンテナあたり 20 分の課金対象期間であり、実行時間の上限ではありません) で課金され、さらにその内部から実行された SDK 検索クエリごとに課金されます。ツールの料金はモデルの token 料金とは別に発生します。
+</Note>
+
+<div id="search-api-pricing">
+  ## Search API の料金
+</div>
+
+| API            | 1,000リクエストあたりの料金 | 説明                       |
+| -------------- | :--------------: | ------------------------ |
+| **Search API** |       $5.00      | 高度なフィルタリングに対応した生のウェブ検索結果 |
+
+<Note>
+  **課金単位:** Search API の課金対象は、リクエスト内のクエリ単位ではなく、成功した `POST /search` リクエスト単位です。最大5件のクエリを含む配列のリクエストが成功した場合も、課金は1単位です。無効なリクエスト、レート制限されたリクエスト、上流の障害は課金されません。結果が0件でも、レスポンスが成功していれば課金対象となります。token に基づく追加料金は発生しません。
+</Note>
+
+<div id="sonar-api-pricing">
+  ## Sonar API の料金
+</div>
+
+<SonarDeprecationNotice />
+
+<Info>
+  **クエリあたりの総コスト** = トークンコスト + リクエスト料金 (検索コンテキストサイズによって変動し、Sonar、Sonar Pro、Sonar Reasoning Pro モデルにのみ適用されます)
+</Info>
+
+<Tabs>
+  <Tab title="トークン料金">
+    <div id="token-pricing">
+      ## トークン料金
+    </div>
+
+    **トークン料金**は、リクエストとレスポンスに含まれるトークン数に基づいて決まります。
+
+    | モデル                     | 入力トークン ($/1M) | 出力トークン ($/1M) | 引用トークン ($/1M) | 検索クエリ ($/1K) | 推論トークン ($/1M) |
+    | ----------------------- | :-----------: | :-----------: | :-----------: | :----------: | :-----------: |
+    | **Sonar**               |       $1      |       $1      |       -       |       -      |       -       |
+    | **Sonar Pro**           |       $3      |      $15      |       -       |       -      |       -       |
+    | **Sonar Reasoning Pro** |       $2      |       $8      |       -       |       -      |       -       |
+    | **Sonar Deep Research** |       $2      |       $8      |       $2      |      $5      |       $3      |
+  </Tab>
+
+  <Tab title="リクエスト料金">
+    <div id="request-pricing-by-search-context-size">
+      ## 検索コンテキストサイズ別のリクエスト料金
+    </div>
+
+    **検索コンテキスト**は、取得するウェブ情報の量を決定します。コンテキストが大きいほど、より網羅的な結果が得られます。次の表は、各モデルの**1000 リクエスト**あたりのリクエスト料金を示しています。
+
+    | モデル                     | Low コンテキストサイズ | Medium コンテキストサイズ | High コンテキストサイズ |
+    | ----------------------- | :-----------: | :--------------: | :------------: |
+    | **Sonar**               |       $5      |        $8        |       $12      |
+    | **Sonar Pro**           |       $6      |        $10       |       $14      |
+    | **Sonar Reasoning Pro** |       $6      |        $10       |       $14      |
+
+    <Note>
+      * **Low**: (デフォルト) 最速かつ最安
+      * **Medium**: コストと品質のバランス重視
+      * **High**: 検索の深さが最大。リサーチ用途に最適
+
+      [検索コンテキストの詳細はこちら →](https://docs.perplexity.ai/docs/sonar/filters#context-size-control)
+    </Note>
+  </Tab>
+
+  <Tab title="Pro Search の料金">
+    <div id="pro-search-pricing-pro-search-for-sonar-pro">
+      ## Pro Search の料金 (Sonar Pro 向け Pro Search)
+    </div>
+
+    **Pro Search** は、自動的なツール利用と多段階の推論によって Sonar Pro を強化します。有効にすると、モデルは複数回のウェブ検索を実行し、URL のコンテンツを取得して複雑なクエリに回答できます。[Pro Search の詳細はこちら](/ja/docs/sonar/pro-search/quickstart)。
+
+    <Info>
+      Pro Search には `stream: true` が必要で、`web_search_options` 内の `search_type` パラメータで有効化します。
+    </Info>
+
+    <div id="search-type-options">
+      ### 検索タイプのオプション
+    </div>
+
+    | 検索タイプ      | 説明                         | リクエスト料金 (1Kあたり)  |
+    | ---------- | -------------------------- | :--------------: |
+    | **`fast`** |  (デフォルト) 標準の Sonar Pro の挙動 |  $6 / $10 / $14  |
+    | **`pro`**  | 複雑なクエリ向けの多段階ツール利用          |  $14 / $18 / $22 |
+    | **`auto`** | クエリの複雑さに応じた自動判定            |     判定結果により変動    |
+
+    <Note>
+      リクエスト料金は検索コンテキストサイズ (Low / Medium / High) によって変動します。トークン料金は標準の Sonar Pro と同じです (入力 100万トークンあたり $3、出力 100万トークンあたり $15) 。
+    </Note>
+  </Tab>
+</Tabs>
+
+<div id="embeddings-api-pricing">
+  ## Embeddings API の料金
+</div>
+
+セマンティック検索、検索拡張生成 (RAG) をはじめとする機械学習アプリケーション向けに、高品質なテキスト埋め込みを生成します。
+
+<div id="standard-embeddings">
+  ### 標準エンベディング
+</div>
+
+| モデル                  |  次元数 | 価格 ($/100万 token)  |
+| -------------------- | :--: | :----------------: |
+| `pplx-embed-v1-0.6b` | 1024 |       $0.004       |
+| `pplx-embed-v1-4b`   | 2560 |        $0.03       |
+
+<div id="contextualized-embeddings">
+  ### コンテキスト化された埋め込み
+</div>
+
+| モデル                          |  次元数 | 料金 ($/100万トークン)  |
+| ---------------------------- | :--: | :--------------: |
+| `pplx-embed-context-v1-0.6b` | 1024 |      $0.008      |
+| `pplx-embed-context-v1-4b`   | 2560 |       $0.05      |
+
+<Card title="Embeddings API ドキュメントを見る" icon="cube" href="/ja/docs/embeddings/quickstart">
+  セマンティック検索や RAG などで Embeddings API を活用する方法を紹介します。
+</Card>
+
+<AccordionGroup>
+  <Accordion title="トークンとコストの用語集">
+    <div id="input-tokens">
+      ### 入力トークン
+    </div>
+
+    API へ送信するプロンプトやメッセージに含まれるトークン数です。これには以下が含まれます:
+
+    * 質問や指示
+    * 指定したコンテキストや例
+    * システムメッセージや書式
+
+    **例:** 「What is the weather in New York?」= 約 8 入力トークン
+
+    <div id="output-tokens">
+      ### 出力トークン
+    </div>
+
+    API のレスポンスに含まれるトークン数です。これには以下が含まれます:
+
+    * 生成された回答やコンテンツ
+    * 説明や補足のコンテキスト
+    * 検索結果と参照情報
+
+    **例:** 「The weather in New York is currently sunny with a temperature of 72°F.」= 約 15 出力トークン
+
+    <div id="citation-tokens">
+      ### 引用トークン
+    </div>
+
+    レスポンス内の検索結果や参照情報の生成にのみ使用されるトークンです。**Sonar Deep Research** モデルにのみ適用されます。
+
+    **例:** ソースリンク、参照番号、書誌情報の付与
+
+    <div id="search-context-size-vs-context-window">
+      ### 検索コンテキストサイズとコンテキストウィンドウの違い
+    </div>
+
+    **検索コンテキストサイズ**は、**コンテキストウィンドウ**と*同じではありません*。
+
+    * **検索コンテキストサイズ**: 検索時に取得する Web 情報の量 (リクエスト料金に影響)
+    * **コンテキストウィンドウ**: モデルが 1 回のリクエストで処理できる最大トークン数 (トークン上限に影響)
+
+    <div id="search-queries">
+      ### 検索クエリ
+    </div>
+
+    **Sonar Deep Research** がクエリ処理中に実行する個々の検索の回数です。これは最初のユーザークエリとは別にカウントされます。
+
+    * 必要な検索回数はモデルが自動的に判断します
+    * 検索クエリの正確な回数を制御することはできません
+    * `reasoning_effort` パラメータは実行される検索回数に影響します
+    * **Sonar Deep Research** モデルにのみ適用されます
+
+    <div id="reasoning-tokens">
+      ### 推論トークン
+    </div>
+
+    段階的な論理的推論や問題解決に使用されるトークンです。**Sonar Deep Research** モデルにのみ適用されます。
+
+    **例:** 複雑な数学の問題を、説明付きの手順に分解する
+
+    <Info>
+      **トークンの計算:** 英語のテキストでは 1 トークン ≈ 4 文字です。正確な数は言語やコンテンツの複雑さによって変動します。
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+<div id="cost-examples">
+  ## コスト例
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API のウェブ検索" icon="calculator">
+    **`openai/gpt-5.2`** • 入力 500 + 出力 200 token • ウェブ検索 1 回
+
+    | 項目           | コスト           |
+    | ------------ | ------------- |
+    | 入力 token     | $0.000875     |
+    | 出力 token     | $0.0028       |
+    | `web_search` | $0.0025       |
+    | **合計**       | **$0.006175** |
+  </Card>
+
+  <Card title="Agent API のリサーチ preset" icon="chart-area-line">
+    **`low` preset の代表的な実行例** • 入力 2,000 + 出力 1,000 token • ウェブ検索 1 回 + fetch 1 回
+
+    | 項目              | コスト        |
+    | --------------- | ---------- |
+    | model の入力 token | $0.001     |
+    | model の出力 token | $0.003     |
+    | `web_search`    | $0.0025    |
+    | `fetch_url`     | $0.0005    |
+    | **合計**          | **$0.007** |
+  </Card>
+</CardGroup>
+
+実際の preset のコストは、選択した model、token 使用量、ツールの呼び出し回数によって変動します。完了したレスポンスに `usage.cost.total_cost` が含まれる場合、その値が算出されたリクエストコストを示します。
+
+<div id="purchase-options">
+  ## 購入オプション
+</div>
+
+<CardGroup cols={2}>
+  <Card title="AWS Marketplace の Perplexity API Platform" icon="aws" href="/ja/docs/resources/aws-marketplace" arrow="True">
+    AWS Marketplace 経由で API クレジットを購入でき、請求の一元化とエンタープライズ調達に対応します。
+  </Card>
+
+  <Card title="営業チームへのお問い合わせ" icon="file-pencil" iconType="solid" href="https://perplexity.typeform.com/to/m3WnMaG6">
+    エンタープライズ向けお問い合わせフォームにご記入いただければ、チームや組織向けのカスタム価格、専任サポート、エンタープライズ機能についてご相談いただけます。
+  </Card>
+</CardGroup>

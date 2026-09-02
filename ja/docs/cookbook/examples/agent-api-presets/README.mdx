@@ -1,0 +1,257 @@
+---
+title: "presetのカスタマイズ"
+---
+
+model、ツール、機能は急速に進化します。ユースケースに最適な構成を保ちながらエージェントのコードを更新し続けるのは、それだけで専任の仕事になりかねません。Perplexityのpresetは、まさにこの課題を解決します。
+
+<div id="start-from-a-preset">
+  ## presetから始める
+</div>
+
+presetとは、Perplexityが管理するAgent API設定のバンドルで、model、検索設定、推論ステップ、system prompt、利用可能なツールを一つにまとめたものです。評価精度の向上に合わせてPerplexityが基盤となる設定を更新するため、コードに手を加えなくても、その更新が呼び出しに反映されます。
+
+選んだpresetがニーズを完全には満たさない場合はどうすればよいでしょうか。たとえば、ほぼ理想どおりのpreset設定を見つけたものの、1つか2つのフィールドだけは調整したい、というケースです。この場合は、presetを名前で指定したうえで、調整が必要なフィールドだけを上書きできます。それ以外のpresetのフィールドには、引き続き既定値が使用されます。
+
+<div id="check-the-prerequisites">
+  ## 前提条件を確認する
+</div>
+
+Python 3.10 以降、`perplexityai` ライブラリのインストール、そして `PERPLEXITY_API_KEY` として環境変数に設定した API キーが必要です。キーは [console.perplexity.ai/group/keys](https://console.perplexity.ai/group/keys) で作成できます。API をまだ一度も呼び出したことがない場合は、先に [Perplexity API クイックスタート](https://docs.perplexity.ai/docs/getting-started/quickstart) を一通り試しておいてください。
+
+```bash theme={null}
+pip install perplexityai
+export PERPLEXITY_API_KEY="pplx-..."
+```
+
+<div id="run-a-basic-example">
+  ## 基本的な例を実行する
+</div>
+
+このチュートリアルの例は、特に断りがない限りすべて `low` preset を使用します。まずは、プロンプトだけを指定して呼び出してみましょう。
+
+```python theme={null}
+from perplexity import Perplexity
+
+client = Perplexity()
+
+response = client.responses.create(
+    preset="low",
+    input="Summarize the current Perplexity Agent API pricing page.",
+)
+
+print("model:", response.model)
+print(response.output_text)
+```
+
+`low` presetでは、model、検索設定、推論ステップ、システムプロンプト、利用可能なツールがあらかじめ設定されています。リクエスト側で指定するのは入力のみです。
+
+<div id="customize-a-preset-in-two-moves">
+  ## 2つの操作でpresetをカスタマイズする
+</div>
+
+実際のカスタマイズは、次の2つの手法でほぼすべてに対応できます。トップレベルのフィールドを上書きする方法と、特定のツールのオプションを調整する方法です。最後のセクションでは、実際に何が実行されたかを確認する方法を説明します。
+
+<div id="1-override-one-parameter">
+  ### 1. パラメータを1つ上書きする
+</div>
+
+presetがほぼ要件を満たしているものの、1つのフィールドだけ変更が必要な場合は、そのパラメータを上書きします。該当するフィールドをリクエストで渡すだけで、それ以外のフィールドはすべてデフォルト値のまま維持されます。
+
+`low` では `max_steps` のデフォルト値が小さく設定されています (現在の値はpresetのドキュメントを確認してください) 。タスクでより多くの推論やツール利用の反復が必要な場合は、この上限を引き上げてください:
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input="Summarize this week's Agent API changelog.",
+    max_steps=8,
+)
+
+print("model:", response.model)
+print("status:", response.status)
+print("tool invocations:", response.usage.tool_calls_details)
+```
+
+<div id="2-adjust-options-for-one-tool">
+  ### 2. 単一ツールのオプションを調整する
+</div>
+
+presetのツールセット自体は用途に合っているが、1つのツールだけチューニングが必要な場合は、ツールオプションを調整します。そのツールについて部分的なエントリを渡せば、presetに含まれる他のツールはそのまま維持されます。
+
+`low` は、プロンプトにURLが指定されている場合、デフォルトで `fetch_url` を呼び出します。部分的な `web_search` のオーバーライドを渡しても、`fetch_url` は引き続き実行されます。
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input=(
+        "Read https://docs.perplexity.ai/docs/agent-api/presets "
+        "and list the preset names on that page."
+    ),
+    tools=[{
+        "type": "web_search",
+        "max_tokens": 6000,
+        "max_tokens_per_page": 1200,
+    }],
+)
+
+print("model:", response.model)
+print("tools ran:", list(response.usage.tool_calls_details.keys()))
+```
+
+2026年8月19日に `perplexityai==0.43.3` で実行した結果:
+
+```text theme={null}
+model: openai/gpt-5.6-luna
+tools ran: ['fetch_url']
+```
+
+このリクエストで調整したのは `web_search` ですが、実際に実行されたのは `fetch_url` です。プロンプトが URL の読み取りを求めており、その役割を担うツールが `fetch_url` だからです。証拠は `usage.tool_calls_details` にあります。リクエストで `fetch_url` のエントリを渡していないにもかかわらず、そこに `fetch_url` が現れています。これがツールのマージです。`fetch_url` も併せて調整するには、`tools` に `web_search` と並べて `fetch_url` のエントリを追加してください。
+
+<div id="put-both-moves-together-an-evidence-based-rollout-decision">
+  ## 2つの手法を組み合わせる: エビデンスに基づくロールアウト判断
+</div>
+
+ここまでの概念を組み合わせてみましょう。CPUバウンドなサービスのパフォーマンス責任者が、Python 3.14のフリースレッドビルドを試験導入すべきか判断しているとします。ベースとしては `low` が適していますが、このタスクにはより広い推論の余地(オーバーライド)と、特定の技術ページ2件から得られるより深いコンテキスト(ツールのマージ)が必要です。
+
+```python theme={null}
+from perplexity import Perplexity
+
+client = Perplexity()
+
+response = client.responses.create(
+    preset="low",
+    input=(
+        "You are the performance lead for a CPU-bound fraud-scoring service. "
+        "The team proposes piloting Python 3.14's free-threaded build in "
+        "production. Create an adoption brief of at most 450 words with exactly "
+        "these Markdown headings: ## Decision, ## Three technical risks, "
+        "## Five benchmark gates, and ## Two stop conditions. Make each list "
+        "match the number in its heading. For every risk, separate the "
+        "documented behavior from its implication for this service. Use only "
+        "the sources allowed by the web_search tool. Cite factual claims inline "
+        "using numeric result IDs, one source per bracket, like [1][2]. Never "
+        "invent citation IDs. Do not include shell commands."
+    ),
+    max_steps=8,
+    tools=[{
+        "type": "web_search",
+        "search_context_size": "high",
+        "filters": {
+            "search_domain_filter": [
+                "docs.python.org/3.14/whatsnew/3.14.html",
+                "docs.python.org/3/howto/free-threading-python.html",
+            ],
+        },
+    }],
+)
+
+print(response.output_text)
+
+print("\n--- Observed run ---")
+print("model:      ", response.model)
+print("status:     ", response.status)
+print("tools:      ", response.usage.tool_calls_details)
+print("total cost: $", response.usage.cost.total_cost)
+```
+
+呼び出しの各要素には、それぞれ役割があります。
+
+| 項目                                          | 提供元                                   |
+| ------------------------------------------- | ------------------------------------- |
+| メンテナンス済みのmodel、システムプロンプト、推論、デフォルト値、未掲載のツール群 | `low` preset                          |
+| アプリケーションのタスクと出力の取り決め                        | `input`                               |
+| 추가の推論ステップの余地                                | `max_steps=8` による上書き                  |
+| より深い根拠の抽出                                   | `search_context_size="high"` のツールマージ  |
+| 信頼できる情報源のポリシー                               | URLレベルの `search_domain_filter` ツールマージ |
+| 実行時の根拠                                      | レスポンスのメタデータ                           |
+
+2026年8月19日に `perplexityai==0.43.3` で実施した代表的な実行では、次のブリーフ (`response.output_text`) が生成されました。
+
+```markdown theme={null}
+## 決定
+
+Python 3.14 のフリースレッドビルドは、既定のランタイムとしてではなく、範囲を厳密に限定したカナリアとしてのみ本番環境で試行する。Python 3.14 はフリースレッディングを正式にサポートしているが、依然としてオプション扱いであり、サードパーティ拡張の互換性やワークロード固有のスケーリングには無視できない不確実性が残る。[1][2] トラフィックを拡大する前に、GIL 有効ビルドへのロールバック経路、同一のキャパシティ制御、および以下のベンチマーク基準を必須とする。
+
+## 3つの技術的リスク
+
+1. **文書化された挙動:** フリースレッド実行はシングルスレッドのオーバーヘッドを追加し、`pyperformance` 全体でプラットフォームやハードウェアに応じておよそ 1〜8% となる。[2] **含意:** 大部分が逐次的な Python 処理である不正検知リクエストは、マルチスレッドのスループットが向上しても、遅くなるか、より多くの CPU を必要とする可能性がある。
+
+2. **文書化された挙動:** 一部の C 拡張はフリースレッド動作に対応しておらず、インポート時に GIL を自動的に再有効化することがある（その際に警告が出力される）。[2] **含意:** 並列に動作しているはずのワーカーが気付かないうちに直列化し、スループットやテールレイテンシの計測結果が誤解を招くものになりかねない。すべての依存関係を監査し、GIL が想定外に再有効化された場合は試行を失敗として扱うこと。
+
+3. **文書化された挙動:** 組み込みコンテナは GIL 時代の挙動に近い保護を提供するが、共有されたイテレータは一般にスレッドセーフではなく、フレームへの同時アクセスはインタプリタをクラッシュさせ得る。[2] **含意:** 特徴量抽出、キャッシュ、モデル周辺の実装に残る「GIL があるから安全」という前提は、競合状態、結果の破損、プロセスのクラッシュを招く恐れがある。共有される可変状態には明示的な同期が必要だと考えること。
+
+## 5つのベンチマーク基準
+
+1. **正確性:** 本番を代表するリプレイを GIL ビルドに対して実行し、不正判定、スコア、エラー分類、監査記録がすべて一致することを要件とする。
+
+2. **スループット:** 目標のコア割り当てと現実的なスレッド数において、GIL ビルド比で持続的に 1.20 倍以上のリクエスト/秒を要件とする。
+
+3. **レイテンシ:** ピーク負荷時の p50、p95、p99 において、5% を超える悪化がなく、サービスレベル目標の未達がゼロであることを要件とする。
+
+4. **CPU 効率:** 同一トラフィック下で、スコアリング1リクエストあたりの CPU 秒が 10% 以上低いことを要件とする。フリースレッディングがすべてのプログラムに自動的に恩恵をもたらすわけではないため、ワーカー増加に伴うスケーリングは別途計測する。[2]
+
+5. **運用上の安全性:** 本番の依存関係バージョンで24時間のソークテストを実施し、クラッシュ、デッドロック、データ競合、想定外の GIL 再有効化警告、および GIL ビルドに対して合意した予算を超えるメモリ増加がいずれもゼロであることを要件とする。フリースレッドビルドは通常、より多くのメモリを消費する。[2]
+
+## 2つの中止条件
+
+1. **即時ロールバック:** 正確性に差異がある、SLO に違反する、クラッシュやデッドロックが発生する、または本番経路上のいずれかの依存関係が GIL を再有効化する場合は、試行を中止して GIL ビルドに戻す。
+
+2. **試行後の見送り:** いずれかのベンチマーク基準を満たさない場合、特にスループット向上が文書化されたシングルスレッドのオーバーヘッドを補えない場合や、メモリ／キャパシティのコストが承認済み予算を超える場合は、カナリアを超えて展開しない。
+```
+
+さらに、次の observed-run ブロックを追加します:
+
+```text theme={null}
+model:       openai/gpt-5.6-luna
+status:      completed
+tools:       {'search_web': ToolCallDetailsOutput(invocation=2)}
+total cost:  $0.00672
+```
+
+生成されたブリーフは410語で、指定したすべての見出しとリスト項目数に従い、有効な番号付き引用を使用し、許可された2つの公式Pythonページのみを参照していました。スポットチェックによる事実確認でも、並列実行、拡張モジュールによるGILの再有効化、イテレータの安全性、Python 3.14の公式サポート、文書化されたシングルスレッド時の性能低下といった記述が正確であることを確認できました。
+
+出力は実行ごとに異なります。生成されたロールアウトの提案はあくまで下書きです。引用IDはレスポンスの検索結果と照合して検証し、影響の大きい推奨事項は本番環境で使用する前に必ずレビューしてください。
+
+<div id="inspect-what-actually-ran">
+  ## 実際に実行された内容を確認する
+</div>
+
+APIが実際に何を実行したのかを確認する手段が必要です。実際に使用されたモデルは `response.model`、実行されたツールは `response.usage.tool_calls_details`、請求金額は `response.usage.cost.total_cost` で確認できます。レスポンスには、実効的なシステムプロンプト、`max_steps`、推論、継承されたツールセット全体は含まれません。そのため、これはpresetの設定内容ではなく、観測された実行内容の確認と捉えてください。
+
+```python theme={null}
+def inspect(preset: str, prompt: str) -> None:
+    response = client.responses.create(preset=preset, input=prompt)
+    print(f"preset={preset}")
+    print(f"  model:       {response.model}")
+    print(f"  status:      {response.status}")
+    print(f"  invocations: {response.usage.tool_calls_details}")
+    print(f"  total_cost:  ${response.usage.cost.total_cost}")
+
+inspect("low", "Summarize the current Perplexity Agent API pricing page.")
+```
+
+数値は環境によって異なります。2026年8月19日に `perplexityai==0.43.3` で実行した結果は次のとおりです。
+
+```text theme={null}
+preset=low
+  model:       openai/gpt-5.6-luna
+  status:      completed
+  invocations: {'fetch_url': ToolCallDetailsOutput(invocation=1), 'search_web': ToolCallDetailsOutput(invocation=1)}
+  total_cost:  $0.01812
+```
+
+正確さやコストが重要なリクエストについては、実際に何が実行されたのかを確認しましょう。どの model が呼び出しを処理し、どのツールが実行され、その呼び出しにいくらかかったのかを確認できます。
+
+<div id="summary">
+  ## まとめ
+</div>
+
+presetを使うと、管理されたAgent APIの設定を名前で呼び出せます。フィールドを1つ上書きすれば、他のデフォルト値はそのままに、その1点だけを変更できます。ツールのオプションをマージすれば、presetで利用可能な他のツールを有効に保ったまま、特定のツールだけを調整できます。呼び出しの内容を確認するには、`response.model` と `response.usage.tool_calls_details` を参照してください。
+
+<div id="resources">
+  ## リソース
+</div>
+
+* [Agent API の preset](https://docs.perplexity.ai/docs/agent-api/presets)
+* [Agent API クイックスタート](https://docs.perplexity.ai/docs/agent-api/quickstart)
+* [Web Search](https://docs.perplexity.ai/docs/agent-api/tools/web-search)
+* [Perplexity API の料金](https://docs.perplexity.ai/docs/getting-started/pricing)

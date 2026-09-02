@@ -1,0 +1,146 @@
+---
+title: "Perplexity avec n8n"
+description: "Ajoutez la recherche web en temps réel, des agents IA et des embeddings à vos workflows n8n grâce au nœud Perplexity natif."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+n8n propose un **nœud Perplexity** natif avec les ressources Agent, Search et Embeddings — toutes configurables depuis le canevas visuel. Les modèles sont chargés dynamiquement depuis l&#39;API : la liste déroulante reflète donc toujours les dernières options disponibles.
+
+<Info>
+  **n8n** est une plateforme d&#39;automatisation de workflows basée sur des nœuds. Elle prend en charge aussi bien les déploiements auto-hébergés que les déploiements cloud — tous les exemples ci-dessous fonctionnent dans les deux cas. Si vous êtes en auto-hébergement, assurez-vous que votre instance peut joindre `api.perplexity.ai` en sortie. Pour en savoir plus, consultez [n8n.io](https://n8n.io).
+</Info>
+
+Le nœud prend en charge trois ressources :
+
+* **Agent** — Modèles tiers (OpenAI, Anthropic, Google, xAI) avec appel d&#39;outils et sortie structurée
+* **Search** — Résultats web bruts classés, à traiter vous-même
+* **Embeddings** — Génération de vecteurs pour les pipelines de RAG et de récupération
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+* n8n 2.14.0+ (cloud sur [app.n8n.cloud](https://app.n8n.cloud) ou auto-hébergé)
+* Une clé API Perplexity
+
+<Card title="Obtenir une clé API" icon="key" href="https://console.perplexity.ai/project/keys">
+  Générez votre clé API Perplexity depuis la console.
+</Card>
+
+<div id="credential-setup">
+  ## Configuration des identifiants
+</div>
+
+<Steps>
+  <Step title="Ouvrir les identifiants">
+    Dans n8n, accédez à **Settings → Credentials → Add credential**.
+  </Step>
+
+  <Step title="Sélectionner Perplexity">
+    Recherchez **API Perplexity**, puis sélectionnez-le.
+  </Step>
+
+  <Step title="Ajouter votre clé">
+    Collez votre clé API, puis enregistrez. Le nœud utilisera automatiquement cet identifiant.
+  </Step>
+</Steps>
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_credentials.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=43dac8012eb71603e45c77afad6959e8" alt="Configuration des identifiants Perplexity" />
+
+***
+
+<div id="agent">
+  ## Agent
+</div>
+
+Utilisez la ressource Agent pour acheminer les requêtes vers des modèles tiers (OpenAI, Anthropic, Google, xAI) avec les outils `web_search` et `fetch_url` de Perplexity.
+
+Définissez **Resource** sur `Agent` et configurez :
+
+| Paramètre               | Description                                                                                                         |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| **Model**               | N&#39;importe quel modèle de la liste déroulante dynamique (p. ex. `openai/gpt-5.5`, `anthropic/claude-sonnet-4-6`) |
+| **Input**               | Votre prompt — prend en charge les expressions n8n                                                                  |
+| **Tools**               | Sélectionnez `web_search`, `fetch_url` ou les deux                                                                  |
+| **System Instructions** | Prompt système facultatif pour l&#39;agent                                                                          |
+| **Response Format**     | Schéma JSON facultatif pour une sortie structurée                                                                   |
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_agent_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=5ead62566997fab45106e72a292e8d92" alt="Configuration de la ressource Agent" />
+
+***
+
+<div id="search">
+  ## Search
+</div>
+
+Obtenez des résultats web bruts et classés, sans traitement par un LLM. Définissez **Resource** sur `Search` :
+
+| Paramètre         | Description                                                   |
+| ----------------- | ------------------------------------------------------------- |
+| **Query**         | La requête de recherche — prend en charge les expressions n8n |
+| **Recency**       | `day`, `week`, `month` ou `year`                              |
+| **Domain Filter** | Limiter à des domaines précis                                 |
+| **Language**      | Code de langue ISO 639-1                                      |
+| **Country**       | Code pays à deux lettres                                      |
+
+Chaque résultat contient `title`, `url`, `snippet` et `date`.
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_search_results.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=ce3da801cd5fe19dddd11d293084714f" alt="Résultats de la ressource Search" />
+
+***
+
+<div id="embeddings">
+  ## Embeddings
+</div>
+
+Générez des vecteurs pour les pipelines RAG et de récupération. Définissez **Resource** sur `Embeddings` :
+
+| Paramètre | Description                                                                    |
+| --------- | ------------------------------------------------------------------------------ |
+| **Model** | `pplx-embed-v1-4b` (2560 dimensions) ou `pplx-embed-v1-0.6b` (1024 dimensions) |
+| **Input** | Texte à vectoriser — prend en charge les expressions n8n                       |
+
+Le nœud prend également en charge les embeddings contextuels via `POST /v1/contextualizedembeddings`, pour des vecteurs tenant compte des fragments de document.
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_embeddings_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=3e84f575f042b158214dab7ce8ea6db0" alt="Configuration de la ressource Embeddings" />
+
+***
+
+<div id="error-handling">
+  ## Gestion des erreurs
+</div>
+
+Utilisez le workflow **Error Trigger** de n8n ou l&#39;option intégrée **Retry on Fail** (paramètres du nœud → Retry on Fail) pour traiter les erreurs transitoires :
+
+* **429 Too Many Requests** — ajoutez un nœud **Wait** appliquant un backoff exponentiel avant de réessayer
+* **401 Unauthorized** — vérifiez que vos identifiants Perplexity API sont correctement enregistrés
+* **Erreurs 500** — activez Retry on Fail dans les paramètres du nœud
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Documentation n8n" icon="book" href="https://docs.n8n.io">
+    Documentation officielle de n8n
+  </Card>
+
+  <Card title="Communauté n8n" icon="users" href="https://community.n8n.io">
+    Modèles, workflows et entraide communautaire
+  </Card>
+
+  <Card title="Référence de l'API Perplexity" icon="code" href="/fr/api-reference">
+    Référence complète de l&#39;API
+  </Card>
+
+  <Card title="Agent API" icon="sparkles" href="/fr/docs/agent-api/models">
+    Modèles et capacités disponibles
+  </Card>
+</CardGroup>

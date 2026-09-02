@@ -1,0 +1,238 @@
+---
+title: "株式リサーチブリーフ"
+description: "Perplexity Agent API と組み込みの finance_search ツールを使って、任意の上場銘柄のティッカーから機関投資家水準の株式リサーチブリーフを生成します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="equity-research-brief">
+  # 株式リサーチブリーフ
+</div>
+
+Perplexity の [Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) と組み込みの [`finance_search`](https://docs.perplexity.ai/docs/agent-api/tools/finance-search) ツールを使い、任意の上場銘柄のティッカーについて構造化された株式リサーチブリーフを生成するコマンドラインツールです。
+
+`finance_search` は、株価、財務データ、決算説明会のトランスクリプト、同業他社比較、アナリスト予想といった構造化された市場データを返します。そのため model は、記述的な内容だけでなく数値に裏付けられたレポートを組み立てられます。このツールは、エージェント型の投資家向けワークフローのために設計されています。
+
+<div id="features">
+  ## 機能
+</div>
+
+* コマンド1つで6セクション構成のブリーフを生成：スナップショット、事業概要、財務推移、直近決算、同業比較、リスク、結論
+* Agent API の `finance_search` ツールにより、構造化されたファンダメンタルズ、株価、決算説明会のトランスクリプトを取得
+* 公式の `finance_search` 推奨事項に沿った3つの preset 構成：
+  * `quote` — リアルタイムの株価/クオートのみ。最速かつ最安
+  * `single` — Web コンテキストを併用した単一企業の過去データ参照
+  * `research` — 複数企業を横断するマルチステップのフルブリーフ (デフォルト) 
+* ブリーフと併せて、引用にそのまま使える Perplexity の金融情報ソース URL を出力
+* `finance_search` の呼び出し回数とリクエストの総コストを表示
+* `--json` フラグを指定すると Agent API の生レスポンスを出力し、下流のパイプラインで利用可能
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+* Python 3.9以降
+* Agent APIへのアクセス権を持つPerplexity API key。`finance_search` は現在ベータ版です。提供状況については [Finance Search のドキュメント](https://docs.perplexity.ai/docs/agent-api/tools/finance-search) を参照してください。
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+cd docs/examples/equity-research-brief
+pip install -r requirements.txt
+chmod +x equity_research_brief.py
+```
+
+<div id="api-key-setup">
+  ## API keyの設定
+</div>
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key-here"
+```
+
+キーは `--api-key` で渡すか、作業ディレクトリの `.pplx_api_key` ファイルに記述することもできます。
+
+<div id="quick-start">
+  ## クイックスタート
+</div>
+
+NVIDIA に関する完全なリサーチブリーフを生成します。
+
+```bash theme={null}
+./equity_research_brief.py NVDA
+```
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```bash theme={null}
+./equity_research_brief.py TICKER [--config {quote,single,research}] [--json] [--api-key KEY]
+```
+
+<div id="just-a-live-quote-cheapest-1-tool-call">
+  ### リアルタイム株価のみ (最も低コスト、ツール呼び出し約1回) 
+</div>
+
+```bash theme={null}
+./equity_research_brief.py AAPL --config quote
+```
+
+<div id="single-company-historical-lookup-with-web-context">
+  ### ウェブコンテキストを活用した単一企業の過去データ検索
+</div>
+
+```bash theme={null}
+./equity_research_brief.py MSFT --config single
+```
+
+<div id="full-multi-step-research-brief-default">
+  ### マルチステップの完全なリサーチブリーフ (デフォルト) 
+</div>
+
+```bash theme={null}
+./equity_research_brief.py NVDA --config research
+```
+
+<div id="emit-raw-agent-api-json">
+  ### Agent API の生の JSON を出力する
+</div>
+
+```bash theme={null}
+./equity_research_brief.py TSLA --json | jq '.usage.cost'
+```
+
+<div id="configuration-reference">
+  ## 設定リファレンス
+</div>
+
+| 設定         | モデル                         | ツール                                           | 最大ステップ数 | 適した用途               |
+| ---------- | --------------------------- | --------------------------------------------- | ------- | ------------------- |
+| `quote`    | `perplexity/sonar`          | `finance_search`                              | 1       | リアルタイムの価格・気配値、最速の経路 |
+| `single`   | `openai/gpt-5.5`            | `web_search` + `finance_search` + `fetch_url` | 5       | 単一企業の過去のファンダメンタルズ   |
+| `research` | `anthropic/claude-opus-4-7` | `web_search` + `finance_search` + `fetch_url` | 10      | 複数企業の比較、詳細なレポート     |
+
+これらの設定は、[`finance_search` の推奨設定](https://docs.perplexity.ai/docs/agent-api/tools/finance-search)をそのまま採用したものです。
+
+<div id="example-output-truncated">
+  ## 出力例 (抜粋) 
+</div>
+
+```
+## 1. スナップショット
+
+- **株価:** $200.23（2026-05-01 14:10 UTC 時点）
+- **時価総額:** $4.87T
+- **PER（TTM）:** 40.86
+- **52週レンジ:** $110.82 – $216.83
+
+## 2. 事業概要
+
+NVIDIA は、AI の学習・推論、ゲーミング、プロフェッショナル向けビジュアライゼーション、
+自動車分野で使われるアクセラレーテッドコンピューティングプラットフォーム（GPU、
+ネットワーキング、フルスタックソフトウェア）を手がける。売上の大半はデータセンター部門が占める。
+
+## 3. 業績の推移
+| 会計年度 | 売上高   | 営業利益率 | 純利益   |
+| ----- | ----------- | ---------------- | ---------- |
+| FY25  | $130.5B     | 62.4%            | $72.9B     |
+...
+
+---
+finance_search: カテゴリ [earnings_history, financials, profile, quote] にわたって 4 件の呼び出し
+
+金融情報ソース:
+  - https://www.perplexity.ai/finance/NVDA
+  - https://www.perplexity.ai/finance/NVDA/earnings?eventId=409967
+  - ...
+
+コスト: 0.2817 USD
+```
+
+<div id="code-walkthrough">
+  ## コードの解説
+</div>
+
+このスクリプトは次の3つの処理を行います。
+
+**1. `finance_search` を有効にして Agent API を1回呼び出す。**
+
+```python theme={null}
+from perplexity import Perplexity
+
+client = Perplexity()
+response = client.responses.create(
+    model="anthropic/claude-opus-4-7",
+    instructions=SYSTEM_PROMPT,
+    input=BRIEF_TEMPLATE.format(ticker="NVDA"),
+    tools=[
+        {"type": "web_search"},
+        {"type": "finance_search"},
+        {"type": "fetch_url"},
+    ],
+    max_output_tokens=4096,
+    max_steps=10,
+)
+```
+
+モデルはプロンプトに基づいて、どの `finance_search` カテゴリ (quote、financials、transcript など) を取得するかを判断します。フィールドを手動で指定する必要はありません。
+
+**2. `response.output` をたどって、アシスタントのテキストと構造化された `finance_results` ブロックの両方を抽出します。**
+
+```python theme={null}
+for item in response.output:
+    if item.type == "finance_results":
+        for r in item.results:
+            print(r.category, r.tickers, r.sources)
+    elif item.type == "message":
+        for block in item.content:
+            if block.type == "output_text":
+                print(block.text)
+```
+
+**3. コストと金融情報ソース URL を本文と併せて提示する。** `result.sources` に返される Perplexity の金融ページは、安定した引用可能なリンクです。ブリーフを人間が読む場合にも、下流の RAG パイプラインで処理する場合にも役立ちます。
+
+<div id="prompting-guidance">
+  ## プロンプト作成のガイダンス
+</div>
+
+`finance_search` は、特定のデータ形式ではなくビジネス上の成果を求めるプロンプトで最も効果を発揮します。システムプロンプトでは、model に対して次のように指示しています。
+
+* 定量的に記述し、数値を適切な期間 (例: `FY2025`、`Q3 FY26`) に対応付けること
+* 数値を決して捏造しないこと — `finance_search` がフィールドを返さない場合は、その旨を明示すること
+* 出力を整った Markdown 形式にすること
+
+このパターンについては、[finance&#95;search のプロンプトガイダンス](https://docs.perplexity.ai/docs/agent-api/tools/finance-search#prompt-guidance)に記載されています。
+
+<div id="pricing">
+  ## 料金
+</div>
+
+`finance_search` は **呼び出し1,000回あたり $5** で課金され、モデルのトークン使用量とは別に計上されます。preset ごとにコスト特性は異なります。
+
+* `quote`: 通常は1回の呼び出しで、ブリーフあたり約 $0.007
+* `single`: 1〜3回の呼び出し + GPT-5.5 のトークン
+* `research`: 3〜6回の呼び出し + Claude Opus のトークン
+
+最新の料金は [Perplexity の料金](https://docs.perplexity.ai/docs/getting-started/pricing) を参照してください。
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+* `finance_search` は現在ベータ版であり、すべての API key で利用できるとは限りません
+* 結果は Perplexity の金融データのカバー範囲に依存します。マイナーな銘柄や米国外のティッカーでは、構造化データが十分に返らない場合があります
+* 本内容は投資助言ではありません。「結論」セクションは、推奨ではなく分析上の見解として明示的に位置づけています
+
+<div id="resources">
+  ## リソース
+</div>
+
+* [Agent API クイックスタート](https://docs.perplexity.ai/docs/agent-api/quickstart)
+* [Finance Search ツール](https://docs.perplexity.ai/docs/agent-api/tools/finance-search)
+* [Web Search ツール](https://docs.perplexity.ai/docs/agent-api/tools/web-search)
+* [Perplexity Python SDK](https://pypi.org/project/perplexityai/)

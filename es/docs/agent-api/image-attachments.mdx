@@ -1,0 +1,257 @@
+---
+title: "Imágenes adjuntas"
+description: "Aprende a subir y analizar imágenes mediante codificación base64 o URL HTTPS"
+---
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+La Agent API admite el análisis de imágenes mediante la carga directa de imágenes. Las imágenes pueden proporcionarse como cadenas codificadas en base64 dentro de un URI de datos o como URL HTTPS estándar.
+
+<Warning>
+  * Al usar codificación base64, actualmente la API solo admite imágenes de hasta 50 MB cada una.
+  * Formatos admitidos para imágenes codificadas en base64: PNG (image/png), JPEG (image/jpeg), WEBP (image/webp) y GIF (image/gif).
+  * Al usar una URL HTTPS, el modelo intentará obtener la imagen desde la URL indicada. Asegúrate de que la URL sea de acceso público.
+</Warning>
+
+<div id="examples">
+  ## Ejemplos
+</div>
+
+<Tabs>
+  <Tab title="Datos codificados en Base64">
+    <Info>Usa este método cuando tengas el archivo de imagen en local y quieras incrustarlo directamente en el cuerpo de la solicitud. Recuerda el límite de tamaño de 50 MB y los formatos admitidos (PNG, JPEG, WEBP, GIF).</Info>
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import base64
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      # Leer y codificar la imagen en base64
+      def encode_image(image_path):
+          with open(image_path, "rb") as image_file:
+              return base64.b64encode(image_file.read()).decode("utf-8")
+
+      image_path = "image.png"
+      base64_image = encode_image(image_path)
+
+      # Analizar la imagen
+      response = client.responses.create(
+          model="openai/gpt-5.6-sol",
+          input=[
+              {
+                  "role": "user",
+                  "content": [
+                      {"type": "input_text", "text": "what's in this image?"},
+                      {
+                          "type": "input_image",
+                          "image_url": f"data:image/png;base64,{base64_image}",
+                      },
+                  ],
+              }
+          ],
+      )
+
+      print(response.output_text)
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+      import * as fs from 'fs';
+
+      const client = new Perplexity();
+
+      // Leer y codificar la imagen en base64
+      const imageBuffer = fs.readFileSync('image.png');
+      const base64Image = imageBuffer.toString('base64');
+      const imageDataUri = `data:image/png;base64,${base64Image}`;
+
+      // Analizar la imagen
+      const response = await client.responses.create({
+          model: 'openai/gpt-5-mini',
+          input: [
+              {
+                  role: 'user',
+                  content: [
+                      { type: 'input_text', text: "What's in this image?" },
+                      { type: 'input_image', image_url: imageDataUri }
+                  ]
+              }
+          ],
+      } as any);
+
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "openai/gpt-5-mini",
+          "input": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What'\''s in this image?"
+                },
+                {
+                  "type": "input_image",
+                  "image_url": "data:image/png;base64,$BASE64_ENCODED_IMAGE"
+                }
+              ]
+            }
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </Tab>
+
+  <Tab title="URL HTTPS">
+    <Info>Usa este método cuando tengas la URL de una imagen de acceso público. El modelo descargará la imagen desde la URL proporcionada.</Info>
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+
+      # Analizar la imagen
+      response = client.responses.create(
+          model="openai/gpt-5.6-sol",
+          input=[
+              {
+                  "role": "user",
+                  "content": [
+                      {"type": "input_text", "text": "Can you describe the image at this URL?"},
+                      {
+                          "type": "input_image",
+                          "image_url": image_url,
+                      },
+                  ],
+              }
+          ],
+      )
+
+      print(response.output_text)
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const imageHttpsUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg";
+
+      // Analizar la imagen
+      const response = await client.responses.create({
+          model: 'openai/gpt-5-mini',
+          input: [
+              {
+                  role: 'user',
+                  content: [
+                      { type: 'input_text', text: 'Can you describe the image at this URL?' },
+                      { type: 'input_image', image_url: imageHttpsUrl }
+                  ]
+              }
+          ],
+      } as any);
+
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "openai/gpt-5-mini",
+          "input": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Can you describe the image at this URL?"
+                },
+                {
+                  "type": "input_image",
+                  "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+                }
+              ]
+            }
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </Tab>
+</Tabs>
+
+<div id="request-format">
+  ## Formato de la solicitud
+</div>
+
+<div id="agent-api">
+  ### Agent API
+</div>
+
+Las imágenes deben incrustarse en el array `input` cuando se utiliza el formato de array de mensajes. Cada imagen debe proporcionarse con la siguiente estructura:
+
+```json theme={null}
+{
+  "role": "user",
+  "content": [
+    {
+      "type": "input_text",
+      "text": "What's in this image?"
+    },
+    {
+      "type": "input_image",
+      "image_url": "<IMAGE_URL_OR_BASE64_DATA>"
+    }
+  ]
+}
+```
+
+El campo `image_url` acepta cualquiera de estas opciones:
+
+* **Una URL de la imagen**: una URL HTTPS de acceso público que apunte directamente al archivo de imagen
+* **Los datos de la imagen codificados en base64**: un URI de datos con el formato `data:image/{format};base64,{base64_content}`
+
+<div id="pricing">
+  ## Precios
+</div>
+
+Las imágenes se tokenizan según sus dimensiones en píxeles mediante la siguiente fórmula:
+
+```
+tokens = (width px × height px) / 750
+```
+
+**Ejemplos:**
+
+* Una imagen de 1024×768 consumiría: (1024 × 768) / 750 = 1048 tokens
+* Una imagen de 512×512 consumiría: (512 × 512) / 750 = 349 tokens
+
+Estos tokens de imagen se cobran según el precio de los tokens de entrada del modelo que estés usando y se suman al recuento total de tokens de la solicitud, junto con los tokens de texto.
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Inicio rápido de la Agent API" icon="rocket" href="/es/docs/agent-api/quickstart">
+    Empieza a usar la Agent API
+  </Card>
+
+  <Card title="Búsqueda web" icon="settings-bolt" href="/es/docs/agent-api/tools/web-search">
+    Conoce la herramienta `web_search`.
+  </Card>
+</CardGroup>

@@ -1,0 +1,282 @@
+---
+title: "运行代码"
+description: "为智能体提供 sandbox，让它通过运行真实代码算出精确答案而非估算结果，并返回生成的文件。"
+---
+
+面对精确的算术运算和数据处理，语言模型往往只是近似估算，而非真正计算。`sandbox` 工具为智能体提供一个隔离的 Linux 容器，可运行真实代码并将输出用于作答——适用于结果必须精确的场景，例如计算得出的数值、经过转换的数据集或生成的报告。在容器内部，智能体还可以直接调用 Perplexity 的 [Web Search](/zh/docs/agent-api/tools/web-search)、[Fetch URL Content](/zh/docs/agent-api/tools/fetch-url-content) 和 [People Search](/zh/docs/agent-api/tools/people-search)，无需将它们添加到请求中，再对返回的内容进行计算——每项均按其标准费率计费。[Sandbox 工具参考](/zh/docs/agent-api/tools/sandbox)中列出了完整的设置项、响应结构和定价说明。
+
+<div id="enable-the-sandbox">
+  ## 启用 sandbox
+</div>
+
+在 `tools` 数组中添加 `{"type": "sandbox"}`。model 会根据你的提示词自行判断何时运行代码。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Compute the compound annual growth rate from 4.2M in 2019 to 11.8M in 2025.",
+      tools=[{"type": "sandbox"}],
+      instructions="Use the sandbox to compute the exact figure before answering.",
+  )
+
+  print(get_output_text(response))
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Compute the compound annual growth rate from 4.2M in 2019 to 11.8M in 2025.',
+    tools: [{ type: 'sandbox' as const }],
+    instructions: 'Use the sandbox to compute the exact figure before answering.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Compute the compound annual growth rate from 4.2M in 2019 to 11.8M in 2025.",
+      "tools": [{ "type": "sandbox" }],
+      "instructions": "Use the sandbox to compute the exact figure before answering."
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="when-to-reach-for-it">
+  ## 何时使用
+</div>
+
+* 估算无法满足要求的数值计算与统计分析
+* 数据清洗、解析与转换
+* 执行代码以验证逻辑或复现错误
+* 生成文件与产物——CSV、JSON、HTML、报告，或代码写出的任何其他文件
+* 需要中间文件或计算状态的多步骤工作流
+
+<Tip>
+  将 `sandbox` 与 `web_search` 搭配使用，智能体便可先收集证据，再在容器内对其进行计算。关于 sandbox 如何与其他工具协同，请参阅 [Sandbox 参考文档](/zh/docs/agent-api/tools/sandbox)。
+</Tip>
+
+<div id="read-the-computed-result">
+  ## 读取计算结果
+</div>
+
+当智能体运行代码时，响应的 `output` 数组中除了 `message`，还会包含一个或多个 `sandbox_results` 项。每一项都包含所执行的 `code`、`language`，以及一个带有 `stdout`、`stderr`、`exit_code` 和 `status` 的 `results` 数组。据此即可验证答案确实是智能体计算得出的，而不是猜出来的。各字段的完整说明请参见[响应结构参考](/zh/docs/agent-api/tools/sandbox#response-shape)。
+
+从响应中读取该项 (此处的 `response` 来自上文[启用 sandbox](#enable-the-sandbox) 示例) ：
+
+```python Python theme={null}
+for item in response.output:
+    if item.type == "sandbox_results":
+        print(item.code)
+        print(item.results[0].stdout)
+```
+
+针对该请求，智能体在 sandbox 中编写并运行了以下 Python 代码，并将打印出的值用于最终回答：
+
+<Accordion title="响应">
+  <Tabs>
+    <Tab title="格式化代码">
+      ```python theme={null}
+      from decimal import Decimal, getcontext
+
+      getcontext().prec = 50
+      start = Decimal('4.2')
+      end = Decimal('11.8')
+      years = Decimal(2025 - 2019)
+      log_growth = (end / start).ln() / years
+      cagr = log_growth.exp() - Decimal(1)
+      print(cagr)
+      print(cagr * 100)
+      ```
+
+      ```text Output theme={null}
+      0.1878787669330553776746033271110368937629924939521
+      18.787876693305537767460332711103689376299249395210
+      ```
+    </Tab>
+
+    <Tab title="原始响应">
+      ```json theme={null}
+      {
+        "id": "resp_482ba96d-c94a-4b0b-8032-e29062a71cdc",
+        "created_at": 1781869590,
+        "model": "openai/gpt-5.6-sol",
+        "object": "response",
+        "output": [
+          {
+            "id": null,
+            "content": null,
+            "role": null,
+            "status": "completed",
+            "type": "sandbox_results",
+            "call_id": "call_7br1ycfTNZ2jFa4HG6otVC76",
+            "code": "from decimal import Decimal, getcontext\ngetcontext().prec=50\nstart=Decimal('4.2')\nend=Decimal('11.8')\nyears=Decimal(2025-2019)\n# Decimal fractional power via exp ln? Decimal has ln exp\ncagr=(end/start).ln()/years\nrate=cagr.exp()-Decimal(1)\nprint(rate)\nprint(rate*100)",
+            "container_id": "iuptasr65kixvn1p7s3r6",
+            "language": "python",
+            "results": [
+              {
+                "duration_ms": 274,
+                "exit_code": 0,
+                "status": "completed",
+                "stderr": "",
+                "stdout": "0.1878787669330553776746033271110368937629924939521\n18.787876693305537767460332711103689376299249395210\n"
+              }
+            ]
+          },
+          {
+            "id": "msg_8349d00e-ca88-4074-a7bd-e3dea9fe77cf",
+            "content": [
+              {
+                "text": "The compound annual growth rate (CAGR) from **4.2M in 2019** to **11.8M in 2025** is:\n\n\\[\n\\text{CAGR} = \\left(\\frac{11.8}{4.2}\\right)^{1/6} - 1\n\\]\n\n\\[\n\\text{CAGR} \\approx 18.79\\%\n\\]\n\n**Answer: 18.8% per year**.",
+                "type": "output_text",
+                "annotations": []
+              }
+            ],
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "status": "completed",
+        "background": false,
+        "error": null,
+        "usage": {
+          "input_tokens": 3262,
+          "output_tokens": 294,
+          "total_tokens": 3556,
+          "cost": {
+            "currency": "USD",
+            "input_cost": 0.01631,
+            "output_cost": 0.00882,
+            "total_cost": 0.02513,
+            "cache_creation_cost": null,
+            "cache_read_cost": null,
+            "tool_calls_cost": 0.0,
+            "tool_calls_cost_details": {
+              "sandbox": 0
+            }
+          },
+          "input_tokens_details": {
+            "cache_creation_input_tokens": null,
+            "cache_read_input_tokens": null,
+            "cached_tokens": 0
+          },
+          "tool_calls_details": {
+            "sandbox": {
+              "invocation": 1,
+              "duration_ms": 274
+            }
+          },
+          "output_tokens_details": {
+            "reasoning_tokens": 56
+          }
+        },
+        "completed_at": 1781869590,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "Use the sandbox to compute the exact figure before answering.",
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "metadata": {},
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "reasoning": null,
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [
+          {
+            "type": "sandbox"
+          }
+        ],
+        "top_logprobs": 0,
+        "top_p": 1,
+        "truncation": "",
+        "user": null
+      }
+      ```
+    </Tab>
+  </Tabs>
+</Accordion>
+
+<div id="return-files">
+  ## 返回文件
+</div>
+
+当 sandbox 中的代码写入并共享文件时，响应的 `output` 中会包含一个 `share_file` 项。文件内容不会内联返回——需通过响应文件端点，以响应的 `id` 为键来列出并下载：
+
+<CodeGroup>
+  ```python Python theme={null}
+  files = client.responses.files.list(response.id)
+  for f in files.data:
+      print(f.id, f.filename, f.bytes)
+
+  content = client.responses.files.content(
+      file_id=files.data[0].id,
+      response_id=response.id,
+  )
+  content.write_to_file(files.data[0].filename)
+  ```
+
+  ```bash cURL theme={null}
+  # 列出该响应生成的文件
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" | jq
+
+  # 通过文件 id 下载其中一个
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files/$FILE_ID/content \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -o output.csv
+  ```
+</CodeGroup>
+
+<Note>
+  长时间运行的 sandbox 任务很适合搭配后台运行：提交时设置 `background: true`，然后按 ID 轮询。参见[输出控制](/zh/docs/agent-api/output-control)和 [Sandbox 参考文档](/zh/docs/agent-api/tools/sandbox#running-in-the-background)。
+</Note>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="构建结构化输出" icon="list-details" href="/zh/docs/agent-api/building-agents/shape-output">
+    强制返回代码可解析的结构化 JSON。
+  </Card>
+
+  <Card title="sandbox 参考文档" icon="box" href="/zh/docs/agent-api/tools/sandbox">
+    完整的 sandbox 配置、响应结构、文件获取与定价说明。
+  </Card>
+</CardGroup>

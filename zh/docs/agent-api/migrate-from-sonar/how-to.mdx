@@ -1,0 +1,853 @@
+---
+title: "如何从 Sonar 迁移"
+sidebarTitle: "如何迁移"
+description: "将 Sonar chat completions 集成迁移到 Agent API，涵盖请求、响应、搜索、preset、异步运行以及参数映射。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+本指南介绍如何将 Sonar chat completions 集成迁移到 Agent API。
+你将保留同样的网页搜索接地能力，同时获得一个能开展多步研究、自主执行代码，并调用金融、人物搜索等工具的智能体。
+
+<div id="use-the-migration-skill">
+  ## 使用迁移技能
+</div>
+
+最快的方式是让编码智能体来完成迁移。在待迁移的项目中打开它，然后发送以下内容：
+
+```text wrap theme={null}
+阅读 https://github.com/perplexityai/api-platform-developers/blob/main/skills/migrate-sonar-to-agent-api/SKILL.md 并安装该技能，然后用它将本项目从 Sonar 迁移到 Agent API。
+```
+
+有关支持的编程智能体和其他安装方式，请参阅[仓库 README](https://github.com/perplexityai/api-platform-developers/blob/main/README.md)。
+
+<div id="1-update-the-endpoint-and-method">
+  ## 1. 更新端点和方法
+</div>
+
+将请求指向 `/v1/agent`，并将 `chat.completions.create()` 替换为 `responses.create()`。
+对于纯文本，Agent API 接受相同的 `role`/`content` 条目，因此请求体几乎不用改动：把数组通过 `input` 传入 (而非 `messages`) ，再改一下 model 名称即可。
+
+<Columns cols={2}>
+  <div>
+    **Sonar**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      completion = client.chat.completions.create(
+          model="sonar",
+          messages=[
+              {"role": "system", "content": "You are a concise research assistant."},
+              {"role": "user", "content": "What are the latest developments in AI agents?"},
+          ],
+      )
+      print(completion.choices[0].message.content)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const completion = await client.chat.completions.create({
+        model: 'sonar',
+        messages: [
+          { role: 'system', content: 'You are a concise research assistant.' },
+          { role: 'user', content: 'What are the latest developments in AI agents?' },
+        ],
+      });
+      console.log(completion.choices[0].message.content);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/sonar \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "sonar",
+          "messages": [
+            {"role": "system", "content": "You are a concise research assistant."},
+            {"role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+
+  <div>
+    **Agent API**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      response = client.responses.create(
+          model="perplexity/sonar",
+          input=[
+              {"type": "message", "role": "system", "content": "You are a concise research assistant."},
+              {"type": "message", "role": "user", "content": "What are the latest developments in AI agents?"},
+          ],
+      )
+      print(response.output_text)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const response = await client.responses.create({
+        model: 'perplexity/sonar',
+        input: [
+          { type: 'message', role: 'system', content: 'You are a concise research assistant.' },
+          { type: 'message', role: 'user', content: 'What are the latest developments in AI agents?' },
+        ],
+      });
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "perplexity/sonar",
+          "input": [
+            {"type": "message", "role": "system", "content": "You are a concise research assistant."},
+            {"type": "message", "role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+</Columns>
+
+<div id="2-map-messages-to-input">
+  ## 2. 将 messages 映射到 input
+</div>
+
+Sonar 以 `messages` 数组的形式接收提示词，Agent API 则通过 `input` 接收。
+对于简单的单轮提示词，直接传入一个普通字符串即可。
+若需保留 system prompt 或多轮对话记录，可传入输入项数组，或使用顶层的 `instructions` 字段。
+
+<Columns cols={2}>
+  <div>
+    **Sonar**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      # 单轮用户消息
+      completion = client.chat.completions.create(
+          model="sonar",
+          messages=[{"role": "user", "content": "What are the latest developments in AI agents?"}]
+      )
+
+      # 系统指引 + 一轮用户消息
+      completion = client.chat.completions.create(
+          model="sonar",
+          messages=[
+              {"role": "system", "content": "You are a concise research assistant."},
+              {"role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+      )
+      print(completion.choices[0].message.content)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      // 单轮用户消息
+      const simple = await client.chat.completions.create({
+        model: 'sonar',
+        messages: [{ role: 'user', content: 'What are the latest developments in AI agents?' }]
+      });
+
+      // 系统指引 + 一轮用户消息
+      const completion = await client.chat.completions.create({
+        model: 'sonar',
+        messages: [
+          { role: 'system', content: 'You are a concise research assistant.' },
+          { role: 'user', content: 'What are the latest developments in AI agents?' }
+        ]
+      });
+      console.log(completion.choices[0].message.content);
+      ```
+
+      ```bash cURL theme={null}
+      # 系统指引 + 一轮用户消息
+      curl https://api.perplexity.ai/v1/sonar \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "sonar",
+          "messages": [
+            {"role": "system", "content": "You are a concise research assistant."},
+            {"role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+
+  <div>
+    **Agent API**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      # 简单的字符串输入
+      response = client.responses.create(
+          model="perplexity/sonar",
+          input="What are the latest developments in AI agents?"
+      )
+
+      # 系统指引 + 一轮用户消息
+      response = client.responses.create(
+          model="perplexity/sonar",
+          instructions="You are a concise research assistant.",
+          input=[
+              {"type": "message", "role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+      )
+      print(response.output_text)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      // 简单的字符串输入
+      const simple = await client.responses.create({
+        model: 'perplexity/sonar',
+        input: 'What are the latest developments in AI agents?'
+      });
+
+      // 系统指引 + 一轮用户消息
+      const response = await client.responses.create({
+        model: 'perplexity/sonar',
+        instructions: 'You are a concise research assistant.',
+        input: [
+          { type: 'message', role: 'user', content: 'What are the latest developments in AI agents?' }
+        ]
+      });
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      # 系统指引 + 一轮用户消息
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "perplexity/sonar",
+          "instructions": "You are a concise research assistant.",
+          "input": [
+            {"type": "message", "role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+</Columns>
+
+<Tip>
+  需要延续多轮对话？最简单的方式是使用 `previous_response_id`：让新请求指向此前已完成的响应，无需重新发送整段对话记录。你也可以自行在 `input` 中重放此前的轮次 (包括 `assistant` 项) 。参见[对话状态](/zh/docs/agent-api/conversation-state)。
+</Tip>
+
+<div id="3-update-output-handling">
+  ## 3. 更新输出处理
+</div>
+
+从 `response.output_text` 读取回答文本——它可直接替代 Sonar 的 `choices[0].message.content`。
+如果需要的不只是回答文本 (例如工具调用、搜索结果) ，可遍历带类型的 `output` 数组，并按每一项的 `type` 分别处理。
+
+<Columns cols={2}>
+  <div>
+    **Sonar**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      completion = client.chat.completions.create(
+          model="sonar",
+          messages=[{"role": "user", "content": "What are the latest developments in AI agents?"}],
+      )
+      print(completion.choices[0].message.content)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const completion = await client.chat.completions.create({
+        model: 'sonar',
+        messages: [{ role: 'user', content: 'What are the latest developments in AI agents?' }],
+      });
+      console.log(completion.choices[0].message.content);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/sonar \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "sonar",
+          "messages": [
+            {"role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+        }' | jq -r '.choices[0].message.content'
+      ```
+    </CodeGroup>
+  </div>
+
+  <div>
+    **Agent API**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      response = client.responses.create(
+          model="perplexity/sonar",
+          input="What are the latest developments in AI agents?",
+      )
+      print(response.output_text)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const response = await client.responses.create({
+        model: 'perplexity/sonar',
+        input: 'What are the latest developments in AI agents?',
+      });
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "perplexity/sonar",
+          "input": "What are the latest developments in AI agents?"
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+</Columns>
+
+<Tip>
+  **`output` 数组是一份完整的执行轨迹，而不只是回答。** 除最终文本外，它还记录了模型走过的每一步——执行过的搜索及其结果、在 [`sandbox`](/zh/docs/agent-api/tools/sandbox) 中运行的具体代码，以及生成的所有文件。
+  Sonar 只返回回答及其引用；而在这里，你可以查看并审计整个运行过程。
+</Tip>
+
+<div id="streaming">
+  ### 流式传输
+</div>
+
+Sonar 的流式响应会返回增量数据块，每个 choice 上带有 `delta.content` 字段。
+Agent API 流式传输的是带类型的服务器发送事件 (SSE) ，因此需要更新流的消费逻辑，改为根据每个事件的 `type` 分支处理。
+回答文本请消费 `response.output_text.delta` 事件；工具调用和推理内容则通过各自的 `response.output_item.*` 与 `response.reasoning.*` 事件返回，而非文本增量。
+
+<Columns cols={2}>
+  <div>
+    **Sonar**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      stream = client.chat.completions.create(
+          model="sonar",
+          messages=[{"role": "user", "content": "Explain quantum computing"}],
+          stream=True
+      )
+      for chunk in stream:
+          if chunk.choices[0].delta.content:
+              print(chunk.choices[0].delta.content, end="")
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const stream = await client.chat.completions.create({
+        model: 'sonar',
+        messages: [{ role: 'user', content: 'Explain quantum computing' }],
+        stream: true
+      });
+      for await (const chunk of stream) {
+        if (chunk.choices[0]?.delta?.content) {
+          process.stdout.write(chunk.choices[0].delta.content);
+        }
+      }
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/sonar \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "sonar",
+          "messages": [
+            {"role": "user", "content": "Explain quantum computing"}
+          ],
+          "stream": true
+        }'
+      ```
+    </CodeGroup>
+  </div>
+
+  <div>
+    **Agent API**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      stream = client.responses.create(
+          model="perplexity/sonar",
+          input="Explain quantum computing",
+          stream=True
+      )
+      for event in stream:
+          if event.type == "response.output_text.delta":
+              print(event.delta, end="", flush=True)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const stream = await client.responses.create({
+        model: 'perplexity/sonar',
+        input: 'Explain quantum computing',
+        stream: true
+      });
+      for await (const event of stream) {
+        if (event.type === 'response.output_text.delta') {
+          process.stdout.write(event.delta);
+        }
+      }
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "perplexity/sonar",
+          "input": "Explain quantum computing",
+          "stream": true
+        }'
+      ```
+    </CodeGroup>
+  </div>
+</Columns>
+
+<div id="4-web-search">
+  ## 4. 网页搜索
+</div>
+
+Perplexity 自有的搜索——也就是原先内置于 Sonar 的网页搜索能力——现在通过 `web_search` 工具提供。
+在 Sonar 中它始终开启；而在 Agent API 中，需要把 `web_search` 加入请求的 `tools` 才会启用，否则模型只会凭自身知识作答，不做任何搜索。
+相应的搜索控制项也一并移到了该工具上：Sonar 中位于顶层的 `search_recency_filter` 和 `search_domain_filter`，现在写在工具的 `filters` 中。
+完整选项请参阅 [网页搜索](/zh/docs/agent-api/tools/web-search) 参考文档。
+
+<Columns cols={2}>
+  <div>
+    **Sonar**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      completion = client.chat.completions.create(
+          model="sonar",
+          messages=[{"role": "user", "content": "Latest renewable energy policy updates"}],
+          search_recency_filter="month",
+          search_domain_filter=["iea.org", "energy.gov"]
+      )
+      print(completion.choices[0].message.content)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const completion = await client.chat.completions.create({
+        model: 'sonar',
+        messages: [{ role: 'user', content: 'Latest renewable energy policy updates' }],
+        search_recency_filter: 'month',
+        search_domain_filter: ['iea.org', 'energy.gov']
+      });
+      console.log(completion.choices[0].message.content);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/sonar \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "sonar",
+          "messages": [
+            {"role": "user", "content": "Latest renewable energy policy updates"}
+          ],
+          "search_recency_filter": "month",
+          "search_domain_filter": ["iea.org", "energy.gov"]
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+
+  <div>
+    **Agent API**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      response = client.responses.create(
+          model="perplexity/sonar",
+          input="Latest renewable energy policy updates",
+          tools=[{"type": "web_search", "filters": {"search_domain_filter": ["iea.org", "energy.gov"], "search_recency_filter": "month"}}],
+      )
+      print(response.output_text)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const response = await client.responses.create({
+        model: 'perplexity/sonar',
+        input: 'Latest renewable energy policy updates',
+        tools: [{ type: 'web_search' as const, filters: { search_domain_filter: ['iea.org', 'energy.gov'], search_recency_filter: 'month' } }],
+      });
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "perplexity/sonar",
+          "input": "Latest renewable energy policy updates",
+          "tools": [
+            {
+              "type": "web_search",
+              "filters": {
+                "search_domain_filter": ["iea.org", "energy.gov"],
+                "search_recency_filter": "month"
+              }
+            }
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+</Columns>
+
+<Tip>
+  **网页搜索只是其中一个工具。** 再加上 [`sandbox`](/zh/docs/agent-api/tools/sandbox)，模型就能自行编写并运行代码，生成可从响应中下载的文件；而 [Wide Research](/zh/docs/agent-api/wide-research) 能把这种“搜索 + 代码”的组合扩展到数百条有来源支撑的条目。
+  完整工具列表请参阅[工具概览](/zh/docs/agent-api/tools/overview)。
+</Tip>
+
+<div id="inline-citations">
+  ### 内联引用
+</div>
+
+Sonar 默认返回内联的 `[n]` 引用标记。
+
+<Note>
+  Agent API 的 `fast`、`low`、`medium` 和 `high` preset 已经为有来源支撑的陈述内置了内联引用。`fast` preset 使用形如 `[1]` 的编号引用；`low`、`medium` 和 `high` 使用形如 `[web:1]` 的按来源类型标注的引用。下面的自定义 `instructions` 适用于不使用上述 preset、而是直接指定 model 和工具的请求。
+</Note>
+
+如果使用自定义配置，请在 `instructions` 中要求 model 引用带编号的网页搜索结果：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="perplexity/sonar",
+      instructions=(
+          "Base every factual statement on the numbered web search results provided. "
+          "Before finalizing, verify each claim against the sources: re-read the cited results and "
+          "confirm they actually support the statement; if a claim is not directly supported, drop "
+          "it or soften it rather than guessing. "
+          "After each sentence that uses information from those results, cite the exact source "
+          "number(s) in square brackets right after the statement, like [1] or [1][2], with no "
+          "space before the bracket. Cite the one to three sources that most directly support the "
+          "statement, and only cite a source that actually contains that information. Do not cite a "
+          "source you did not use, do not invent source numbers, and do not add a separate "
+          "references section."
+      ),
+      input="What are the latest developments in AI agents?",
+      tools=[{"type": "web_search"}],
+  )
+
+  print(response.output_text)  # 带有内联 [n] 标记的回答
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'perplexity/sonar',
+    instructions:
+      'Base every factual statement on the numbered web search results provided. ' +
+      'Before finalizing, verify each claim against the sources: re-read the cited results and ' +
+      'confirm they actually support the statement; if a claim is not directly supported, drop ' +
+      'it or soften it rather than guessing. ' +
+      'After each sentence that uses information from those results, cite the exact source ' +
+      'number(s) in square brackets right after the statement, like [1] or [1][2], with no ' +
+      'space before the bracket. Cite the one to three sources that most directly support the ' +
+      'statement, and only cite a source that actually contains that information. Do not cite a ' +
+      'source you did not use, do not invent source numbers, and do not add a separate ' +
+      'references section.',
+    input: 'What are the latest developments in AI agents?',
+    tools: [{ type: 'web_search' as const }],
+  });
+
+  console.log(response.output_text); // 带有内联 [n] 标记的回答
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/sonar",
+      "instructions": "Base every factual statement on the numbered web search results provided. Before finalizing, verify each claim against the sources: re-read the cited results and confirm they actually support the statement; if a claim is not directly supported, drop it or soften it rather than guessing. After each sentence that uses information from those results, cite the exact source number(s) in square brackets right after the statement, like [1] or [1][2], with no space before the bracket. Cite the one to three sources that most directly support the statement, and only cite a source that actually contains that information. Do not cite a source you did not use, do not invent source numbers, and do not add a separate references section.",
+      "input": "What are the latest developments in AI agents?",
+      "tools": [{ "type": "web_search" }]
+    }' | jq
+  ```
+</CodeGroup>
+
+`[n]` 标记直接嵌入在回答文本中，而不是放在单独的字段里。
+它们指向的来源会通过 `type: "search_results"` 的 `output` 项单独返回——从该项的 `results` 中读取即可，其中每条结果都带有 `id`，每个 `[n]` 标记对应 `id` 为 `n` 的那条结果。
+
+<Tip>
+  **不止于搜索——Agent API 具备智能体能力。** 模型会运行一个[循环](/zh/docs/agent-api/building-agents/define-the-run)，因此你只需把任务交给它，它便会自行逐步完成。
+  除网页搜索外，它还可以调用各类工具，例如获取结构化市场与财报数据的 [Finance Search](/zh/docs/agent-api/tools/finance-search)，以及查询职业档案的 [People Search](/zh/docs/agent-api/tools/people-search)。
+</Tip>
+
+<div id="5-map-sonar-models-to-presets">
+  ## 5. 将 Sonar 模型映射到 preset
+</div>
+
+建议的初始对应关系：`sonar` → `fast`、`sonar-pro` → `low`、`sonar-reasoning-pro` → `medium`、`sonar-deep-research` → `high`。
+详情参见 [Presets](/zh/docs/agent-api/presets)。
+
+<Columns cols={2}>
+  <div>
+    **Sonar**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      completion = client.chat.completions.create(
+          model="sonar-deep-research",
+          messages=[{"role": "user", "content": "What are the latest developments in AI agents?"}]
+      )
+      print(completion.choices[0].message.content)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const completion = await client.chat.completions.create({
+        model: 'sonar-deep-research',
+        messages: [{ role: 'user', content: 'What are the latest developments in AI agents?' }]
+      });
+      console.log(completion.choices[0].message.content);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/sonar \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "sonar-deep-research",
+          "messages": [
+            {"role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+
+  <div>
+    **Agent API**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      response = client.responses.create(
+          preset="high",
+          input="What are the latest developments in AI agents?",
+      )
+      print(response.output_text)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const response = await client.responses.create({
+        preset: 'high',
+        input: 'What are the latest developments in AI agents?',
+      });
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "preset": "high",
+          "input": "What are the latest developments in AI agents?"
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+</Columns>
+
+<Tip>
+  **需要 Sonar 做不到的能力？** 可以选用更高的层级。
+  [`high`](/zh/docs/agent-api/presets#choosing-a-preset) 会跨大量来源做深度研究，适合深入分析和撰写报告。
+  [`xhigh`](/zh/docs/agent-api/presets#choosing-a-preset) 还提供代码 sandbox，并运行更长的工具调用循环，因此能应对单次查询搞不定的开放式任务。
+</Tip>
+
+<div id="6-migrate-async-requests-optional">
+  ## 6. 迁移异步请求 (可选)
+</div>
+
+Sonar 的异步 API 对应 Agent API 的后台运行：提交请求时设置 `background: true`，然后按 id 轮询响应。
+有关请求结构、轮询、重连及完整生命周期，请参阅 [Background Runs](/zh/docs/agent-api/output-control#background-runs)。
+
+<div id="parameter-reference">
+  ## 参数参考
+</div>
+
+下面将常用的 Sonar 参数映射到对应的 Agent API 参数。有些只是字段的直接迁移；有些则是 Agent API 中最接近的实现方式，这类行会明确指出没有一一对应的等价项。
+
+<Note>
+  没有找到你依赖的某项 Sonar 行为？请发邮件到 [api@perplexity.ai](mailto:api@perplexity.ai) 告诉我们——这有助于我们确定 Agent API 接下来优先支持哪些功能。
+</Note>
+
+<div id="standard-openai-parameters">
+  ### 标准 OpenAI 参数
+</div>
+
+`stream` 参数沿用不变。Agent API 也接受 `temperature` 和 `top_p`，但它们是否对生成产生影响，取决于所选的 model。
+
+<Warning>
+  对于 GPT-5、o1 和 o3 系列 model (包括 `openai/gpt-5.6-sol`) ，Agent API 会静默忽略 `temperature` 和 `top_p`。请勿迁移那些依赖这些参数在上述 model 上生效的逻辑。即使某个 model 支持采样控制，将 `temperature` 设为 `0` 也不能保证多次请求间的输出是确定性的或逐字节一致的。
+</Warning>
+
+Agent API 上有几个参数发生了变化：
+
+* `max_tokens` 更名为 `max_output_tokens`。
+* `response_format` 中 `json_schema` 的结构保持不变，且在 Agent API 上，结构化输出不再局限于特定的 Perplexity model。Sonar 的 `response_format.type: "regex"` 在 Agent API 中没有对应项——请改用 JSON schema 重新设计正则相关的流程。
+
+<div id="sonar-specific-parameters">
+  ### Sonar 特有参数
+</div>
+
+**直接对应 (部分已重命名或位置变更) ：**
+
+| Sonar 参数                                                                                                                                 | Agent API 对应项                                                                                                 |
+| ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| [域名、时效性与日期筛选器](/zh/docs/sonar/filters)<br />(`search_domain_filter`、`search_recency_filter`、`search_*_date_filter`、`last_updated_*_filter`) | 名称相同，位于 [`web_search` 工具的 `filters`](/zh/docs/agent-api/tools/web-search#filters) 中                              |
+| `web_search_options.search_context_size`                                                                                                 | `web_search` 工具上的 [`search_context_size`](/zh/docs/agent-api/tools/web-search#configuring-search)，不在 `filters` 中 |
+| `web_search_options.user_location`                                                                                                       | `web_search` 工具上的 [`user_location`](/zh/docs/agent-api/tools/web-search#location-filter)，不在 `filters` 中          |
+| `num_search_results`                                                                                                                     | `web_search` 工具上的 [`max_results`](/zh/docs/agent-api/tools/web-search#number-of-results) —— 限制结果总数的上限            |
+| `reasoning_effort`                                                                                                                       | `reasoning.effort`                                                                                            |
+
+**没有直接对应字段 —— 需改用相应的工具或写法：**
+
+| Sonar 参数                    | Agent API 对应项                                                                                                                                                                                                         |
+| --------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable_search_classifier`  | 提供 [`web_search`](/zh/docs/agent-api/tools/web-search) 工具，由 model 自行决定何时搜索                                                                                                                                               |
+| `disable_search`            | 不提供 [`web_search`](/zh/docs/agent-api/tools/web-search) 工具。使用 preset 时，preset 自带的工具仍处于启用状态 —— `tools: []` 并不会将其清除，目前也没有公开方式可禁用 preset 工具；可用 `max_tool_calls: 0` 一刀切地禁用所有工具调用作为变通方案                                       |
+| `search_mode`               | `web` (默认值) 是隐式行为。`academic` 没有直接对应项；请使用 `web_search` 并配合域名筛选器和提示词。对于 `sec`，结构化金融数据请使用 [Finance Search](/zh/docs/agent-api/tools/finance-search)，检索申报文件/原始来源则使用限定到 SEC 来源的 `web_search`                                  |
+| `search_type` (Pro Search)  | 没有直接对应项 —— 将 `"fast"` 映射到 [`fast` preset](/zh/docs/agent-api/presets) (原 `fast-search`) ，将 `"pro"` 映射到 `preset: "low"` (原 `pro-search`) 以获得多步 Pro Search 行为；也可在显式指定的 model 上设置 `max_steps` 来限制多步搜索。没有与 `"auto"` 分类器对应的选项 |
+| `return_related_questions`  | 提示 model 在结尾给出若干后续问题，也可借助[结构化输出](/zh/docs/agent-api/output-control#structured-outputs)的 schema 实现                                                                                                                        |
+
+**Agent API 无对应项 —— 请删除这些参数：**
+
+* `search_language_filter`。
+* `stream_mode` —— Agent API 的流式输出始终发出带类型的 SSE 事件，推理与工具活动均作为独立事件返回，最接近 Sonar 的 `concise` 模式；不存在 `full` 模式那样的内联元数据格式。
+* [图片结果](/zh/docs/sonar/media#receiving-images) (`return_images`、`num_images`、`image_domain_filter`、`image_format_filter`、`web_search_options.image_results_enhanced_relevance`) —— 不支持；Agent API 不返回 `images`。
+* [视频结果](/zh/docs/sonar/media#receiving-videos) (`return_videos`、`num_videos`、`media_response`) —— 不支持；Agent API 不返回 `videos`。
+
+<Tip>
+  完整的 `web_search` 选项请参阅 [Web Search](/zh/docs/agent-api/tools/web-search) 参考文档。
+</Tip>
+
+<div id="multimodal-input">
+  ### 多模态输入
+</div>
+
+| Sonar 内容块              | Agent API                                                                      |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `image_url`            | [`input_image` 内容块](/zh/docs/agent-api/image-attachments) (data URI 或 HTTPS URL)  |
+| `file_url` / `pdf_url` | 无对应项                                                                           |
+| `video_url`            | 无对应项                                                                           |

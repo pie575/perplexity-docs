@@ -1,0 +1,40 @@
+---
+title: "创建聊天补全"
+description: "使用 OpenAI Chat Completions 模式向任意 Router model 发送对话。设置 `stream:
+  true` 可接收服务器发送事件；添加 `stream_options: {\"include_usage\": true}` 可在最后一个数据块中获取
+  token 用量。"
+openapi: "/zh/openapi/openapi-gateway-chat.json POST /router/v1/chat/completions"
+---
+
+<Info>
+  Router API 采用 OpenAI Chat Completions 模式，仅支持其中特定的一部分参数。若请求中使用了不受支持的参数，将返回 400 错误并指明该参数名称。
+</Info>
+
+<Accordion title="参数支持情况">
+  **支持并生效：** `model`、`messages`、`stream`、`stream_options.include_usage`、`max_completion_tokens`、`max_tokens`、`temperature`、`top_p`、`stop`、`reasoning_effort`、`service_tier` (`auto`、`default`、`flex`、`priority`) 、`response_format` (`text`、`json_schema`、`json_object`) 、`tools`、`tool_choice` (包括 `allowed_tools`) 、`parallel_tool_calls`、`prompt_cache_key`、`prompt_cache_options`、`prompt_cache_retention`，以及消息片段中的 `prompt_cache_breakpoint` 字段。
+
+  **接受但不转发给 model：** `user`、`safety_identifier`、`metadata`。
+
+  **仅接受默认值：** `n` (`1`) 、`logprobs` (`false`) 、`store` (`false`) 、`presence_penalty` (`0`) 、`frequency_penalty` (`0`) 。
+
+  **返回 400 拒绝：** `seed`、`logit_bias`、`top_logprobs`、`functions` (请改用 `tools`) 、`function_call` (请改用 `tool_choice`) 、`modalities`、`audio`、`prediction`、`web_search_options`、`moderation`、`verbosity`、设置为 `true` 的 `stream_options.include_obfuscation`，以及任何无法识别的顶层字段。
+
+  **注意事项：** 省略 `reasoning_effort` 时，将采用该 model 所属提供方的默认值；默认值因提供方和 model 而异。`response_format.json_schema` 始终以严格模式运行。助手消息和流式增量内容中可能包含 `reasoning_content`；将其回放到助手消息中，即可在多次请求之间保留推理上下文。函数工具必须提供描述。
+</Accordion>
+
+<Accordion title="错误">
+  错误采用 OpenAI 的封装格式：
+
+  ```json
+  {
+    "error": {
+      "code": null,
+      "message": "Invalid model 'example/does-not-exist'. Permitted models can be found in the documentation at https://docs.perplexity.ai/docs/getting-started/models.",
+      "param": null,
+      "type": "invalid_request_error"
+    }
+  }
+  ```
+
+  4xx 错误的 `type` 为 `invalid_request_error`；429 为 `rate_limit_error` (触发限流或 model 过载——请在 `Retry-After` 指定的间隔后重试) ；5xx 为 `server_error`。在产生输出之前即失败的请求不会计费。
+</Accordion>

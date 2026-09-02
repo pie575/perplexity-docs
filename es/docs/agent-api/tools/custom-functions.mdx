@@ -1,0 +1,306 @@
+---
+title: "Funciones personalizadas"
+description: "Define una función personalizada, ejecuta en tu código las llamadas que solicite el model y devuelve cada resultado a la Agent API."
+---
+
+Las funciones personalizadas permiten que un agente use código que tú controlas, como una consulta a una base de datos, una API interna o lógica de negocio. Tú describes la función en la solicitud, pero la Agent API nunca la ejecuta por ti: tu aplicación se encarga de la llamada y devuelve el resultado.
+
+<div id="run-a-complete-example">
+  ## Ejecuta un ejemplo completo
+</div>
+
+Este ejemplo define una función de estado de pedido y completa todo el bucle de la herramienta. Sustituye la búsqueda en memoria por tu propia base de datos o llamada a una API.
+
+<Steps>
+  <Step title="Instala el SDK">
+    ```bash theme={null}
+    pip install perplexityai
+    ```
+  </Step>
+
+  <Step title="Configura tu clave de API">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Step>
+
+  <Step title="Guarda y ejecuta el ejemplo">
+    Guarda uno de los ejemplos como `custom_function.py` o `custom-function.ts` y ejecútalo.
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import json
+
+      from perplexity import Perplexity
+
+      MODEL = "openai/gpt-5.6-sol"
+      QUESTION = "What's the status of order ORD-10042?"
+
+      client = Perplexity()
+
+      tools = [
+          {
+              "type": "function",
+              "name": "get_order_status",
+              "description": "Look up the current status of an order by its order ID.",
+              "parameters": {
+                  "type": "object",
+                  "properties": {"order_id": {"type": "string"}},
+                  "required": ["order_id"],
+                  "additionalProperties": False,
+              },
+              "strict": True,
+          }
+      ]
+
+
+      def get_order_status(order_id: str) -> dict[str, str]:
+          """Replace this sample data with a database or API call."""
+          orders = {
+              "ORD-10042": {
+                  "status": "in_transit",
+                  "carrier": "DHL",
+                  "estimated_delivery": "2026-08-08",
+              }
+          }
+          return orders.get(order_id, {"error": "Order not found."})
+
+
+      # 1. Envía la pregunta y las herramientas disponibles al modelo.
+      response = client.responses.create(
+          model=MODEL,
+          input=QUESTION,
+          tools=tools,
+      )
+
+      # 2. Agrega los elementos de salida del modelo a la conversación.
+      next_input = [
+          {"type": "message", "role": "user", "content": QUESTION},
+          *[item.model_dump(exclude_none=True) for item in response.output],
+      ]
+
+      # 3. Ejecuta cada función solicitada por el modelo y añade su resultado.
+      for item in response.output:
+          if item.type != "function_call":
+              continue
+          if item.name != "get_order_status":
+              raise ValueError(f"Unknown function: {item.name}")
+
+          arguments = json.loads(item.arguments)
+          result = get_order_status(**arguments)
+          next_input.append(
+              {
+                  "type": "function_call_output",
+                  "call_id": item.call_id,
+                  "output": json.dumps(result),
+              }
+          )
+
+      # 4. Devuelve la conversación actualizada para que el modelo pueda responder.
+      final_response = client.responses.create(
+          model=MODEL,
+          input=next_input,
+          tools=tools,
+      )
+
+      print(final_response.output_text)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+      import type { InputItem } from '@perplexity-ai/perplexity_ai/resources/responses/responses';
+
+      const MODEL = 'openai/gpt-5.6-sol';
+      const QUESTION = "What's the status of order ORD-10042?";
+
+      const client = new Perplexity();
+
+      const tools = [
+        {
+          type: 'function' as const,
+          name: 'get_order_status',
+          description: 'Look up the current status of an order by its order ID.',
+          parameters: {
+            type: 'object',
+            properties: { order_id: { type: 'string' } },
+            required: ['order_id'],
+            additionalProperties: false,
+          },
+          strict: true,
+        },
+      ];
+
+      function getOrderStatus(orderId: string): Record<string, string> {
+        // Sustituye estos datos de ejemplo por una consulta a una base de datos o una llamada a una API.
+        const orders: Record<string, Record<string, string>> = {
+          'ORD-10042': {
+            status: 'in_transit',
+            carrier: 'DHL',
+            estimated_delivery: '2026-08-08',
+          },
+        };
+        return orders[orderId] ?? { error: 'Order not found.' };
+      }
+
+      // 1. Envía la pregunta y las herramientas disponibles al model.
+      const response = await client.responses.create({
+        model: MODEL,
+        input: QUESTION,
+        tools,
+      });
+
+      // 2. Inicia la continuación con la pregunta original.
+      const nextInput: InputItem[] = [
+        { type: 'message', role: 'user', content: QUESTION },
+      ];
+
+      // 3. Reproduce cada llamada de función, ejecútala en local y añade su resultado.
+      for (const item of response.output) {
+        if (item.type !== 'function_call') continue;
+        nextInput.push({
+          type: 'function_call',
+          call_id: item.call_id,
+          name: item.name,
+          arguments: item.arguments,
+          ...(item.thought_signature
+            ? { thought_signature: item.thought_signature }
+            : {}),
+        });
+
+        if (item.name !== 'get_order_status') {
+          throw new Error(`Unknown function: ${item.name}`);
+        }
+        const args = JSON.parse(item.arguments) as { order_id: string };
+        const result = getOrderStatus(args.order_id);
+        nextInput.push({
+          type: 'function_call_output',
+          call_id: item.call_id,
+          output: JSON.stringify(result),
+        });
+      }
+
+      // 4. Devuelve la conversación actualizada para que el model pueda responder.
+      const finalResponse = await client.responses.create({
+        model: MODEL,
+        input: nextInput,
+        tools,
+      });
+
+      console.log(finalResponse.output_text);
+      ```
+    </CodeGroup>
+
+    Ejecútalo:
+
+    <CodeGroup>
+      ```bash Python theme={null}
+      python custom_function.py
+      ```
+
+      ```bash Typescript theme={null}
+      npm install @perplexity-ai/perplexity_ai tsx
+      npx tsx custom-function.ts
+      ```
+    </CodeGroup>
+
+    Ejemplo de salida en la terminal:
+
+    ```text theme={null}
+    El pedido ORD-10042 está en tránsito con DHL. La entrega estimada es el sábado 8 de agosto de 2026.
+    ```
+  </Step>
+</Steps>
+
+<div id="how-the-loop-works">
+  ## Cómo funciona el bucle
+</div>
+
+Las dos solicitudes a la Agent API envuelven una única ejecución de función local:
+
+1. **Declarar y llamar.** Tu primera solicitud incluye la pregunta del usuario y el esquema de la función en `tools`.
+2. **Leer `function_call`.** El modelo devuelve un elemento `function_call` en `response.output`. Su campo `arguments` es una cadena JSON, así que analízala antes de llamar a tu código.
+3. **Ejecutar localmente.** Tu aplicación llama a `get_order_status` con esos argumentos. Este código no se ejecuta en la Agent API.
+4. **Devolver `function_call_output`.** Añade los elementos de salida del modelo y un `function_call_output` con el resultado local, y luego realiza otra solicitud. Copia el `call_id` original para que el modelo pueda asociar el resultado con su llamada.
+5. **Leer la respuesta.** Tras recibir el resultado de la función, el modelo devuelve un `message` normal del asistente. Si en su lugar solicita otra función, repite el mismo bucle.
+
+<div id="inspect-the-response-arrays">
+  ## Inspecciona los arrays de la respuesta
+</div>
+
+Este es el array `output` completo de la primera solicitud. `arguments` está codificado como JSON en una cadena, y los ID varían entre solicitudes.
+
+```json theme={null}
+[
+  {
+    "id": "fc_a181bc3f-7a54-40b6-a85e-a50a0a6fac92",
+    "arguments": "{\"order_id\":\"ORD-10042\"}",
+    "call_id": "call_Ku9yfMSIZWrJBGm2wqCaFF0G",
+    "name": "get_order_status",
+    "status": "completed",
+    "type": "function_call"
+  }
+]
+```
+
+La aplicación ejecuta `get_order_status` y envía este array `input` de continuación. El `function_call` y el `function_call_output` comparten el mismo `call_id`:
+
+```json theme={null}
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": "What's the status of order ORD-10042?"
+  },
+  {
+    "id": "fc_a181bc3f-7a54-40b6-a85e-a50a0a6fac92",
+    "arguments": "{\"order_id\":\"ORD-10042\"}",
+    "call_id": "call_Ku9yfMSIZWrJBGm2wqCaFF0G",
+    "name": "get_order_status",
+    "status": "completed",
+    "type": "function_call"
+  },
+  {
+    "type": "function_call_output",
+    "call_id": "call_Ku9yfMSIZWrJBGm2wqCaFF0G",
+    "output": "{\"status\": \"in_transit\", \"carrier\": \"DHL\", \"estimated_delivery\": \"2026-08-08\"}"
+  }
+]
+```
+
+La segunda solicitud devuelve entonces este array `output` completo:
+
+```json theme={null}
+[
+  {
+    "id": "msg_b95a5d0d-bb02-4f09-bde4-22a781265e61",
+    "content": [
+      {
+        "text": "Order **ORD-10042** is **in transit** with **DHL**. Estimated delivery is **Saturday, August 8, 2026**.",
+        "type": "output_text",
+        "annotations": []
+      }
+    ],
+    "role": "assistant",
+    "status": "completed",
+    "type": "message"
+  }
+]
+```
+
+<Note>
+  Algunos modelos incluyen un `thought_signature` en los elementos `function_call`. Consérvalo al reenviar el elemento. El ejemplo de Python lo hace serializando el objeto completo del SDK; el ejemplo de TypeScript lo copia cuando está presente.
+</Note>
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Cookbook de llamadas a funciones" icon="book" href="/es/docs/cookbook/articles/function-calling-e2e/README">
+    Gestiona múltiples funciones, llamadas en paralelo y errores en flujos de trabajo de producción.
+  </Card>
+
+  <Card title="Descripción general de las herramientas" icon="list" href="/es/docs/agent-api/tools/overview">
+    Compara las funciones personalizadas con las herramientas integradas y los servidores MCP.
+  </Card>
+</CardGroup>

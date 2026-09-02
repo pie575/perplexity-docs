@@ -1,0 +1,653 @@
+---
+title: "Orchestration multi-fournisseurs"
+description: "Routez vos requêtes entre les modèles OpenAI, Anthropic, Google et xAI via l'Agent API de Perplexity, sans marge appliquée, créez des chaînes de repli et comparez les fournisseurs côte à côte"
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+Ce guide montre comment utiliser l&#39;Agent API de Perplexity comme passerelle unifiée vers les modèles d&#39;OpenAI, Anthropic, Google, xAI et Perplexity — le tout avec une seule API key et sans majoration. Vous apprendrez à router les requêtes vers des fournisseurs spécifiques, à construire des chaînes de repli pour une haute disponibilité, à comparer les réponses de différents modèles et à découvrir dynamiquement les modèles disponibles via le point de terminaison `/v1/models`.
+
+<Info>
+  Perplexity refacture l&#39;utilisation des modèles tiers au prix coûtant, sans majoration. Vous ne payez que ce que facture le fournisseur, le tout regroupé sur une facture unique. Consultez [Modèles de l&#39;Agent API](/fr/docs/agent-api/models) pour la liste complète.
+</Info>
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+Installez le SDK Perplexity :
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+Si vous n&#39;avez pas encore d&#39;API key :
+
+<Card title="Obtenez votre API key Perplexity" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Cliquez ici" href="https://perplexity.ai/account/api">
+  Rendez-vous dans l&#39;onglet **API Keys** du portail API et générez une nouvelle clé.
+</Card>
+
+Exportez ensuite votre API key dans une variable d&#39;environnement :
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="why-multi-provider">
+  ## Pourquoi le multi-fournisseur ?
+</div>
+
+| Avantage                     | Détails                                                                                                           |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| **Une seule API key**        | Accédez aux modèles OpenAI, Anthropic, Google, xAI et Perplexity sans comptes distincts                           |
+| **Aucune majoration**        | Les coûts des modèles tiers sont répercutés au tarif du fournisseur                                               |
+| **Format unifié**            | Même format de requête/réponse pour tous les fournisseurs                                                         |
+| **Repli intégré**            | Le paramètre `models` interroge les fournisseurs dans l&#39;ordre jusqu&#39;à ce que l&#39;un d&#39;eux réussisse |
+| **Compatibilité des outils** | `web_search`, `fetch_url` et les fonctions personnalisées fonctionnent avec tous les modèles                      |
+
+<div id="available-models">
+  ## Modèles disponibles
+</div>
+
+Utilisez le point de terminaison `/v1/models` pour découvrir dynamiquement tous les modèles disponibles.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import requests
+  import os
+
+  resp = requests.get(
+      "https://api.perplexity.ai/v1/models",
+      headers={"Authorization": f"Bearer {os.environ['PERPLEXITY_API_KEY']}"}
+  )
+  models = resp.json()["data"]
+
+  # Regrouper par fournisseur
+  providers = {}
+  for model in models:
+      provider = model["id"].split("/")[0] if "/" in model["id"] else "perplexity"
+      providers.setdefault(provider, []).append(model["id"])
+
+  for provider, model_ids in sorted(providers.items()):
+      print(f"\n{provider}:")
+      for mid in model_ids:
+          print(f"  {mid}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  const resp = await fetch("https://api.perplexity.ai/v1/models", {
+      headers: { Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}` },
+  });
+  const models = (await resp.json()).data;
+
+  // Regrouper par fournisseur
+  const providers: Record<string, string[]> = {};
+  for (const model of models) {
+      const provider = model.id.includes("/") ? model.id.split("/")[0] : "perplexity";
+      (providers[provider] ??= []).push(model.id);
+  }
+
+  for (const [provider, ids] of Object.entries(providers).sort()) {
+      console.log(`\n${provider}:`);
+      for (const id of ids) console.log(`  ${id}`);
+  }
+  ```
+
+  ```bash curl theme={null}
+  curl -s "https://api.perplexity.ai/v1/models" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" | python3 -m json.tool
+  ```
+</CodeGroup>
+
+Principaux modèles par fournisseur :
+
+| Fournisseur    | Modèles                                                                                  | Idéal pour                             |
+| -------------- | ---------------------------------------------------------------------------------------- | -------------------------------------- |
+| **OpenAI**     | `openai/gpt-5.4`, `openai/gpt-5.1`, `openai/gpt-5-mini`, `openai/gpt-5.4`                | Raisonnement général, code, analyse    |
+| **Anthropic**  | `anthropic/claude-opus-4-6`, `anthropic/claude-sonnet-4-6`, `anthropic/claude-haiku-4-5` | Contexte long, respect des consignes   |
+| **Google**     | `google/gemini-3.1-flash-lite`, `google/gemini-3.1-pro-preview`                          | Multimodal, inférence rapide           |
+| **xAI**        | `xai/grok-4.20-non-reasoning`                                                            | Réponses rapides, conversationnel      |
+| **Perplexity** | `perplexity/sonar`                                                                       | Réponses appuyées sur la recherche web |
+
+<div id="routing-to-a-specific-provider">
+  ## Routage vers un fournisseur spécifique
+</div>
+
+Utilisez le paramètre `model` pour cibler le modèle d&#39;un fournisseur spécifique.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Router vers OpenAI
+  openai_response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Explain the difference between TCP and UDP.",
+      max_output_tokens=500,
+  )
+  print(f"OpenAI: {openai_response.output_text[:200]}...")
+
+  # Router vers Anthropic
+  anthropic_response = client.responses.create(
+      model="anthropic/claude-sonnet-4-6",
+      input="Explain the difference between TCP and UDP.",
+      max_output_tokens=500,
+  )
+  print(f"Anthropic: {anthropic_response.output_text[:200]}...")
+
+  # Router vers Google
+  google_response = client.responses.create(
+      model="google/gemini-3.1-flash-lite",
+      input="Explain the difference between TCP and UDP.",
+      max_output_tokens=500,
+  )
+  print(f"Google: {google_response.output_text[:200]}...")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // Router vers OpenAI
+  const openaiResponse = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "Explain the difference between TCP and UDP.",
+      max_output_tokens: 500,
+  });
+  console.log(`OpenAI: ${openaiResponse.output_text.slice(0, 200)}...`);
+
+  // Router vers Anthropic
+  const anthropicResponse = await client.responses.create({
+      model: "anthropic/claude-sonnet-4-6",
+      input: "Explain the difference between TCP and UDP.",
+      max_output_tokens: 500,
+  });
+  console.log(`Anthropic: ${anthropicResponse.output_text.slice(0, 200)}...`);
+
+  // Router vers Google
+  const googleResponse = await client.responses.create({
+      model: "google/gemini-3.1-flash-lite",
+      input: "Explain the difference between TCP and UDP.",
+      max_output_tokens: 500,
+  });
+  console.log(`Google: ${googleResponse.output_text.slice(0, 200)}...`);
+  ```
+</CodeGroup>
+
+<div id="model-fallback-chains">
+  ## Chaînes de repli entre modèles
+</div>
+
+Le paramètre `models` accepte un tableau de 5 modèles au maximum. L&#39;API les essaie dans l&#39;ordre et renvoie la première réponse obtenue avec succès. C&#39;est idéal pour les systèmes en production, où la disponibilité est déterminante.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Principal : OpenAI, repli : Anthropic, puis Google
+  response = client.responses.create(
+      models=[
+          "openai/gpt-5.4",
+          "anthropic/claude-sonnet-4-6",
+          "google/gemini-3.1-flash-lite",
+      ],
+      input="What are the key principles of zero-trust security?",
+      tools=[{"type": "web_search"}],
+  )
+
+  print(f"Model used: {response.model}")
+  print(f"Response: {response.output_text[:300]}...")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      models: [
+          "openai/gpt-5.4",
+          "anthropic/claude-sonnet-4-6",
+          "google/gemini-3.1-flash-lite",
+      ],
+      input: "What are the key principles of zero-trust security?",
+      tools: [{ type: "web_search" }],
+  });
+
+  console.log(`Model used: ${response.model}`);
+  console.log(`Response: ${response.output_text.slice(0, 300)}...`);
+  ```
+</CodeGroup>
+
+<Tip>
+  Classez votre chaîne de repli par ordre de préférence : placez votre modèle principal en premier, puis les solutions de remplacement par ordre de préférence décroissant. L&#39;API renvoie la réponse du premier modèle qui aboutit.
+</Tip>
+
+<div id="comparing-responses-across-providers">
+  ## Comparer les réponses entre fournisseurs
+</div>
+
+Envoyez le même prompt à plusieurs modèles et comparez la qualité, la latence et le coût.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  MODELS = [
+      "openai/gpt-5.4",
+      "anthropic/claude-sonnet-4-6",
+      "google/gemini-3.1-flash-lite",
+      "xai/grok-4.20-non-reasoning",
+      "perplexity/sonar",
+  ]
+
+  prompt = "What are the three most important design patterns in microservices architecture?"
+
+  results = []
+  for model in MODELS:
+      print(f"Querying {model}...")
+      start = time.time()
+      try:
+          response = client.responses.create(
+              model=model,
+              input=prompt,
+              max_output_tokens=800,
+          )
+          elapsed = time.time() - start
+          results.append({
+              "model": model,
+              "latency": round(elapsed, 2),
+              "tokens": response.usage.output_tokens,
+              "cost": response.usage.cost.total_cost,
+              "preview": response.output_text[:150].replace("\n", " "),
+          })
+      except Exception as e:
+          results.append({"model": model, "error": str(e)})
+
+  # Afficher la comparaison
+  print(f"\n{'Model':<42} {'Latency':>8} {'Tokens':>7} {'Cost':>10}")
+  print("-" * 70)
+  for r in results:
+      if "error" in r:
+          print(f"{r['model']:<42} {'ERROR':>8}")
+      else:
+          print(f"{r['model']:<42} {r['latency']:>7.2f}s {r['tokens']:>7} ${r['cost']:.5f}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const MODELS = [
+      "openai/gpt-5.4",
+      "anthropic/claude-sonnet-4-6",
+      "google/gemini-3.1-flash-lite",
+      "xai/grok-4.20-non-reasoning",
+      "perplexity/sonar",
+  ];
+
+  const prompt = "What are the three most important design patterns in microservices architecture?";
+
+  const results: any[] = [];
+  for (const model of MODELS) {
+      console.log(`Querying ${model}...`);
+      const start = Date.now();
+      try {
+          const response = await client.responses.create({
+              model,
+              input: prompt,
+              max_output_tokens: 800,
+          });
+          const elapsed = (Date.now() - start) / 1000;
+          results.push({
+              model,
+              latency: elapsed.toFixed(2),
+              tokens: response.usage.output_tokens,
+              cost: response.usage.cost.total_cost,
+              preview: response.output_text.slice(0, 150).replace(/\n/g, " "),
+          });
+      } catch (e: any) {
+          results.push({ model, error: e.message });
+      }
+  }
+
+  console.log(`\n${"Model".padEnd(42)} ${"Latency".padStart(8)} ${"Tokens".padStart(7)} ${"Cost".padStart(10)}`);
+  console.log("-".repeat(70));
+  for (const r of results) {
+      if (r.error) {
+          console.log(`${r.model.padEnd(42)} ${"ERROR".padStart(8)}`);
+      } else {
+          console.log(`${r.model.padEnd(42)} ${(r.latency + "s").padStart(8)} ${String(r.tokens).padStart(7)} ${"$" + r.cost.toFixed(5)}`);
+      }
+  }
+  ```
+</CodeGroup>
+
+<div id="task-based-model-routing">
+  ## Routage de modèles selon la tâche
+</div>
+
+À chaque type de tâche correspond un modèle différent. Créez un routeur qui sélectionne le modèle le plus adapté à chaque type de tâche.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Routage selon les caractéristiques de la tâche
+  MODEL_ROUTING = {
+      "code": "anthropic/claude-sonnet-4-6",      # Excellent en génération de code
+      "analysis": "openai/gpt-5.4",               # Excellent en analyse structurée
+      "fast_chat": "xai/grok-4.20-non-reasoning",  # Latence la plus faible
+      "research": "perplexity/sonar",              # Ancrage sur la recherche web intégré
+      "multimodal": "google/gemini-3.1-flash-lite",  # Vision + rapidité
+  }
+
+
+  def route_request(task_type: str, prompt: str, **kwargs) -> dict:
+      """Route une requête vers le modèle optimal selon le type de tâche."""
+      model = MODEL_ROUTING.get(task_type)
+      if not model:
+          raise ValueError(f"Unknown task type: {task_type}. Options: {list(MODEL_ROUTING.keys())}")
+
+      # Ajoute web_search pour les tâches de recherche
+      tools = kwargs.pop("tools", None)
+      if task_type == "research" and tools is None:
+          tools = [{"type": "web_search"}]
+
+      response = client.responses.create(
+          model=model,
+          input=prompt,
+          tools=tools,
+          **kwargs,
+      )
+
+      return {
+          "model": response.model,
+          "task_type": task_type,
+          "output": response.output_text,
+          "cost": response.usage.cost.total_cost,
+      }
+
+
+  # Tâche de code → Anthropic
+  code_result = route_request(
+      "code",
+      "Write a Python function that implements binary search on a sorted list.",
+      max_output_tokens=500,
+  )
+  print(f"[{code_result['task_type']}] via {code_result['model']} (${code_result['cost']:.5f})")
+  print(code_result["output"][:200])
+
+  # Tâche de recherche → Perplexity Sonar
+  research_result = route_request(
+      "research",
+      "What were the key announcements at the latest WWDC?",
+  )
+  print(f"\n[{research_result['task_type']}] via {research_result['model']} (${research_result['cost']:.5f})")
+  print(research_result["output"][:200])
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const MODEL_ROUTING: Record<string, string> = {
+      code: "anthropic/claude-sonnet-4-6",
+      analysis: "openai/gpt-5.4",
+      fast_chat: "xai/grok-4.20-non-reasoning",
+      research: "perplexity/sonar",
+      multimodal: "google/gemini-3.1-flash-lite",
+  };
+
+  async function routeRequest(taskType: string, prompt: string, options: Record<string, any> = {}) {
+      const model = MODEL_ROUTING[taskType];
+      if (!model) throw new Error(`Unknown task type: ${taskType}`);
+
+      const tools = options.tools ?? (taskType === "research" ? [{ type: "web_search" }] : undefined);
+
+      const response = await client.responses.create({
+          model,
+          input: prompt,
+          tools,
+          ...options,
+      });
+
+      return {
+          model: response.model,
+          taskType,
+          output: response.output_text,
+          cost: response.usage.cost.total_cost,
+      };
+  }
+
+  // Tâche de code → Anthropic
+  const codeResult = await routeRequest("code", "Write a Python function that implements binary search on a sorted list.", { max_output_tokens: 500 });
+  console.log(`[${codeResult.taskType}] via ${codeResult.model} ($${codeResult.cost.toFixed(5)})`);
+  console.log(codeResult.output.slice(0, 200));
+
+  // Tâche de recherche → Perplexity Sonar
+  const researchResult = await routeRequest("research", "What were the key announcements at the latest WWDC?");
+  console.log(`\n[${researchResult.taskType}] via ${researchResult.model} ($${researchResult.cost.toFixed(5)})`);
+  console.log(researchResult.output.slice(0, 200));
+  ```
+</CodeGroup>
+
+<div id="combining-multi-provider-with-tools">
+  ## Combiner le multi-fournisseur et les outils
+</div>
+
+Tous les modèles accessibles via l&#39;Agent API prennent en charge la même interface d&#39;outils : `web_search`, `fetch_url` et les fonctions personnalisées fonctionnent de façon identique, quel que soit le fournisseur.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+  import json
+
+  client = Perplexity()
+
+  tools = [
+      {"type": "web_search"},
+      {
+          "type": "function",
+          "name": "calculate_roi",
+          "description": "Calculate return on investment given initial cost and revenue.",
+          "parameters": {
+              "type": "object",
+              "properties": {
+                  "initial_cost": {"type": "number", "description": "Initial investment in USD"},
+                  "annual_revenue": {"type": "number", "description": "Expected annual revenue in USD"},
+                  "years": {"type": "integer", "description": "Number of years"},
+              },
+              "required": ["initial_cost", "annual_revenue", "years"],
+          },
+      },
+  ]
+
+
+  def calculate_roi(initial_cost: float, annual_revenue: float, years: int) -> dict:
+      total_revenue = annual_revenue * years
+      roi = ((total_revenue - initial_cost) / initial_cost) * 100
+      return {"roi_percent": round(roi, 2), "total_revenue": total_revenue, "net_profit": total_revenue - initial_cost}
+
+
+  # Utiliser Anthropic Claude avec la recherche web + une fonction personnalisée
+  response = client.responses.create(
+      model="anthropic/claude-sonnet-4-6",
+      tools=tools,
+      input=(
+          "Research the average cost to deploy a 100kW commercial solar installation in 2026, "
+          "then calculate the 10-year ROI assuming $18,000 annual energy savings."
+      ),
+  )
+
+  # Gérer les appels de fonction
+  while any(item.type == "function_call" for item in response.output):
+      next_input = [item.model_dump() for item in response.output]
+      for item in response.output:
+          if item.type == "function_call":
+              args = json.loads(item.arguments)
+              result = calculate_roi(**args)
+              next_input.append({
+                  "type": "function_call_output",
+                  "call_id": item.call_id,
+                  "output": json.dumps(result),
+              })
+      response = client.responses.create(
+          model="anthropic/claude-sonnet-4-6",
+          tools=tools,
+          input=next_input,
+      )
+
+  print(response.output_text)
+  ```
+</CodeGroup>
+
+<div id="dynamic-model-discovery">
+  ## Découverte dynamique des modèles
+</div>
+
+Créez des applications qui s&#39;adaptent automatiquement aux nouveaux modèles disponibles en interrogeant le point de terminaison `/v1/models` au démarrage.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import requests
+  import os
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def discover_models() -> dict[str, list[str]]:
+      """Récupère les modèles disponibles et les regroupe par fournisseur."""
+      resp = requests.get(
+          "https://api.perplexity.ai/v1/models",
+          headers={"Authorization": f"Bearer {os.environ['PERPLEXITY_API_KEY']}"},
+      )
+      resp.raise_for_status()
+      models = resp.json()["data"]
+
+      providers = {}
+      for model in models:
+          provider = model["id"].split("/")[0] if "/" in model["id"] else "perplexity"
+          providers.setdefault(provider, []).append(model["id"])
+      return providers
+
+
+  def build_fallback_chain(providers: dict[str, list[str]], preferred_order: list[str]) -> list[str]:
+      """Construit une chaîne de repli à partir des modèles disponibles, en choisissant un modèle par fournisseur."""
+      chain = []
+      for provider in preferred_order:
+          if provider in providers and providers[provider]:
+              chain.append(providers[provider][0])  # Choisit le premier modèle disponible
+      return chain[:5]  # 5 modèles maximum dans la chaîne de repli
+
+
+  # Découvre les modèles et construit la chaîne
+  available = discover_models()
+  print(f"Available providers: {list(available.keys())}")
+
+  chain = build_fallback_chain(available, ["openai", "anthropic", "google", "xai", "perplexity"])
+  print(f"Fallback chain: {chain}")
+
+  # Utilise la chaîne dynamique
+  response = client.responses.create(
+      models=chain,
+      input="Summarize the latest developments in AI regulation worldwide.",
+      tools=[{"type": "web_search"}],
+  )
+  print(f"\nModel used: {response.model}")
+  print(response.output_text[:300])
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  async function discoverModels(): Promise<Record<string, string[]>> {
+      const resp = await fetch("https://api.perplexity.ai/v1/models", {
+          headers: { Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}` },
+      });
+      const models = (await resp.json()).data;
+
+      const providers: Record<string, string[]> = {};
+      for (const model of models) {
+          const provider = model.id.includes("/") ? model.id.split("/")[0] : "perplexity";
+          (providers[provider] ??= []).push(model.id);
+      }
+      return providers;
+  }
+
+  function buildFallbackChain(providers: Record<string, string[]>, preferredOrder: string[]): string[] {
+      const chain: string[] = [];
+      for (const provider of preferredOrder) {
+          if (providers[provider]?.length) {
+              chain.push(providers[provider][0]);
+          }
+      }
+      return chain.slice(0, 5);
+  }
+
+  const available = await discoverModels();
+  console.log(`Available providers: ${Object.keys(available).join(", ")}`);
+
+  const chain = buildFallbackChain(available, ["openai", "anthropic", "google", "xai", "perplexity"]);
+  console.log(`Fallback chain: ${chain.join(" → ")}`);
+
+  const response = await client.responses.create({
+      models: chain,
+      input: "Summarize the latest developments in AI regulation worldwide.",
+      tools: [{ type: "web_search" }],
+  });
+
+  console.log(`\nModel used: ${response.model}`);
+  console.log(response.output_text.slice(0, 300));
+  ```
+</CodeGroup>
+
+<Info>
+  Le point de terminaison `/v1/models` renvoie la liste à jour des modèles pris en charge. Interrogez-le au démarrage de l&#39;application ou mettez sa réponse en cache avec une durée de vie (TTL) pour tenir compte des nouveaux modèles au fur et à mesure de leur ajout.
+</Info>
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Modèles de l'Agent API" icon="brain" href="/fr/docs/agent-api/models">
+    Liste complète des modèles disponibles, de leurs capacités et de leurs tarifs.
+  </Card>
+
+  <Card title="Repli de modèle" icon="square-rounded-arrow-down" href="/fr/docs/agent-api/model-fallback">
+    Tout savoir sur la configuration et le comportement de la chaîne de repli.
+  </Card>
+
+  <Card title="Exemple de comparaison de modèles" icon="chart-bar" href="/fr/docs/cookbook/examples/model-comparison/README">
+    Outil en ligne de commande pour comparer les performances des modèles côte à côte.
+  </Card>
+
+  <Card title="Presets" icon="settings" href="/fr/docs/agent-api/presets">
+    Utilisez des presets comme `low` pour bénéficier de valeurs par défaut optimisées.
+  </Card>
+</CardGroup>

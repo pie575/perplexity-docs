@@ -1,0 +1,574 @@
+---
+title: "Gestion des clés API"
+description: "Découvrez comment générer, révoquer et renouveler les clés API pour un accès sécurisé"
+---
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Les clés API sont indispensables pour authentifier les requêtes envoyées à l&#39;API Perplexity. Ce guide explique comment créer, gérer et renouveler vos clés API à l&#39;aide de nos endpoints de gestion des tokens d&#39;authentification.
+
+<Warning>
+  **Les clés API ne s&#39;affichent qu&#39;une seule fois.** Lorsque vous créez une clé API — depuis la console ou par programmation —, le token complet est renvoyé à cet instant précis et **ne pourra plus être récupéré par la suite**. Enregistrez-le immédiatement dans un emplacement sécurisé avant de fermer la page ou la réponse.
+</Warning>
+
+<Info>
+  Les clés API doivent être traitées comme des identifiants sensibles. Stockez-les de manière sécurisée et ne les exposez jamais dans du code côté client ni dans des dépôts publics.
+</Info>
+
+<div id="getting-started-create-your-project-first">
+  ## Premiers pas : commencez par créer votre projet
+</div>
+
+<Warning>
+  **Prérequis importants** : avant de pouvoir générer des clés API, vous devez d&#39;abord créer un projet depuis l&#39;interface web de Perplexity.
+</Warning>
+
+<Steps>
+  <Step title="Créer un projet">
+    Rendez-vous sur la page Projects et créez votre premier projet :
+
+    **[Ouvrir les paramètres du projet →](https://console.perplexity.ai/project/settings)**
+
+    Les projets permettent d&#39;organiser vos clés et de gérer les accès entre différentes équipes ou différents environnements.
+
+    <Tip>
+      Choisissez un nom explicite pour votre projet (par exemple « Production » ou « Development ») pour en faciliter l&#39;organisation.
+    </Tip>
+  </Step>
+
+  <Step title="Générer vos clés API">
+    Une fois votre projet créé, rendez-vous sur la page Clés API pour générer votre première clé :
+
+    **[Générer des clés API →](https://console.perplexity.ai/project/keys)**
+
+    Vous pouvez créer plusieurs clés dans chaque projet, pour différents usages ou environnements. La valeur complète de la clé ne s&#39;affiche qu&#39;une seule fois, au moment de sa création — copiez-la avant de quitter la page.
+  </Step>
+</Steps>
+
+<Note>
+  Une fois votre première clé API créée depuis l&#39;interface web, vous pouvez utiliser les endpoints programmatiques ci-dessous pour générer et gérer d&#39;autres clés.
+</Note>
+
+<div id="key-management-endpoints">
+  ## Endpoints de gestion des clés
+</div>
+
+Perplexity fournit deux endpoints permettant de gérer les clés API par programmation :
+
+* **`/generate_auth_token`** – Crée une nouvelle clé API
+* **`/revoke_auth_token`** – Révoque une clé API existante
+
+<Warning>
+  Une fois révoquée, une clé API est définitivement perdue. Veillez à mettre à jour vos applications avec les nouvelles clés avant de révoquer les anciennes.
+</Warning>
+
+<div id="generating-api-keys">
+  ## Génération de clés API
+</div>
+
+Créez de nouvelles clés API par programmation. Fournissez toujours un `token_name` descriptif : une fois la clé créée, ce nom constitue le principal moyen de l&#39;identifier, car la valeur complète du token n&#39;est plus visible.
+
+<div id="request">
+  ### Requête
+</div>
+
+<CodeGroup>
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/generate_auth_token \
+    --header "Authorization: Bearer YOUR_EXISTING_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "token_name": "Production API Key"
+    }'
+  ```
+
+  ```python Python theme={null}
+  import requests
+
+  url = "https://api.perplexity.ai/generate_auth_token"
+  headers = {
+      "Authorization": "Bearer YOUR_EXISTING_API_KEY",
+      "Content-Type": "application/json"
+  }
+  payload = {
+      "token_name": "Production API Key"  # Facultatif
+  }
+
+  response = requests.post(url, headers=headers, json=payload)
+  data = response.json()
+  print(f"New API Key: {data['auth_token']}")
+  print(f"Created at: {data['created_at_epoch_seconds']}")
+  ```
+
+  ```typescript Typescript theme={null}
+  const response = await fetch("https://api.perplexity.ai/generate_auth_token", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer YOUR_EXISTING_API_KEY",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      token_name: "Production API Key"  // Facultatif
+    })
+  });
+
+  const data = await response.json();
+  console.log(`New API Key: ${data.auth_token}`);
+  console.log(`Created at: ${data.created_at_epoch_seconds}`);
+  ```
+</CodeGroup>
+
+<div id="response">
+  ### Réponse
+</div>
+
+```json theme={null}
+{
+  "auth_token": "pplx-1234567890abcdef",
+  "created_at_epoch_seconds": 1735689600,
+  "token_name": "Production API Key"
+}
+```
+
+<Warning>
+  Enregistrez immédiatement l&#39;`auth_token` en lieu sûr. C&#39;est la **seule** fois où la valeur complète du token est renvoyée : elle ne pourra plus être récupérée par la suite, ni via un endpoint ni depuis la console.
+</Warning>
+
+<div id="revoking-api-keys">
+  ## Révocation des clés API
+</div>
+
+Révoquez les clés API devenues inutiles ou susceptibles d&#39;avoir été compromises.
+
+<div id="request-2">
+  ### Requête
+</div>
+
+<CodeGroup>
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/revoke_auth_token \
+    --header "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "auth_token": "pplx-1234567890abcdef"
+    }'
+  ```
+
+  ```python Python theme={null}
+  import os
+  import requests
+
+  url = "https://api.perplexity.ai/revoke_auth_token"
+  headers = {
+      "Authorization": f"Bearer {os.environ.get('PERPLEXITY_API_KEY')}",
+      "Content-Type": "application/json"
+  }
+  payload = {
+      "auth_token": "pplx-1234567890abcdef"
+  }
+
+  response = requests.post(url, headers=headers, json=payload)
+  if response.status_code == 200:
+      print("API key successfully revoked")
+  ```
+
+  ```typescript Typescript theme={null}
+  const response = await fetch("https://api.perplexity.ai/revoke_auth_token", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      auth_token: "pplx-1234567890abcdef"
+    })
+  });
+
+  if (response.status === 200) {
+    console.log("API key successfully revoked");
+  }
+  ```
+</CodeGroup>
+
+<div id="response-2">
+  ### Réponse
+</div>
+
+Renvoie un code d&#39;état `200 OK` lorsque la révocation aboutit.
+
+<div id="api-key-rotation">
+  ## Rotation des clés API
+</div>
+
+La rotation régulière des clés est une bonne pratique de sécurité qui limite l&#39;impact d&#39;une éventuelle compromission. Voici comment mettre en place une rotation des clés sans interruption de service :
+
+<div id="rotation-strategy">
+  ### Stratégie de rotation
+</div>
+
+<Steps>
+  <Step title="Générer une nouvelle clé">
+    Créez une nouvelle API key pendant que votre clé actuelle est toujours active :
+
+    ```python theme={null}
+    # Générer une nouvelle clé
+    new_key_response = requests.post(
+        "https://api.perplexity.ai/generate_auth_token",
+        headers={"Authorization": f"Bearer {current_key}"},
+        json={"token_name": f"Rotated Key - {datetime.now().isoformat()}"}
+    )
+    new_key = new_key_response.json()["auth_token"]
+    ```
+  </Step>
+
+  <Step title="Mettre à jour les applications">
+    Déployez la nouvelle clé dans vos applications :
+
+    ```python theme={null}
+    # Mettre à jour les variables d'environnement ou la gestion des secrets
+    os.environ["PERPLEXITY_API_KEY"] = new_key
+
+    # Vérifier que la nouvelle clé fonctionne
+    test_response = requests.post(
+        "https://api.perplexity.ai/v1/agent",
+        headers={"Authorization": f"Bearer {new_key}"},
+        json={
+            "preset": "low",
+            "input": "Test"
+        }
+    )
+    assert test_response.status_code == 200
+    ```
+  </Step>
+
+  <Step title="Surveiller la transition">
+    Assurez-vous que tous les services utilisent la nouvelle clé avant de poursuivre :
+
+    ```python theme={null}
+    # Surveillez les journaux de votre application pour confirmer
+    # que toutes les instances utilisent la nouvelle clé
+    time.sleep(300)  # Attendre la propagation
+    ```
+  </Step>
+
+  <Step title="Révoquer l'ancienne clé">
+    Une fois cette vérification faite, révoquez l&#39;ancienne clé :
+
+    ```python theme={null}
+    # Révoquer l'ancienne clé
+    revoke_response = requests.post(
+        "https://api.perplexity.ai/revoke_auth_token",
+        headers={"Authorization": f"Bearer {new_key}"},
+        json={"auth_token": current_key}
+    )
+    assert revoke_response.status_code == 200
+    print("Key rotation completed successfully")
+    ```
+  </Step>
+</Steps>
+
+<div id="automated-rotation-example">
+  ### Exemple de rotation automatisée
+</div>
+
+Voici un exemple complet de script de rotation automatisée des clés :
+
+<CodeGroup>
+  ```python Python theme={null}
+  import requests
+  import os
+  import time
+  from datetime import datetime
+  import logging
+
+  logging.basicConfig(level=logging.INFO)
+  logger = logging.getLogger(__name__)
+
+  class PerplexityKeyRotator:
+      def __init__(self, current_key):
+          self.base_url = "https://api.perplexity.ai"
+          self.current_key = current_key
+
+      def generate_new_key(self, name=None):
+          """Generate a new API key"""
+          url = f"{self.base_url}/generate_auth_token"
+          headers = {"Authorization": f"Bearer {self.current_key}"}
+          payload = {}
+          if name:
+              payload["token_name"] = name
+
+          response = requests.post(url, headers=headers, json=payload)
+          response.raise_for_status()
+          return response.json()
+
+      def test_key(self, key):
+          """Test if a key is valid"""
+          url = f"{self.base_url}/v1/agent"
+          headers = {"Authorization": f"Bearer {key}"}
+          payload = {
+              "preset": "low",
+              "input": "Test",
+              "max_output_tokens": 1
+          }
+
+          try:
+              response = requests.post(url, headers=headers, json=payload)
+              return response.status_code == 200
+          except:
+              return False
+
+      def revoke_key(self, key_to_revoke):
+          """Revoke an API key"""
+          url = f"{self.base_url}/revoke_auth_token"
+          headers = {"Authorization": f"Bearer {self.current_key}"}
+          payload = {"auth_token": key_to_revoke}
+
+          response = requests.post(url, headers=headers, json=payload)
+          return response.status_code == 200
+
+      def rotate_key(self, update_callback=None):
+          """Perform complete key rotation"""
+          logger.info("Starting key rotation...")
+
+          # Étape 1 : générer une nouvelle clé
+          new_key_data = self.generate_new_key(
+              name=f"Rotated-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+          )
+          new_key = new_key_data["auth_token"]
+          logger.info(f"New key generated: {new_key[:10]}...")
+
+          # Étape 2 : tester la nouvelle clé
+          if not self.test_key(new_key):
+              raise Exception("New key validation failed")
+          logger.info("New key validated successfully")
+
+          # Étape 3 : mettre à jour l'application (callback)
+          if update_callback:
+              update_callback(new_key)
+              logger.info("Application updated with new key")
+
+          # Étape 4 : attendre la propagation
+          logger.info("Waiting for propagation...")
+          time.sleep(30)
+
+          # Étape 5 : révoquer l'ancienne clé
+          old_key = self.current_key
+          self.current_key = new_key  # Utiliser la nouvelle clé pour la révocation
+
+          if self.revoke_key(old_key):
+              logger.info("Old key revoked successfully")
+          else:
+              logger.warning("Failed to revoke old key")
+
+          logger.info("Key rotation completed")
+          return new_key
+
+  # Exemple d'utilisation
+  def update_environment(new_key):
+      """Update your environment with the new key"""
+      os.environ["PERPLEXITY_API_KEY"] = new_key
+      # Mettez à jour ici votre système de gestion des secrets
+      # update_aws_secrets_manager(new_key)
+      # update_kubernetes_secret(new_key)
+
+  # Effectuer la rotation
+  rotator = PerplexityKeyRotator(os.environ["PERPLEXITY_API_KEY"])
+  new_key = rotator.rotate_key(update_callback=update_environment)
+  print(f"Rotation complete. New key: {new_key[:10]}...")
+  ```
+
+  ```typescript Typescript theme={null}
+  import fetch from 'node-fetch';
+
+  class PerplexityKeyRotator {
+    private baseUrl = 'https://api.perplexity.ai';
+    private currentKey: string;
+
+    constructor(currentKey: string) {
+      this.currentKey = currentKey;
+    }
+
+    async generateNewKey(name?: string): Promise<{
+      auth_token: string;
+      created_at_epoch_seconds: number;
+      token_name?: string;
+    }> {
+      const response = await fetch(`${this.baseUrl}/generate_auth_token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.currentKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(name ? { token_name: name } : {})
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate key: ${response.statusText}`);
+      }
+
+      return response.json();
+    }
+
+    async testKey(key: string): Promise<boolean> {
+      try {
+        const response = await fetch(`${this.baseUrl}/v1/agent`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            preset: 'low',
+            input: 'Test',
+            max_output_tokens: 1
+          })
+        });
+
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    async revokeKey(keyToRevoke: string): Promise<boolean> {
+      const response = await fetch(`${this.baseUrl}/revoke_auth_token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.currentKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ auth_token: keyToRevoke })
+      });
+
+      return response.ok;
+    }
+
+    async rotateKey(updateCallback?: (newKey: string) => Promise<void>): Promise<string> {
+      console.log('Starting key rotation...');
+
+      // Étape 1 : générer une nouvelle clé
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const newKeyData = await this.generateNewKey(`Rotated-${timestamp}`);
+      const newKey = newKeyData.auth_token;
+      console.log(`New key generated: ${newKey.substring(0, 10)}...`);
+
+      // Étape 2 : tester la nouvelle clé
+      if (!(await this.testKey(newKey))) {
+        throw new Error('New key validation failed');
+      }
+      console.log('New key validated successfully');
+
+      // Étape 3 : mettre à jour l'application
+      if (updateCallback) {
+        await updateCallback(newKey);
+        console.log('Application updated with new key');
+      }
+
+      // Étape 4 : attendre la propagation
+      console.log('Waiting for propagation...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
+
+      // Étape 5 : révoquer l'ancienne clé
+      const oldKey = this.currentKey;
+      this.currentKey = newKey;
+
+      if (await this.revokeKey(oldKey)) {
+        console.log('Old key revoked successfully');
+      } else {
+        console.warn('Failed to revoke old key');
+      }
+
+      console.log('Key rotation completed');
+      return newKey;
+    }
+  }
+
+  // Exemple d'utilisation
+  async function updateEnvironment(newKey: string): Promise<void> {
+    process.env.PERPLEXITY_API_KEY = newKey;
+    // Mettez à jour ici votre système de gestion des secrets
+    // await updateAwsSecretsManager(newKey);
+    // await updateKubernetesSecret(newKey);
+  }
+
+  // Effectuer la rotation
+  const rotator = new PerplexityKeyRotator(process.env.PERPLEXITY_API_KEY!);
+  const newKey = await rotator.rotateKey(updateEnvironment);
+  console.log(`Rotation complete. New key: ${newKey.substring(0, 10)}...`);
+  ```
+</CodeGroup>
+
+<div id="best-practices">
+  ## Bonnes pratiques
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Utilisez des variables d'environnement">
+    Ne codez jamais en dur vos clés API dans votre code source. Stockez-les dans des variables d&#39;environnement ou dans un système sécurisé de gestion des secrets.
+
+    **À faire** : `os.environ["PERPLEXITY_API_KEY"]`
+
+    **À éviter** : `api_key = "pplx-1234567890abcdef"`
+  </Card>
+
+  <Card title="Mettez en place une rotation des clés">
+    Renouvelez régulièrement vos clés API (par exemple, tous les 90 jours) afin de limiter l&#39;impact d&#39;une éventuelle compromission.
+
+    Automatisez cette rotation à l&#39;aide de scripts pour éviter toute interruption de service.
+  </Card>
+
+  <Card title="Utilisez des noms explicites">
+    Définissez toujours `token_name` lors de la génération d&#39;une clé. Une fois la clé créée, son nom est le principal moyen de l&#39;identifier, car la valeur complète du token n&#39;est plus visible.
+
+    Exemples : « Production-Main », « Development-Testing », « CI/CD-Pipeline »
+  </Card>
+
+  <Card title="Surveillez l'utilisation des clés">
+    Identifiez les clés utilisées dans vos applications et révoquez sans tarder celles qui ne servent plus.
+
+    Tenez à jour un inventaire des clés actives et de leur usage.
+  </Card>
+</CardGroup>
+
+<div id="security-considerations">
+  ## Considérations de sécurité
+</div>
+
+<Warning>
+  **N&#39;exposez jamais vos clés API dans :**
+
+  * Le code JavaScript côté client
+  * Les applications mobiles
+  * Les dépôts publics
+  * Les fichiers de logs ou les messages d&#39;erreur
+  * Les URL ou les paramètres de requête
+</Warning>
+
+<div id="if-a-key-is-compromised">
+  ### En cas de compromission d&#39;une clé
+</div>
+
+1. **Générez immédiatement une nouvelle clé** avec `/generate_auth_token`
+2. **Mettez à jour toutes les applications** pour qu&#39;elles utilisent la nouvelle clé
+3. **Révoquez la clé compromise** avec `/revoke_auth_token`
+4. **Examinez les journaux d&#39;accès** afin d&#39;identifier toute utilisation non autorisée
+5. **Mettez en place des mesures de sécurité supplémentaires**, telles qu&#39;une liste d&#39;adresses IP autorisées, si cette option est disponible
+
+<div id="troubleshooting">
+  ## Dépannage
+</div>
+
+| Problème                                               | Solution                                                                               |
+| ------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| « Échec de l&#39;authentification » après une rotation | Assurez-vous que la nouvelle clé a bien été propagée à toutes les instances de service |
+| Impossible de révoquer une clé                         | Vérifiez que vous utilisez une clé API valide disposant des permissions appropriées    |
+| Échec de la génération de clé                          | Vérifiez l&#39;état de votre compte et les limites de votre palier d&#39;API           |
+| Les services utilisent toujours l&#39;ancienne clé     | Mettez en place une rotation des secrets adaptée dans votre pipeline de déploiement    |
+
+<Info>
+  Pour toute aide complémentaire sur la gestion des clés API, consultez la [page Clés API](https://console.perplexity.ai/project/keys) de la console API ou contactez notre équipe d&#39;assistance.
+</Info>

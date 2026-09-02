@@ -1,0 +1,656 @@
+---
+title: "Extracción de salida estructurada"
+description: "Obtén respuestas JSON tipadas y validadas con esquema desde la Agent API usando response_format con esquemas JSON para extracción de datos, canalizaciones e investigación estructurada"
+---
+
+Esta guía muestra cómo extraer JSON estructurado y tipado desde la Agent API mediante el parámetro `response_format` con esquemas JSON. Aprenderás patrones prácticos para extraer datos de productos, hallazgos de investigación y tablas comparativas, así como para crear canalizaciones de datos fiables, todo ello con conformidad garantizada con el esquema.
+
+<Info>
+  La Agent API aplica tu esquema JSON durante la generación, por lo que las respuestas siempre se ajustan a la estructura especificada. Para consultar la referencia completa de parámetros, ve a [Control de salida](/es/docs/agent-api/output-control).
+</Info>
+
+<div id="prerequisites">
+  ## Requisitos previos
+</div>
+
+Instala el SDK de Perplexity:
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+Si aún no tienes una API key:
+
+<Card title="Obtén tu API key de Perplexity" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Haz clic aquí" href="https://perplexity.ai/account/api">
+  Ve a la pestaña **API Keys** del Portal de API y genera una nueva clave.
+</Card>
+
+Después, exporta tu API key como variable de entorno:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-structured-outputs-work">
+  ## Cómo funcionan las salidas estructuradas
+</div>
+
+Cuando pasas `response_format` con `type: "json_schema"`, la Agent API restringe la salida del model para que coincida exactamente con tu esquema. La respuesta en `output_text` es una cadena JSON válida que puedes parsear directamente.
+
+El formato del esquema sigue [JSON Schema](https://json-schema.org/) con algunas restricciones propias de la Perplexity API:
+
+* **Sin esquemas recursivos.** El esquema no puede hacer referencia a sí mismo.
+* **Sin objetos sin restringir.** Evita `additionalProperties: true` o tipos `object` sin propiedades definidas.
+* **Se requieren esquemas con nombre.** Cada esquema necesita un campo `name` que lo identifique.
+
+<div id="basic-extracting-a-single-entity">
+  ## Básico: extraer una sola entidad
+</div>
+
+Extrae datos estructurados sobre un único tema, fundamentados con búsqueda web.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What is the current market cap, CEO, and founding year of NVIDIA?",
+      tools=[{"type": "web_search"}],
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "company_profile",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "company_name": {"type": "string"},
+                      "ticker": {"type": "string"},
+                      "ceo": {"type": "string"},
+                      "founded_year": {"type": "integer"},
+                      "market_cap_usd": {"type": "string"},
+                      "sector": {"type": "string"},
+                      "headquarters": {"type": "string"},
+                  },
+                  "required": ["company_name", "ticker", "ceo", "founded_year", "market_cap_usd", "sector", "headquarters"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  company = json.loads(response.output_text)
+  print(f"{company['company_name']} ({company['ticker']})")
+  print(f"  CEO: {company['ceo']}")
+  print(f"  Founded: {company['founded_year']}")
+  print(f"  Market Cap: {company['market_cap_usd']}")
+  print(f"  Sector: {company['sector']}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What is the current market cap, CEO, and founding year of NVIDIA?",
+      tools: [{ type: "web_search" }],
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "company_profile",
+              schema: {
+                  type: "object",
+                  properties: {
+                      company_name: { type: "string" },
+                      ticker: { type: "string" },
+                      ceo: { type: "string" },
+                      founded_year: { type: "integer" },
+                      market_cap_usd: { type: "string" },
+                      sector: { type: "string" },
+                      headquarters: { type: "string" },
+                  },
+                  required: ["company_name", "ticker", "ceo", "founded_year", "market_cap_usd", "sector", "headquarters"],
+              },
+          },
+      },
+  });
+
+  const company = JSON.parse(response.output_text);
+  console.log(`${company.company_name} (${company.ticker})`);
+  console.log(`  CEO: ${company.ceo}`);
+  console.log(`  Founded: ${company.founded_year}`);
+  console.log(`  Market Cap: ${company.market_cap_usd}`);
+  console.log(`  Sector: ${company.sector}`);
+  ```
+</CodeGroup>
+
+<div id="extracting-lists-product-comparisons">
+  ## Extracción de listas: comparación de productos
+</div>
+
+Extrae una comparación estructurada de varios elementos a partir de una sola consulta.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Compare the top 3 electric vehicles under $40,000 available in the US in 2026",
+      tools=[{"type": "web_search"}],
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "ev_comparison",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "vehicles": {
+                          "type": "array",
+                          "items": {
+                              "type": "object",
+                              "properties": {
+                                  "make": {"type": "string"},
+                                  "model": {"type": "string"},
+                                  "year": {"type": "integer"},
+                                  "starting_price_usd": {"type": "integer"},
+                                  "range_miles": {"type": "integer"},
+                                  "battery_kwh": {"type": "number"},
+                                  "pros": {"type": "array", "items": {"type": "string"}},
+                                  "cons": {"type": "array", "items": {"type": "string"}},
+                              },
+                              "required": ["make", "model", "year", "starting_price_usd", "range_miles", "battery_kwh", "pros", "cons"],
+                              "additionalProperties": false,
+                          },
+                      },
+                      "comparison_date": {"type": "string"},
+                  },
+                  "required": ["vehicles", "comparison_date"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  data = json.loads(response.output_text)
+  print(f"EV Comparison (as of {data['comparison_date']})\n")
+
+  for v in data["vehicles"]:
+      print(f"{v['year']} {v['make']} {v['model']}")
+      print(f"  Price: ${v['starting_price_usd']:,}")
+      print(f"  Range: {v['range_miles']} mi | Battery: {v['battery_kwh']} kWh")
+      print(f"  Pros: {', '.join(v['pros'])}")
+      print(f"  Cons: {', '.join(v['cons'])}")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "Compare the top 3 electric vehicles under $40,000 available in the US in 2026",
+      tools: [{ type: "web_search" }],
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "ev_comparison",
+              schema: {
+                  type: "object",
+                  properties: {
+                      vehicles: {
+                          type: "array",
+                          items: {
+                              type: "object",
+                              properties: {
+                                  make: { type: "string" },
+                                  model: { type: "string" },
+                                  year: { type: "integer" },
+                                  starting_price_usd: { type: "integer" },
+                                  range_miles: { type: "integer" },
+                                  battery_kwh: { type: "number" },
+                                  pros: { type: "array", items: { type: "string" } },
+                                  cons: { type: "array", items: { type: "string" } },
+                              },
+                              required: ["make", "model", "year", "starting_price_usd", "range_miles", "battery_kwh", "pros", "cons"],
+                          },
+                      },
+                      comparison_date: { type: "string" },
+                  },
+                  required: ["vehicles", "comparison_date"],
+              },
+          },
+      },
+  });
+
+  const data = JSON.parse(response.output_text);
+  console.log(`EV Comparison (as of ${data.comparison_date})\n`);
+
+  for (const v of data.vehicles) {
+      console.log(`${v.year} ${v.make} ${v.model}`);
+      console.log(`  Price: $${v.starting_price_usd.toLocaleString()}`);
+      console.log(`  Range: ${v.range_miles} mi | Battery: ${v.battery_kwh} kWh`);
+      console.log(`  Pros: ${v.pros.join(", ")}`);
+      console.log(`  Cons: ${v.cons.join(", ")}`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<div id="research-findings-extraction">
+  ## Extracción de hallazgos de investigación
+</div>
+
+Convierte investigaciones fundamentadas en búsquedas web a un formato estructurado apto para informes o bases de datos.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the most recent clinical trial results for GLP-1 receptor agonists in treating obesity?",
+      tools=[{"type": "web_search"}],
+      instructions="Provide findings from the most recent clinical trials. Include specific numbers and trial names where available.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "research_findings",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "topic": {"type": "string"},
+                      "findings": {
+                          "type": "array",
+                          "items": {
+                              "type": "object",
+                              "properties": {
+                                  "trial_name": {"type": "string"},
+                                  "drug": {"type": "string"},
+                                  "phase": {"type": "string"},
+                                  "key_result": {"type": "string"},
+                                  "sample_size": {"type": "string"},
+                                  "publication_year": {"type": "integer"},
+                              },
+                              "required": ["trial_name", "drug", "phase", "key_result", "sample_size", "publication_year"],
+                              "additionalProperties": false,
+                          },
+                      },
+                      "summary": {"type": "string"},
+                  },
+                  "required": ["topic", "findings", "summary"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  data = json.loads(response.output_text)
+  print(f"Topic: {data['topic']}\n")
+  print(f"Summary: {data['summary']}\n")
+
+  for finding in data["findings"]:
+      print(f"  {finding['trial_name']} ({finding['drug']}, Phase {finding['phase']})")
+      print(f"    Result: {finding['key_result']}")
+      print(f"    N={finding['sample_size']}, Published: {finding['publication_year']}")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the most recent clinical trial results for GLP-1 receptor agonists in treating obesity?",
+      tools: [{ type: "web_search" }],
+      instructions: "Provide findings from the most recent clinical trials. Include specific numbers and trial names where available.",
+      response_format: {
+          type: "json_schema",
+          json_schema: {
+              name: "research_findings",
+              schema: {
+                  type: "object",
+                  properties: {
+                      topic: { type: "string" },
+                      findings: {
+                          type: "array",
+                          items: {
+                              type: "object",
+                              properties: {
+                                  trial_name: { type: "string" },
+                                  drug: { type: "string" },
+                                  phase: { type: "string" },
+                                  key_result: { type: "string" },
+                                  sample_size: { type: "string" },
+                                  publication_year: { type: "integer" },
+                              },
+                              required: ["trial_name", "drug", "phase", "key_result", "sample_size", "publication_year"],
+                          },
+                      },
+                      summary: { type: "string" },
+                  },
+                  required: ["topic", "findings", "summary"],
+              },
+          },
+      },
+  });
+
+  const data = JSON.parse(response.output_text);
+  console.log(`Topic: ${data.topic}\n`);
+  console.log(`Summary: ${data.summary}\n`);
+
+  for (const finding of data.findings) {
+      console.log(`  ${finding.trial_name} (${finding.drug}, Phase ${finding.phase})`);
+      console.log(`    Result: ${finding.key_result}`);
+      console.log(`    N=${finding.sample_size}, Published: ${finding.publication_year}`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<div id="building-a-data-pipeline">
+  ## Crear una canalización de datos
+</div>
+
+Encadena la extracción con salida estructurada en una canalización que consulta, extrae y almacena datos estructurados.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import csv
+  import io
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  SCHEMA = {
+      "type": "json_schema",
+      "json_schema": {
+          "name": "startup_funding",
+          "schema": {
+              "type": "object",
+              "properties": {
+                  "companies": {
+                      "type": "array",
+                      "items": {
+                          "type": "object",
+                          "properties": {
+                              "name": {"type": "string"},
+                              "round": {"type": "string"},
+                              "amount_usd": {"type": "string"},
+                              "lead_investor": {"type": "string"},
+                              "sector": {"type": "string"},
+                              "date": {"type": "string"},
+                          },
+                          "required": ["name", "round", "amount_usd", "lead_investor", "sector", "date"],
+                          "additionalProperties": false,
+                      },
+                  },
+              },
+              "required": ["companies"],
+              "additionalProperties": false,
+          },
+      },
+  }
+
+
+  def extract_funding_rounds(sector: str) -> list[dict]:
+      """Consulta la API y devuelve datos estructurados de financiación para un sector."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=f"List the 5 largest startup funding rounds in {sector} from the past 3 months",
+          tools=[{"type": "web_search"}],
+          response_format=SCHEMA,
+      )
+      data = json.loads(response.output_text)
+      return data["companies"]
+
+
+  def pipeline(sectors: list[str]) -> str:
+      """Ejecuta la extracción en varios sectores y genera un CSV."""
+      all_rows = []
+      for sector in sectors:
+          print(f"Extracting: {sector}...")
+          rows = extract_funding_rounds(sector)
+          for row in rows:
+              row["query_sector"] = sector
+              all_rows.append(row)
+
+      # Convertir a CSV
+      output = io.StringIO()
+      writer = csv.DictWriter(output, fieldnames=["query_sector", "name", "round", "amount_usd", "lead_investor", "sector", "date"])
+      writer.writeheader()
+      writer.writerows(all_rows)
+      return output.getvalue()
+
+
+  if __name__ == "__main__":
+      csv_output = pipeline(["AI infrastructure", "climate tech", "biotech"])
+      print(csv_output)
+  ```
+</CodeGroup>
+
+<div id="schema-design-constraints">
+  ## Restricciones de diseño de esquemas
+</div>
+
+<Warning>
+  La Agent API impone estas restricciones a los esquemas JSON:
+
+  * **`additionalProperties` debe ser `false`.** Cada `"type": "object"` del esquema debe incluir `"additionalProperties": false`. Esto aplica tanto al esquema de nivel superior como a todos los objetos anidados.
+  * **Sin esquemas recursivos.** Un esquema no puede referenciarse a sí mismo mediante un `$ref` que apunte a su propia definición.
+  * **Sin diccionarios sin restricciones.** Evita usar `"type": "object"` sin `properties`. Todo tipo de objeto debe tener propiedades definidas explícitamente.
+  * **Todas las propiedades deberían ser `required`.** Aunque se permiten propiedades opcionales, marcarlas todas como obligatorias garantiza una estructura de salida uniforme.
+  * **Sin `$ref` a esquemas externos.** Todas las definiciones deben ser en línea.
+</Warning>
+
+<div id="patterns-that-work">
+  ### Patrones que funcionan
+</div>
+
+```json theme={null}
+// ✅ Objeto plano con campos tipados
+{
+  "type": "object",
+  "properties": {
+    "name": { "type": "string" },
+    "count": { "type": "integer" },
+    "tags": { "type": "array", "items": { "type": "string" } }
+  },
+  "required": ["name", "count", "tags"]
+}
+
+// ✅ Array de objetos tipados
+{
+  "type": "array",
+  "items": {
+    "type": "object",
+    "properties": {
+      "key": { "type": "string" },
+      "value": { "type": "number" }
+    },
+    "required": ["key", "value"]
+  }
+}
+
+// ✅ Enum para valores restringidos
+{
+  "type": "string",
+  "enum": ["low", "medium", "high"]
+}
+```
+
+<div id="patterns-to-avoid">
+  ### Patrones que se deben evitar
+</div>
+
+```json theme={null}
+// ❌ Esquema recursivo (autorreferente)
+{
+  "type": "object",
+  "properties": {
+    "children": { "$ref": "#" }
+  }
+}
+
+// ❌ Objeto sin restricciones
+{
+  "type": "object",
+  "additionalProperties": true
+}
+
+// ❌ Tipo dict/map sin definir
+{
+  "type": "object"
+}
+```
+
+<div id="combining-structured-output-with-function-calling">
+  ## Combinar salidas estructuradas con llamadas a funciones
+</div>
+
+Puedes usar `response_format` junto con herramientas personalizadas. El modelo llama primero a tus funciones y luego da formato a la respuesta final conforme a tu esquema.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  tools = [
+      {"type": "web_search"},
+      {
+          "type": "function",
+          "name": "get_internal_price",
+          "description": "Look up the internal wholesale price for a product SKU.",
+          "parameters": {
+              "type": "object",
+              "properties": {
+                  "sku": {"type": "string", "description": "Product SKU"}
+              },
+              "required": ["sku"]
+          },
+      },
+  ]
+
+
+  def get_internal_price(sku: str) -> dict:
+      prices = {"SKU-A100": 8500, "SKU-H100": 25000, "SKU-4090": 1600}
+      return {"sku": sku, "wholesale_price_usd": prices.get(sku, 0)}
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      tools=tools,
+      input="Get the current retail price for the NVIDIA H100 GPU from the web, and also look up our internal wholesale price for SKU-H100. Compare them.",
+      response_format={
+          "type": "json_schema",
+          "json_schema": {
+              "name": "price_comparison",
+              "schema": {
+                  "type": "object",
+                  "properties": {
+                      "product": {"type": "string"},
+                      "retail_price_usd": {"type": "string"},
+                      "wholesale_price_usd": {"type": "integer"},
+                      "margin_percent": {"type": "string"},
+                      "source": {"type": "string"},
+                  },
+                  "required": ["product", "retail_price_usd", "wholesale_price_usd", "margin_percent", "source"],
+                  "additionalProperties": false,
+              },
+          },
+      },
+  )
+
+  # Gestionar las llamadas a funciones
+  while any(item.type == "function_call" for item in response.output):
+      next_input = [item.model_dump() for item in response.output]
+      for item in response.output:
+          if item.type == "function_call":
+              args = json.loads(item.arguments)
+              result = get_internal_price(**args)
+              next_input.append({
+                  "type": "function_call_output",
+                  "call_id": item.call_id,
+                  "output": json.dumps(result),
+              })
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          tools=tools,
+          input=next_input,
+          response_format={
+              "type": "json_schema",
+              "json_schema": {
+                  "name": "price_comparison",
+                  "schema": {
+                      "type": "object",
+                      "properties": {
+                          "product": {"type": "string"},
+                          "retail_price_usd": {"type": "string"},
+                          "wholesale_price_usd": {"type": "integer"},
+                          "margin_percent": {"type": "string"},
+                          "source": {"type": "string"},
+                      },
+                      "required": ["product", "retail_price_usd", "wholesale_price_usd", "margin_percent", "source"],
+                      "additionalProperties": false,
+                  },
+              },
+          },
+      )
+
+  data = json.loads(response.output_text)
+  print(f"Product: {data['product']}")
+  print(f"Retail: {data['retail_price_usd']} (from {data['source']})")
+  print(f"Wholesale: ${data['wholesale_price_usd']:,}")
+  print(f"Margin: {data['margin_percent']}")
+  ```
+</CodeGroup>
+
+<Tip>
+  Cuando combines salidas estructuradas con llamadas a funciones, pasa el mismo `response_format` en cada turno del bucle multiturno. El esquema solo se aplica a la salida de texto final, no a los argumentos de las llamadas a funciones.
+</Tip>
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Control de salida" icon="adjustments" href="/es/docs/agent-api/output-control">
+    Referencia completa de response&#95;format, streaming y ajuste del formato de salida.
+  </Card>
+
+  <Card title="Llamada a funciones" icon="code-circle" href="/es/docs/cookbook/articles/function-calling-e2e/README">
+    Combina salidas estructuradas con llamadas a funciones en varios turnos.
+  </Card>
+
+  <Card title="Inicio rápido de la Agent API" icon="rocket" href="/es/docs/agent-api/quickstart">
+    Empieza a usar la Agent API en cuestión de minutos.
+  </Card>
+
+  <Card title="Modelos de la Agent API" icon="brain" href="/es/docs/agent-api/models">
+    Elige el model adecuado para tareas de extracción estructurada.
+  </Card>
+</CardGroup>

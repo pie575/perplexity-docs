@@ -1,0 +1,520 @@
+---
+title: "スキル"
+description: "組み込みスキル、インラインスキル、カスタムスキルによって、エージェントに必要なときだけドメイン専門知識を与えます。"
+---
+
+スキルは、エージェントに必要なタイミングでドメイン専門知識を提供する仕組みです。モデルは各スキルを名前と説明のみで把握し、必要だと判断したときにはじめて完全な指示を読み込みます。これは [Designing, Refining, and Maintaining Agent Skills](https://research.perplexity.ai/articles/designing-refining-and-maintaining-agent-skills-at-perplexity) で説明されている段階的開示 (progressive disclosure) のパターンです。
+
+<div id="why-use-skills">
+  ## スキルを使う理由
+</div>
+
+* **専門化。** 基本のプロンプトに加えて、ドキュメント生成やドメイン固有のワークフローを追加できます。
+* **使ったときだけコンテキストを消費。** スキルが読み込まれるまでは、名前と説明の分のコストしかかかりません。
+* **組み合わせ。** 1回のリクエストで、組み込みスキルとインラインの指示を併用できます。
+* **再利用。** カスタムスキルは一度アップロードすれば、どのリクエストからでもIDで参照できます。
+
+<div id="how-skills-work">
+  ## スキルの仕組み
+</div>
+
+リクエストに `skills` 配列を渡します。各エントリは、カタログから選択した**組み込み**スキル、リクエスト内で定義する**インライン**スキル、または自分で作成して Perplexity にアップロードした**カスタム**スキルのいずれかです。
+1 回のリクエストで、種類を問わず最大 **16 個のスキル**を組み合わせられます。
+
+| 段階   | モデル が参照する内容                                                                 |
+| ---- | ----------------------------------------------------------------------------- |
+| 検出   | すべてのスキルの名前と説明のインデックス。                                                         |
+| 読み込み | モデル が `load_skill` を呼び出したときに返される、スキル本体の全文。                                  |
+| ファイル | 組み込みスキルとカスタムスキルは、読み込み時に補助ファイルを sandbox にマウントします。インラインスキルは指示を返すだけで、何もマウントしません。 |
+
+説明文はルーティングのトリガーになります。どのような場合にそのスキルを読み込むべきかが モデル に伝わるように記述してください。
+
+スキルの読み込みには 1 ステップを消費します。モデル は 1 ターンを使って `load_skill` を呼び出して本体を読み込み、それに基づいて動作するのは次のターン以降です。
+[`max_steps`](/ja/docs/agent-api/building-agents/define-the-run#customize-the-loop-max-steps) を省略して モデル を直接呼び出すリクエストは 1 ステップしか実行されないため、モデル はスキルを読み込めても、それに基づいて動作することはできません。
+読み込みと実際の作業の両方に足りるだけの値を `max_steps` に設定してください。
+
+<div id="built-in-skills">
+  ## 組み込みスキル
+</div>
+
+組み込みスキルは、次のような1つのJSONオブジェクトで選択します: `{ "type": "builtin", "name": "office/pdf" }`。
+
+<Tabs>
+  <Tab title="office">
+    <Card title="Office">
+      PDF、Word、PowerPoint、Excelの各ドキュメントをゼロから生成し、構造の検証と目視によるQAを行います。特定のリーフを個別に選択するか、`office` を選択して4つすべてをまとめて付与し、形式の判断をモデルに委ねることもできます。
+    </Card>
+
+    | 名前            | 説明                                       | 選択方法                                           |
+    | ------------- | ---------------------------------------- | ---------------------------------------------- |
+    | `office`      | 下記4つのリーフすべてを付与する包括スキル。                   | `{ "type": "builtin", "name": "office" }`      |
+    | `office/pdf`  | ページ単位の目視QAを行いながらPDFドキュメントを作成。            | `{ "type": "builtin", "name": "office/pdf" }`  |
+    | `office/docx` | 編集可能なWordドキュメント (OOXML) を作成。             | `{ "type": "builtin", "name": "office/docx" }` |
+    | `office/pptx` | スライド単位の目視QAを行いながらPowerPointプレゼンテーションを作成。 | `{ "type": "builtin", "name": "office/pptx" }` |
+    | `office/xlsx` | 数式やグラフを検証し、目視QAを行いながらExcelブックを作成。        | `{ "type": "builtin", "name": "office/xlsx" }` |
+
+    <Note>
+      Officeスキルはドキュメントをゼロから作成するものです。アップロードしたファイルを編集することはできません。
+    </Note>
+  </Tab>
+</Tabs>
+
+<div id="inline-skills">
+  ## インラインスキル
+</div>
+
+スタイルガイド、プレイブック、デザインシステム、社内ルールなど、モデルがオンデマンドで読み込む一回限りの指示やアカウント固有の指示には、インラインスキルを使用します。
+
+| フィールド          | 説明                                       |
+| -------------- | ---------------------------------------- |
+| `type`         | 必須。`"inline"` を指定します。                    |
+| `name`         | 必須。1〜64文字。小文字のASCII英字、数字、単一のハイフンが使用できます。 |
+| `description`  | 必須。1〜1,024バイト。ルーティングのトリガーとなるように記述します。    |
+| `instructions` | 必須。1〜65,536バイト。読み込み時にモデルが参照するスキル本文です。  |
+
+```json theme={null}
+{
+  "type": "inline",
+  "name": "design-system",
+  "description": "Load when creating documents that must follow the house design system.",
+  "instructions": "Model: a 1970s letterpress broadsheet financial page. Paper #EDE9DE; body ink #232220; ..."
+}
+```
+
+インラインスキルには、ファイルも依存関係も sandbox マウントも再利用可能なライブラリもなく、レスポンスにそのまま返されることもありません。
+
+<div id="example-one-off-inline-skill">
+  ### 例: 単発のインラインスキル
+</div>
+
+`office/pdf` とインラインの `design-system` スキルを組み合わせて、自社スタイルに沿った1ページのAI業界株式レポートを生成します。
+ガイダンスがそのリクエストに固有のものである間は、この形式を使用してください。内容が固まったら、[カスタムスキル](#custom-skills)としてアップロードし、IDで参照するようにします。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  design_book = """
+  Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.
+
+  Colors
+  - Paper #EDE9DE; tinted boxes and alternating table rows #E3DFD2.
+  - Body ink #232220 — soft, never hard black (ink spread on newsprint).
+  - Headlines and rules may deepen to #141311; faded ink #5C5850 for captions and secondary text.
+  - No second color anywhere. Up moves: bold with a ▲. Down moves: parentheses with a ▼.
+
+  Typography
+  - Body: low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated.
+  - Headlines: bold condensed serif with a smaller deck beneath.
+  - Kickers and table headers: condensed grotesque caps (Franklin Gothic or Oswald), letterspaced.
+  - Tables: agate style — 7-8pt condensed, tabular figures.
+
+  Layout
+  - One page, ~18mm margins.
+  - Nameplate in blackletter or heavy serif, with a folio line (date, edition, price) set between an Oxford rule (thick over hairline).
+  - Ticker summary as a boxed agate strip below the nameplate.
+  - News timeline in 3-4 narrow justified columns divided by hairline column rules; each item opens with a bold caps dateline ('LONDON, JULY 17 —').
+  - Data table ruled with hairlines only.
+  - Pack the page — separate blocks with cutoff rules, not white space.
+
+  Imagery
+  - Grayscale halftone only, with a hairline keyline and an italic caption.
+
+  Avoid
+  - Second colors, gradients, shadows, rounded corners, sans-serif body text, and generous white space.
+  """
+
+  response = client.responses.create(
+      preset="xhigh",
+      background=True,
+      skills=[
+          {
+              "type": "inline",
+              "name": "design-system",
+              "description": "Load when creating documents that must follow the house design system.",
+              "instructions": design_book,
+          },
+          {"type": "builtin", "name": "office/pdf"},
+      ],
+      input=(
+          "Create a one-page AI-industry stock report. Include NVDA, MSFT, "
+          "GOOGL, AMD, and AVGO with latest price and weekly move. Include "
+          "this week's key AI news, labeled by date and tagged to the ticker "
+          "it moved. Follow the design-system skill."
+      ),
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(response.status)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const designBook = `
+  Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.
+
+  Colors
+  - Paper #EDE9DE; tinted boxes and alternating table rows #E3DFD2.
+  - Body ink #232220 — soft, never hard black (ink spread on newsprint).
+  - Headlines and rules may deepen to #141311; faded ink #5C5850 for captions and secondary text.
+  - No second color anywhere. Up moves: bold with a ▲. Down moves: parentheses with a ▼.
+
+  Typography
+  - Body: low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated.
+  - Headlines: bold condensed serif with a smaller deck beneath.
+  - Kickers and table headers: condensed grotesque caps (Franklin Gothic or Oswald), letterspaced.
+  - Tables: agate style — 7-8pt condensed, tabular figures.
+
+  Layout
+  - One page, ~18mm margins.
+  - Nameplate in blackletter or heavy serif, with a folio line (date, edition, price) set between an Oxford rule (thick over hairline).
+  - Ticker summary as a boxed agate strip below the nameplate.
+  - News timeline in 3-4 narrow justified columns divided by hairline column rules; each item opens with a bold caps dateline ('LONDON, JULY 17 —').
+  - Data table ruled with hairlines only.
+  - Pack the page — separate blocks with cutoff rules, not white space.
+
+  Imagery
+  - Grayscale halftone only, with a hairline keyline and an italic caption.
+
+  Avoid
+  - Second colors, gradients, shadows, rounded corners, sans-serif body text, and generous white space.
+  `;
+
+  let response = await client.responses.create({
+    preset: 'xhigh',
+    background: true,
+    skills: [
+      {
+        type: 'inline',
+        name: 'design-system',
+        description: 'Load when creating documents that must follow the house design system.',
+        instructions: designBook,
+      },
+      { type: 'builtin', name: 'office/pdf' },
+    ],
+    input:
+      'Create a one-page AI-industry stock report. Include NVDA, MSFT, ' +
+      'GOOGL, AMD, and AVGO with latest price and weekly move. Include ' +
+      'this week\'s key AI news, labeled by date and tagged to the ticker ' +
+      'it moved. Follow the design-system skill.',
+  });
+
+  while (response.status === 'queued' || response.status === 'in_progress') {
+    await new Promise((r) => setTimeout(r, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(response.status);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "xhigh",
+      "background": true,
+      "skills": [
+        {
+          "type": "inline",
+          "name": "design-system",
+          "description": "Load when creating documents that must follow the house design system.",
+          "instructions": "Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.\nColors: paper #EDE9DE (tinted boxes and alternating table rows #E3DFD2); body ink #232220 (soft, never hard black); headlines and rules may deepen to #141311; faded ink #5C5850 for captions. No second color. Up moves: bold + ▲; down moves: parentheses + ▼.\nTypography: body low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated; headlines bold condensed serif with a smaller deck; kickers and table headers condensed grotesque caps (Franklin Gothic or Oswald), letterspaced; tables agate 7-8pt condensed with tabular figures.\nLayout: one page, ~18mm margins; blackletter or heavy-serif nameplate with a folio line (date, edition, price) between an Oxford rule (thick over hairline); boxed agate ticker strip below; news timeline in 3-4 narrow justified columns with hairline column rules, items opening with bold caps datelines ('LONDON, JULY 17 —'); data table ruled with hairlines only. Pack the page — cutoff rules, not padding.\nImagery: grayscale halftone with hairline keyline and italic caption.\nAvoid: second colors, gradients, shadows, rounded corners, sans body text, generous white space."
+        },
+        { "type": "builtin", "name": "office/pdf" }
+      ],
+      "input": "Create a one-page AI-industry stock report. Include NVDA, MSFT, GOOGL, AMD, and AVGO with latest price and weekly move. Include this week'\''s key AI news, labeled by date and tagged to the ticker it moved. Follow the design-system skill."
+    }' | jq
+  ```
+</CodeGroup>
+
+ファイルのバイトデータは、[ファイルの操作](/ja/docs/agent-api/working-with-files)で説明するファイルエンドポイントから取得します。
+
+<div id="custom-skills">
+  ## カスタムスキル
+</div>
+
+カスタムスキルとは、ユーザー自身が作成して Perplexity にアップロードするスキルです。指示と補助ファイルをまとめたバージョン管理されたバンドルで、[API Portal](https://console.perplexity.ai/project/skills)で管理し、任意のリクエストから ID で参照できます。
+カスタムスキルはオープンな [Agent Skills フォーマット](https://agentskills.io/specification)を使用します。
+
+各カスタムスキルは単一の [Project](/ja/docs/getting-started/projects#what-is-a-project) に紐付けられ、その中に存在します。
+スキルを所有するのは Project です。その Project 内のどの API key からでも参照できますが、他の Project の key からは参照できません。
+カスタムスキルは、自前のハーネス内で Agent API を実行する用途を想定して設計されています。スキルはパイプラインが期待する手順と出力契約を保持し、コードとは独立してバージョン管理されます。
+
+バンドルに含められるのはテキストだけではありません。指示と併せて `.py` や `.sh` のスクリプトを同梱でき、モデル はそれらを [Sandbox](/ja/docs/agent-api/tools/sandbox) で実行します。つまりスキルは、作業の*進め方*だけでなく、それを実際に行うコードや、モデル が必要に応じて読み込む参照ファイルまで一緒に持ち運べるということです。
+
+<div id="parameters">
+  ### パラメータ
+</div>
+
+| フィールド     | 型      | 必須  | 説明                                                 |
+| --------- | ------ | --- | -------------------------------------------------- |
+| `type`    | string | はい  | `"custom"` を指定します。                                 |
+| `id`      | string | はい  | API Portal からコピーしたスキル ID。`skill_...` の形式です。        |
+| `version` | string | いいえ | 読み込むバージョン、または `"latest"`。省略した場合は `"latest"` になります。 |
+
+スキルの名前と説明は、保存されたバンドルから取得されます。
+
+<div id="create-a-custom-skill-bundle">
+  ### カスタムスキルバンドルを作成する
+</div>
+
+スキルバンドルは、トップレベルのフォルダーを1つだけ持ち、そのフォルダー内に `SKILL.md` を1つだけ含むZIPアーカイブです。
+
+```text theme={null}
+fact-check/
+├── SKILL.md
+├── scripts/
+│   └── check_factcheck.py
+└── references/
+    └── verification-rubric.md
+```
+
+<Card title="サンプルバンドルをダウンロード" icon="download" horizontal="True" href="/ja/docs/assets/skills/fact-check.zip">
+  `fact-check.zip` — API Portal にそのままアップロードできる、ここで紹介しているバンドルです。
+</Card>
+
+`SKILL.md` は、モデルがスキルを検出する方法を定義する [YAML フロントマター](https://agentskills.io/specification#frontmatter)で始まり、その後にスキル本文が続きます。
+
+<Accordion title="SKILL.md の例">
+  ```markdown theme={null}
+  ---
+  name: fact-check
+  description: Load before answering a question whose answer contains factual claims — dates, numbers, names, prices, or events — to verify them before responding. Do not load for opinions, code, or creative writing.
+  ---
+
+  You are the verification gate of an answer pipeline. Verify your own draft
+  before it reaches the user.
+
+  Use the `web_search` tool for every lookup. Do not run searches or fetch
+  pages from inside the sandbox; reserve the sandbox for writing and validating
+  `fact_check.json`.
+
+  1. Draft the answer, then extract every factual claim from it: dates,
+     numbers, names, prices, events.
+  2. Verify each claim with the `web_search` tool, following
+     `references/verification-rubric.md` from this skill's folder.
+  3. Correct the draft wherever a claim fails verification.
+  4. Write the audit trail to `fact_check.json` with exactly these fields:
+     `claims` (list of objects with `claim`, `verdict`, `source_url`) and
+     `corrections` (integer).
+  5. Run `python scripts/check_factcheck.py fact_check.json` from this
+     skill's folder and fix every violation it reports until it passes.
+  6. Once the check passes, give the corrected answer.
+  ```
+</Accordion>
+
+description はガードの役割も兼ねます。スキルを読み込む**べきでない**場面もモデルに伝えられるため、リクエストのステップ予算を守れます。
+
+| フィールド         | ルール                                                              |
+| ------------- | ---------------------------------------------------------------- |
+| `name`        | 必須。1〜64 文字。使用できるのは小文字の英字、数字、単一のハイフンです。                           |
+| `description` | 必須。1〜1,024 バイト。ルーティングのトリガーです — スキルをいつ読み込むべきかがモデルに伝わるように記述してください。 |
+
+その他の[フロントマター](https://agentskills.io/specification#frontmatter)キーは無視されます。
+フロントマター以降はすべてスキル本文となり、モデルがスキルを読み込む際に返されます。
+
+バンドルにはあらゆる種類のファイルを含められます。モデルが必要に応じて読む参照ドキュメントや、[Sandbox](/ja/docs/agent-api/tools/sandbox) で実行する `.py`・`.sh` スクリプトなどです。Sandbox はネットワークにアクセスでき、`pip` でパッケージをインストールできます。
+補助ファイルは、モデルが読み込むまで token を消費しません。
+上記の例のように、本文から相対パスで参照してください。
+
+<div id="manage-custom-skills">
+  ### カスタムスキルの管理
+</div>
+
+1. [API Portalの Skills](https://console.perplexity.ai/project/skills) を開きます。
+2. **Create skill** を選択し、バンドルを `.zip` 形式でアップロードします。名前と説明は `SKILL.md` から読み取られます。
+   `SKILL.md` ファイル単体はアップロードできません。
+3. 一覧からスキル ID (`skill_...`) をコピーします。
+
+スキルの作成・更新・削除を行えるのはAdminのみです。
+[プロジェクト](/ja/docs/getting-started/projects) 内のどの API key からでも、リクエストでスキルを利用できます。
+各スキルのアクションメニューでは、**Update skill** (新しいファイルを新しいバージョンとしてアップロード) 、**Download files** (任意のバージョンをダウンロード) 、**Delete skill** (完全削除。すべてのバージョンが削除されます) も実行できます。
+
+<div id="use-a-custom-skill">
+  ### カスタムスキルを使う
+</div>
+
+カスタムスキルは、自前のパイプラインの中で Agent API を実行するために用意されています。スキルには、モデルが従うべき手順と、必ず通過しなければならない自己チェックが含まれており、プロンプトとは独立してバージョン管理できます。
+次のリクエストでは、事実確認を要する質問を投げ、上記のバンドルに含まれる `fact-check` スキルで自身の回答を検証するようモデルに指示します。
+`YOUR_SKILL_ID` は、API Portal からコピーした ID に置き換えてください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      max_steps=10,
+      tools=[{"type": "web_search"}],
+      skills=[{"type": "custom", "id": "YOUR_SKILL_ID"}],
+      input=(
+          "What were NVIDIA's total revenue and data center revenue in its "
+          "latest reported quarter? Use the fact-check skill to verify your "
+          "answer before responding."
+      ),
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    max_steps: 10,
+    tools: [{ type: 'web_search' }],
+    skills: [{ type: 'custom', id: 'YOUR_SKILL_ID' }],
+    input:
+      "What were NVIDIA's total revenue and data center revenue in its " +
+      'latest reported quarter? Use the fact-check skill to verify your ' +
+      'answer before responding.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "max_steps": 10,
+      "tools": [ { "type": "web_search" } ],
+      "skills": [
+        { "type": "custom", "id": "YOUR_SKILL_ID" }
+      ],
+      "input": "What were NVIDIAs total revenue and data center revenue in its latest reported quarter? Use the fact-check skill to verify your answer before responding."
+    }' | jq
+  ```
+</CodeGroup>
+
+モデルはまず回答の下書きを作成し、各主張を web search で検証して、通らなかった箇所を修正したうえで `fact_check.json` を書き出し、バンドルされたバリデーターを sandbox で実行します。つまり、この自己チェックを通過してから回答することになります。
+
+レスポンスの `output` 配列には、読み込まれたスキルが `skill_loaded` 項目として記録され、続いて実行中の sandbox のステップ (スキルの参照ファイルの読み取り、`fact_check.json` の書き込み、バリデーターの実行) が並び、最後がアシスタントの `message` になります。
+
+<Accordion title="レスポンスの output（一部省略）">
+  ```json theme={null}
+  [
+    { "type": "skill_loaded", "name": "fact-check" },
+    {
+      "type": "sandbox_read_file",
+      "call_id": "call_...",
+      "file_path": "/home/user/workspace/skills/fact-check/references/verification-rubric.md",
+      "start_line": 1,
+      "total_lines": 22,
+      "content": "# Verification rubric\n..."
+    },
+    {
+      "type": "sandbox_write_file",
+      "call_id": "call_...",
+      "file_path": "/home/user/workspace/fact_check.json",
+      "size_bytes": 939
+    },
+    {
+      "type": "sandbox_results",
+      "call_id": "call_...",
+      "container_id": "01a0...",
+      "language": "python",
+      "code": "python scripts/check_factcheck.py fact_check.json",
+      "status": "completed",
+      "results": [
+        { "status": "completed", "exit_code": 0, "duration_ms": 1023, "stdout": "OK: fact_check.json satisfies the contract.\n", "stderr": "" }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_...",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        { "type": "output_text", "text": "NVIDIA's latest reported quarter was Q2 fiscal 2027, ended July 26, 2026 ...", "annotations": [] }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+ストリーミング時には、スキルが読み込まれるたびに `response.skill.loaded` イベントも送出されます。
+リクエストで渡した `skills` 配列は、レスポンスオブジェクトにはそのまま返されません。
+
+<div id="versioning">
+  ### バージョン管理
+</div>
+
+カスタムスキルをアップロードするたびに、新しいバージョンが作成されます。
+各バージョンは差分ではなく、バンドル全体の不変なスナップショットです。
+
+`version` を省略した場合 (または `"latest"` を指定した場合) は最新バージョンが選択され、その解決はリクエストが受理された時点で一度だけ行われます。実行中にアップロードを行っても、実行中のレスポンスが読み込む内容は変わりません。
+
+本番環境のトラフィックは、特定のバージョンに固定してください:
+
+```json theme={null}
+{ "type": "custom", "id": "YOUR_SKILL_ID", "version": "2" }
+```
+
+固定した `version` は常に同一のイミュータブルなバンドルを読み込み、変更されることはありません。変化するのは `"latest"` のみで、いずれかの Admin がバージョンをアップロードすると、`"latest"` を指定したリクエストで実行される内容が即座に変わります。
+バージョン履歴の確認と任意のバージョンのダウンロードは [API Portal](https://console.perplexity.ai/project/skills) から行えます。
+
+<div id="error-handling">
+  ### エラー処理
+</div>
+
+カスタムスキルの参照は、リクエスト送信時に検証されます。
+参照に不備がある場合、ランが開始する前に HTTP 400 でリクエスト全体が失敗します:
+
+| メッセージ                                                    | 意味                                                                                     | 推奨される対処                                              |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `A requested skill does not exist or is not accessible.` | ID がプロジェクト内のスキルと一致しません。入力ミス、削除済みのスキル、または別プロジェクトのキーが原因です。                               | API Portal から ID をコピーし、キーが同じプロジェクトのものであることを確認してください。 |
+| `A requested skill is invalid.`                          | ID または `version` の形式が不正です。`version` は `"2"` のようなバージョン番号の文字列、または `"latest"` である必要があります。 | 参照を修正してください。                                         |
+| `A requested skill conflicts with a built-in skill.`     | スキルの名前(`SKILL.md` に記載)が組み込みスキルの名前と重複しています。                                             | 新しいバージョンでスキルの名前を変更してください。                            |
+| `Two requested skills resolve to the same name.`         | `skills` 内の 2 つのエントリが同じ名前になっています。例えば、同じ名前のカスタムスキルとインラインスキルが指定されている場合などです。              | いずれか一方を削除するか、名前を変更してください。                            |
+
+ランの開始後に発生した失敗は、実行の流れの中で処理されます。ランの途中でスキルを読み込めなかった場合、エラーは モデル に返され、モデル はそのスキルなしで処理を続行し、レスポンスはそのまま完了します。
+
+<Note>
+  `skill_loaded` 出力項目は読み込みの試行を記録するため、読み込みに失敗した場合でも出力されます。エラーのテキストは モデル に渡され、レスポンスには含まれません。
+</Note>
+
+<div id="limits">
+  ### 制限
+</div>
+
+バンドルは以下の制限内に収める必要があり、アップロード時にチェックされます。
+
+* 合計 **32 MiB** — アップロードした ZIP と展開後の内容の両方に適用されます。
+* ファイル数は最大 **100 個**。
+* トップレベルフォルダは **1 つ**、`SKILL.md` も **1 つ** のみ。
+* ファイル名・フォルダ名は **255 文字** 以内。
+* カスタムスキルは **プロジェクトあたり最大 500 個**。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="エージェントスキルのクックブック" icon="book-open" href="/ja/docs/cookbook/articles/agent-skills/README">
+    日次のAI株式ニュースPDFを作成する手順を、ファイルのダウンロードから設計ブック全体まで詳しく解説します。
+  </Card>
+
+  <Card title="ファイルの取り扱い" icon="file" href="/ja/docs/agent-api/working-with-files" />
+
+  <Card title="バックグラウンドモード" icon="clock" href="/ja/docs/agent-api/background-mode" />
+
+  <Card title="Agent API リファレンス" icon="code" href="/ja/api-reference/agent-post" />
+</CardGroup>

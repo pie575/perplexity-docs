@@ -1,0 +1,195 @@
+---
+title: "在 Mastra 中使用 Perplexity"
+description: "在你的 Mastra 智能体和工具中使用 Perplexity 的 Agent API 与 Search API。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+[Mastra](https://mastra.ai) 是一个用于构建 AI 智能体和工作流的开源 TypeScript 框架。你可以通过 Open Responses 提供方将 Perplexity 的 [Agent API](/zh/docs/agent-api/quickstart) 接入 Mastra 的 `Agent`，也可以将 Search API 暴露为兼容 Mastra 的工具。
+
+<Info>
+  **Mastra** 提供统一的 `Agent` 接口、model 路由器以及工具/MCP 系统，用于编排 LLM 工作流。详见 [mastra.ai](https://mastra.ai)。
+</Info>
+
+Mastra 生态提供两种 Perplexity 集成方式：
+
+* **Agent API** — 通过 Open Responses 提供方在 Mastra `Agent` 中运行 [Agent API](/zh/docs/agent-api/quickstart)。
+* **Perplexity Search 工具** — 将 [Search API](/zh/docs/search/quickstart) 暴露为 Mastra 工具，获取按相关性排序的网页结果。
+
+<div id="api-key-setup">
+  ## API key 设置
+</div>
+
+两种集成方式都会从环境变量中读取你的 Perplexity API key：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+Search 工具也支持使用 `PPLX_API_KEY` 作为备选。
+
+<Card title="获取 API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 Perplexity 控制台中生成你的 API key。
+</Card>
+
+<div id="agent-api">
+  ## Agent API
+</div>
+
+<Warning>
+  Mastra 内置的 `perplexity` 和 `perplexity-agent` 模型路由提供方指向 Sonar Chat Completions，而它现已升级为 [Agent API](/zh/docs/agent-api/quickstart)——支持更多 model、工具以及基于研究的 preset。请按下文所示通过 [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses) 接入，或参阅[迁移指南](/zh/docs/agent-api/migrate-from-sonar/overview)。
+</Warning>
+
+[Agent API](/zh/docs/agent-api/quickstart) 采用 [Open Responses](https://www.openresponses.org/) 标准，因此 `@ai-sdk/open-responses` 提供方可直接与其连接。将该提供方指向 Perplexity 的 `/v1/responses` 端点，然后把 model id 传给你的 Mastra `Agent`：
+
+```bash theme={null}
+npm install @mastra/core @ai-sdk/open-responses
+```
+
+```ts theme={null}
+import { Agent } from "@mastra/core/agent";
+import { createOpenResponses } from "@ai-sdk/open-responses";
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const agent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: "Answer questions clearly and concisely.",
+  // 任意 Agent API 模型，例如 openai/gpt-5.6-luna（速度更快）或 openai/gpt-5.6-sol（质量更高）。
+  model: perplexity("openai/gpt-5.6-luna"),
+});
+
+const result = await agent.generate("Explain what the Perplexity Agent API is in two sentences.");
+console.log(result.text);
+```
+
+该智能体同时支持 `agent.generate(...)` 和 `agent.stream(...)`。完整的模型列表、内置工具和 preset 请参阅 [Agent API 快速开始](/zh/docs/agent-api/quickstart)。若需基于网页信息的回答，请添加 `web_search` 工具 (见下文) 。
+
+<div id="web-grounded-answers">
+  ## 基于网页搜索的回答
+</div>
+
+添加 [`web_search`](/zh/docs/agent-api/tools/web-search) 工具，让智能体的回答以 Perplexity 网页搜索的实时结果为依据。`@ai-sdk/open-responses` 提供方发送的请求体是固定的，不会将 Agent API 的内置工具作为一等选项暴露出来，因此需要在该提供方的 `fetch` 钩子中把 `web_search` 加入请求体来启用它——这样一来，智能体通过该提供方发起的每一次调用都会以实时结果为依据：
+
+```ts theme={null}
+import { Agent } from "@mastra/core/agent";
+import { createOpenResponses } from "@ai-sdk/open-responses";
+
+// 该 provider 不会在结果中返回来源，因此在 hook 中捕获它们。
+let sources = [];
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  fetch: async (url, options) => {
+    const body = JSON.parse(options.body as string);
+    // 将内置的 web_search 工具加入请求体，以启用该工具。
+    body.tools = [{ type: "web_search" }];
+    const response = await fetch(url, { ...options, body: JSON.stringify(body) });
+
+    // 来源会作为响应 `output` 数组中一个独立的 `search_results` 项返回。
+    //（流式场景下跳过，此时响应体是事件流而非 JSON。）
+    if (!body.stream) {
+      const raw = await response.clone().json();
+      sources = raw.output
+        .filter((item) => item.type === "search_results")
+        .flatMap((item) => item.results); // 每项形如：{ title, url, snippet, date, ... }
+    }
+
+    return response;
+  },
+});
+
+const agent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: "Answer questions with up-to-date information from the web.",
+  model: perplexity("openai/gpt-5.6-luna"),
+});
+
+const result = await agent.generate("What are the latest breakthroughs in fusion energy this year?");
+console.log(result.text);
+
+for (const source of sources) {
+  console.log(source.title, source.url);
+}
+```
+
+答案在服务端完成了信息溯源，但 `@ai-sdk/open-responses` 不会在结果中暴露来源——`result.sources` 为空——因此 `fetch` 钩子会直接读取原始的 `search_results` 条目。完整的响应结构请参阅[从响应中读取来源](/zh/docs/agent-api/prompt-guide)。
+
+<div id="perplexity-search-tool">
+  ## Perplexity Search 工具
+</div>
+
+`@mastra/perplexity` 包将 [Search API](/zh/docs/search/quickstart) 封装为兼容 Mastra 的工具。如果你需要把原始的排序网页结果直接喂给智能体，就可以使用它。
+
+```bash theme={null}
+npm install @mastra/perplexity zod
+```
+
+```ts theme={null}
+import { createPerplexitySearchTool } from "@mastra/perplexity";
+
+const searchTool = createPerplexitySearchTool({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const results = await searchTool.execute({
+  context: {
+    query: "Latest advances in nuclear fusion",
+    maxResults: 5,
+    searchRecencyFilter: "month",
+  },
+});
+
+for (const result of results) {
+  console.log(result.title, result.url);
+}
+```
+
+该工具的 ID 为 `perplexity-search`，支持的输入参数包括 `query`、`maxResults`、`searchDomainFilter`、`searchRecencyFilter`、`searchAfterDateFilter` 和 `searchBeforeDateFilter`。每条结果包含 `title`、`url`、`snippet` 以及可选的 `date`。
+
+若要一次性注册多个 Perplexity 工具，请使用 `createPerplexityTools(config?)`。完整 schema 请参阅 [Mastra Perplexity 工具参考](https://mastra.ai/reference/tools/perplexity)。
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 快速开始" icon="bolt" href="/zh/docs/agent-api/quickstart">
+    基于 Agent API 的模型、工具和 preset 进行构建。
+  </Card>
+
+  <Card title="Perplexity SDK" icon="code" href="/zh/docs/sdk/overview">
+    安装并配置官方 Perplexity SDK。
+  </Card>
+
+  <Card title="Perplexity 搜索工具" icon="search" href="https://mastra.ai/reference/tools/perplexity">
+    将 Perplexity Search API 封装为 Mastra 工具。
+  </Card>
+
+  <Card title="Mastra 文档" icon="book" href="https://mastra.ai/docs">
+    深入了解 Mastra 中的智能体、工具与工作流。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中遇到问题？
+
+* 查阅 [Mastra 文档](https://mastra.ai/docs)
+* 查看我们的[常见问题](/zh/docs/resources/faq)

@@ -1,0 +1,530 @@
+---
+title: "快速开始"
+description: "快速上手 Sonar Pro 的 Pro Search：支持自动化工具调用、多步推理和实时思考流式输出的增强搜索"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概述
+</div>
+
+Pro Search 为 [Sonar Pro](/zh/docs/sonar/models/sonar-pro) 增加了自动化工具调用能力，通过智能编排网页搜索、URL 内容抓取等工具，实现多步推理。
+
+<Warning>
+  Pro Search 仅在启用流式输出时生效。非流式请求将回退为标准 Sonar Pro 行为。
+</Warning>
+
+<div>
+  <div>
+    <h3>标准 Sonar Pro</h3>
+
+    <ul>
+      <li>单次网页搜索</li>
+      <li>快速生成回答</li>
+      <li>固定的搜索策略</li>
+      <li>静态的结果处理</li>
+    </ul>
+  </div>
+
+  <div>
+    <h3>面向 Sonar Pro 的 Pro Search</h3>
+
+    <ul>
+      <li>借助自动化工具进行多步推理</li>
+      <li>动态执行工具</li>
+      <li>实时思考流式输出</li>
+      <li>自适应的研究策略</li>
+    </ul>
+  </div>
+</div>
+
+<div id="basic-usage">
+  ## 基本用法
+</div>
+
+启用 Pro Search 需要在 API 请求中将 `stream` 设为 `true`，并指定 `"search_type": "pro"`。常规 Sonar Pro 的默认搜索类型为 `"fast"`。
+
+下面的示例演示如何在流式输出下启用 Pro Search：
+
+<CodeGroup>
+  ```python Python SDK theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  messages = [
+      {
+          "role": "user", 
+          "content": "Summarize developments in post-quantum cryptography and how lattice-based and hash-based schemes are being standardized by NIST."
+      }
+  ]
+
+  response = client.chat.completions.create(
+      model="sonar-pro",
+      messages=messages,
+      stream=True,
+      web_search_options={
+          "search_type": "pro"
+      }
+  )
+
+  for chunk in response:
+      if chunk.choices[0].delta.content:
+          print(chunk.choices[0].delta.content, end="")
+  ```
+
+  ```typescript Typescript SDK theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.chat.completions.create({
+    model: 'sonar-pro',
+    messages: [
+      {
+        role: 'user',
+        content: 'Summarize developments in post-quantum cryptography and how lattice-based and hash-based schemes are being standardized by NIST.'
+      }
+    ],
+    stream: true,
+    web_search_options: {
+      search_type: 'pro'
+    }
+  });
+
+  for await (const chunk of response) {
+    if (chunk.choices[0]?.delta?.content) {
+      process.stdout.write((chunk.choices[0]?.delta?.content ?? '') as string);
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/v1/sonar \
+    --header "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "model": "sonar-pro",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Summarize developments in post-quantum cryptography and how lattice-based and hash-based schemes are being standardized by NIST."
+        }
+      ],
+      "stream": true,
+      "web_search_options": {
+        "search_type": "pro"
+      }
+    }' --no-buffer
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "8326e168-7408-4978-853c-468a2500f757",
+    "results": [
+      {
+        "snippet": "NIST’s Post-Quantum Cryptography (PQC) project leads the national and global effort to secure electronic information against the future threat of quantum computers—machines that may be years or decades away but could eventually break many of today’s widely used cryptographic systems.\nThrough a multi-year international competition involving industry, academia, and governments, NIST released the principal three PQC standards in 2024 and is developing additional standards to serve as backups or alternatives.\nOrganizations should begin applying these standards now to migrate their systems to quantum-resistant cryptography.\n...\n#### PQC Standards SIn August 2024, NIST released its principal PQC standards (as Federal Information Processing Standards, or FIPS), specifying key establishment and digital signature schemes based on candidates evaluated and selected through this multi-year process.\n##### FIPS 203# Module-Lattice-Based\nKey-Encapsulation Mechanism Standard\n(ML-KEM)\n##### FIPS 204# Module-Lattice-Based\nDigital Signature Standard\n(ML-DSA)\n##### FIPS 205# Stateless Hash-Based\nDigital Signature Standard\n(SLH-DSA)\n#### Migration to PQCioWith the release of the first three final PQC standards, organizations should begin migrating their systems to quantum-resistant cryptography.\n...\nUnder the transition timeline in NIST IR 8547, NIST will deprecate and ultimately remove quantum-vulnerable algorithms from its standards by 2035, with high-risk systems transitioning much earlier.\n...\n#### Ongoing PQC Standardization ProcessonNIST expects that the two digital signature standards (ML-DSA and SLH-DSA) and key-encapsulation mechanism standard (ML-KEM) will provide the foundation for most deployments of post-quantum cryptography.\n***They can and should be put into use now.** *\nNIST continues to evaluate the security and performance of innovative algorithms in order to identify additional candidates for standardization.\nIn addition to the three algorithms specified in the initial FIPS standards, the Falcon digital signature algorithm and HQC key encapsulation mechanism were selected for ongoing standardization; that process is underway.\nThis process continues with a longer-term effort that solicited additional algorithms for digital signature schemes that could serve as a backup to ML-DSA or that could address unique use cases.",
+        "title": "Post-Quantum Cryptography | CSRC",
+        "url": "https://csrc.nist.gov/projects/post-quantum-cryptography",
+        "date": "2017-01-03",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "**Post-Quantum Cryptography Standardization** is a program and competition by NIST to update their standards to include post-quantum cryptography.\nIt was announced at PQCrypto 2016.\nTwenty-three signature schemes and fifty-nine encryption/KEM schemes were submitted by the initial submission deadline at the end of 2017 of which sixty-nine total were deemed complete and proper and participated in the first round.\nSeven of these, of which three are signature schemes, advanced to the third round, which was announced in July 2020.\nOn August 13, 2024, NIST released final versions of the first three Post Quantum Crypto Standards: FIPS 203, FIPS 204, and FIPS 205.\n...\nAcademic research on the potential impact of quantum computing dates back to at least 2001.\nA NIST published report from April 2016 cites experts that acknowledge the possibility of quantum technology to render the commonly used RSA algorithm insecure by 2030.\nAs a result, a need to standardize quantum-secure cryptographic primitives was pursued.\nSince most symmetric primitives are relatively easy to modify in a way that makes them quantum resistant, efforts have focused on public-key cryptography, namely digital signatures and key encapsulation mechanisms.\nIn December 2016 NIST initiated a standardization process by announcing a call for proposals.\n...\n|Hash-based| |- Gravity-SPHINCS - SPHINCS+| |\n...\nOn July 22, 2020, NIST announced seven finalists (\"first track\"), as well as eight alternate algorithms (\"second track\").\nThe first track contains the algorithms which appear to have the most promise, and will be considered for standardization at the end of the third round.\n...\nOn August 13, 2024, NIST released final versions of its first three Post Quantum Crypto Standards.\nAccording to the release announcement:\n> While there have been no substantive changes made to the standards since the draft versions, NIST has changed the algorithms’ names to specify the versions that appear in the three finalized standards, which are:\n>\n- Federal Information Processing Standard (FIPS) 203, intended as the primary standard for general encryption.\nAmong its advantages are comparatively small encryption keys that two parties can exchange easily, as well as its speed of operation.\nThe standard is based on the CRYSTALS-Kyber algorithm, which has been renamed ML-KEM, short for Module-Lattice-Based Key-Encapsulation Mechanism.\n> - FIPS 204, intended as the primary standard for protecting digital signatures.\nThe standard uses the CRYSTALS-Dilithium algorithm, which has been renamed ML-DSA, short for Module-Lattice-Based Digital Signature Algorithm.\n> - FIPS 205, also designed for digital signatures.\nThe standard employs the SPHINCS+ algorithm, which has been renamed SLH-DSA, short for Stateless Hash-Based Digital Signature Algorithm.\nThe standard is based on a different math approach than ML-DSA, and it is intended as a backup method in case ML-DSA proves vulnerable.\n> - Similarly, when the draft FIPS 206 standard built around FALCON is released, the algorithm will be dubbed FN-DSA, short for FFT (fast-Fourier transform) over NTRU-Lattice-Based Digital Signature Algorithm.\nOn March 11, 2025 NIST released Hamming Quasi-Cyclic (HQC) as the fifth algorithm for post-quantum asymmetric encryption as used for key encapsulation / exchange.\nThe new algorithm is as a backup for ML-KEM, the main algorithm for general encryption.\nHQC is a code-based scheme using different math than ML-KEM, thus mitigating possible weaknesses should any be found in the lattice-based ML-KEM.\nThe draft standard incorporating the HQC algorithm is expected in early 2026 with the final in 2027.",
+        "title": "NIST Post-Quantum Cryptography Standardization - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/NIST_Post-Quantum_Cryptography_Standardization",
+        "date": "2017-12-29",
+        "last_updated": "2026-03-31"
+      },
+      {
+        "snippet": "- NIST has released a final set of encryption tools designed to withstand the attack of a quantum computer.\n- These post-quantum encryption standards secure a wide range of electronic information, from confidential email messages to e-commerce transactions that propel the modern economy.\n- NIST is encouraging computer system administrators to begin transitioning to the new standards as soon as possible.\nGAITHERSBURG, Md.\n— The U.S. Department of Commerce’s National Institute of Standards and Technology (NIST) has finalized its principal set of encryption algorithms designed to withstand cyberattacks from a quantum computer.\n...\nThe algorithms announced today are specified in the first completed standards from NIST’s post-quantum cryptography (PQC) standardization project, and are ready for immediate use.\n...\nThe standards — containing the encryption algorithms’ computer code, instructions for how to implement them, and their intended uses — are the result of an eight-year effort managed by NIST, which has a long history of developing encryption.\nThe agency has rallied the world’s cryptography experts to conceive, submit and then evaluate cryptographic algorithms that could resist the assault of quantum computers.\n...\nThe algorithms NIST has standardized are based on different math problems that would stymie both conventional and quantum computers.\n“These finalized standards include instructions for incorporating them into products and encryption systems,” said NIST mathematician Dustin Moody, who heads the PQC standardization project.\n...\nMoody said that these standards are the primary tools for general encryption and protecting digital signatures.\nNIST also continues to evaluate two other sets of algorithms that could one day serve as backup standards.\nOne of these sets consists of three algorithms designed for general encryption but based on a different type of math problem than the general-purpose algorithm in the finalized standards.\nNIST plans to announce its selection of one or two of these algorithms by the end of 2024.\nThe second set includes a larger group of algorithms designed for digital signatures.\nIn order to accommodate any ideas that cryptographers may have had since the initial 2016 call for submissions, NIST asked the public for additional algorithms in 2022 and has begun a process of evaluating them.\nIn the near future, NIST expects to announce about 15 algorithms from this group that will proceed to the next round of testing, evaluation and analysis.\nWhile analysis of these two additional sets of algorithms will continue, Moody said that any subsequent PQC standards will function as backups to the three that NIST announced today.\n...\nThe new standards are designed for two essential tasks for which encryption is typically used: general encryption, used to protect information exchanged across a public network; and digital signatures, used for identity authentication.\nNIST announced its selection of four algorithms — CRYSTALS-Kyber, CRYSTALS-Dilithium, Sphincs+ and FALCON — slated for standardization in 2022 and released draft versions of three of these standards in 2023.\nThe fourth draft standard based on FALCON is planned for late 2024.\nWhile there have been no substantive changes made to the standards since the draft versions, NIST has changed the algorithms’ names to specify the versions that appear in the three finalized standards, which are:\n- **Federal Information Processing Standard (FIPS) 203**, intended as the primary standard for general encryption.\nAmong its advantages are comparatively small encryption keys that two parties can exchange easily, as well as its speed of operation.\nThe standard is based on the CRYSTALS-Kyber algorithm, which has been renamed ML-KEM, short for Module-Lattice-Based Key-Encapsulation Mechanism.\n- **FIPS 204**, intended as the primary standard for protecting digital signatures.\nThe standard uses the CRYSTALS-Dilithium algorithm, which has been renamed ML-DSA, short for Module-Lattice-Based Digital Signature Algorithm.\n- **FIPS 205**, also designed for digital signatures.\nThe standard employs the Sphincs+ algorithm, which has been renamed SLH-DSA, short for Stateless Hash-Based Digital Signature Algorithm.\nThe standard is based on a different math approach than ML-DSA, and it is intended as a backup method in case ML-DSA proves vulnerable.\nSimilarly, when the draft FIPS 206 standard built around FALCON is released, the algorithm will be dubbed FN-DSA, short for FFT (fast-Fourier transform) over NTRU-Lattice-Based Digital Signature Algorithm.",
+        "title": "NIST Releases First 3 Finalized Post-Quantum Encryption Standards",
+        "url": "https://www.nist.gov/news-events/news/2024/08/nist-releases-first-3-finalized-post-quantum-encryption-standards",
+        "date": "2024-08-13",
+        "last_updated": "2026-05-14"
+      },
+      {
+        "snippet": "**FIPS 203, FIPS 204,** and** FIPS 205**, which specify algorithms derived from **CRYSTALS-Dilithium, CRYSTALS-KYBER**, and **SPHINCS^+^,** were published August 13, 2024.\n**FALCON** was also selected and will be published in **FIPS 206 (in development)**.\nSee NIST IR 8413, Status Report of the Third Round of the NIST Post-Quantum Cryptography Standardization Process.\n**HQC** was selected for standardization on March 11, 2025.\nSee NIST IR 8545, Status Report on the Fourth Round of the NIST Post-Quantum Cryptography Standardization Process.",
+        "title": "PQC Standardization Process - Post-Quantum Cryptography | CSRC",
+        "url": "https://csrc.nist.gov/projects/post-quantum-cryptography/post-quantum-cryptography-standardization",
+        "date": "2017-01-03",
+        "last_updated": "2026-05-22"
+      },
+      {
+        "snippet": "- Three NIST standards that were developed through a rigorous, international process are ready to be implemented now.\nAs researchers around the world race to build quantum computers that could break the current encryption providing security and privacy for our digital lives, NIST is helping to secure our future by developing algorithms to protect our data and systems.\nNIST has already released three post-quantum cryptography standards that can be implemented now to secure a wide range of electronic information, from confidential email messages to e-commerce transactions that propel the modern economy.\nNIST continues to evaluate additional algorithms that could one day serve as backup standards.\nThese Federal Information Processing Standards (FIPS), which are mandatory for federal systems and adopted by organizations around the world, provide detailed descriptions of post-quantum encryption and digital signature algorithms so they can be implemented consistently to facilitate secure and interoperable communication.\nThey were developed through an eight-year effort managed by NIST, which has a long history of developing cryptography standards.\n...\nThe new algorithm will serve as a backup for the general encryption needed to protect data from quantum computers developed in the future.\n...\nThree new algorithms are expected to be ready for use in 2024.\nOthers will follow.",
+        "title": "Post-quantum cryptography | NIST",
+        "url": "https://www.nist.gov/pqc",
+        "date": "2025-12-03",
+        "last_updated": "2026-05-20"
+      },
+      {
+        "snippet": "",
+        "title": "Post-Quantum Cryptography and Quantum-Safe Security - arXiv",
+        "url": "https://arxiv.org/html/2510.10436v1",
+        "date": "2025-10-11",
+        "last_updated": "2026-03-24"
+      },
+      {
+        "snippet": "**Post-Quantum Cryptography Standardization** is a program and competition by NIST to update their standards to include post-quantum cryptography.\nIt was announced at PQCrypto 2016.\n23 signature schemes and 59 encryption/KEM schemes were submitted by the initial submission deadline at the end of 2017 of which 69 total were deemed complete and proper and participated in the first round.\nSeven of these, of which 3 are signature schemes, have advanced to the third round, which was announced on July 22, 2020.\nOn August 13, 2024, NIST released final versions of the first three Post Quantum Crypto Standards: FIPS 203, FIPS 204, and FIPS 205.\n...\nAcademic research on the potential impact of quantum computing dates back to at least 2001.\nA NIST published report from April 2016 cites experts that acknowledge the possibility of quantum technology to render the commonly used RSA algorithm insecure by 2030.\nAs a result, a need to standardize quantum-secure cryptographic primitives was pursued.\nSince most symmetric primitives are relatively easy to modify in a way that makes them quantum resistant, efforts have focused on public-key cryptography, namely digital signatures and key encapsulation mechanisms.\nIn December 2016 NIST initiated a standardization process by announcing a call for proposals.\nThe competition is now in its third round out of expected four, where in each round some algorithms are discarded and others are studied more closely.\nNIST hopes to publish the standardization documents by 2024, but may speed up the process if major breakthroughs in quantum computing are made.\nIt is currently undecided whether the future standards will be published as FIPS or as NIST Special Publication (SP).\n...\nOn July 22, 2020, NIST announced seven finalists (\"first track\"), as well as eight alternate algorithms (\"second track\").\nThe first track contains the algorithms which appear to have the most promise, and will be considered for standardization at the end of the third round.\nAlgorithms in the second track could still become part of the standard, after the third round ends.\nNIST expects some of the alternate candidates to be considered in a fourth round.\nNIST also suggests it may re-open the signature category for new schemes proposals in the future.\n...\nOn July 5, 2022, NIST announced the first group of winners from its six-year competition.\n...\nOn August 13, 2024, NIST released final versions of its first three Post Quantum Crypto Standards.\nAccording to the release announcement:\nWhile there have been no substantive changes made to the standards since the draft versions, NIST has changed the algorithms’ names to specify the versions that appear in the three finalized standards, which are:\n- Federal Information Processing Standard (FIPS) 203, intended as the primary standard for general encryption.\nAmong its advantages are comparatively small encryption keys that two parties can exchange easily, as well as its speed of operation.\nThe standard is based on the CRYSTALS-Kyber algorithm, which has been renamed ML-KEM, short for Module-Lattice-Based Key-Encapsulation Mechanism.\n- FIPS 204, intended as the primary standard for protecting digital signatures.\nThe standard uses the CRYSTALS-Dilithium algorithm, which has been renamed ML-DSA, short for Module-Lattice-Based Digital Signature Algorithm.\n- FIPS 205, also designed for digital signatures.\nThe standard employs the Sphincs+ algorithm, which has been renamed SLH-DSA, short for Stateless Hash-Based Digital Signature Algorithm.\nThe standard is based on a different math approach than ML-DSA, and it is intended as a backup method in case ML-DSA proves vulnerable.\n- Similarly, when the draft FIPS 206 standard built around FALCON is released, the algorithm will be dubbed FN-DSA, short for FFT (fast-Fourier transform) over NTRU-Lattice-Based Digital Signature Algorithm.\nOn March 11, 2025 NIST released HQC as the fifth algorithm for post-quantum asymmetric encryption as used for key encapsulation / exchange.\nThe new algorithm is as a backup for ML-KEM, the main algorithm for general encryption.\nHQC is based on different math than ML-KEM, thus mitigating weakness if found.\nThe draft standard incorporating the HQC algorithm is expected in early 2026 with the final in 2027.",
+        "title": "NIST Post-Quantum Cryptography Standardization - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Post-Quantum_Cryptography_Standardization",
+        "date": "2025-03-19",
+        "last_updated": "2025-03-26"
+      },
+      {
+        "snippet": "NIST is leading a global effort to create electronic defenses against such attacks through its Post-Quantum Cryptography (PQC) project, which released * *the first three finalized PQC standards* * in 2024.\n...\nTo counter this looming threat, we need encryption methods that can stave off cyberattacks by both the conventional computers we know today and the quantum computers of tomorrow.\nThese new methods are called post-quantum encryption algorithms.\n...\nTo stave off attacks by a quantum computer — if and when a cryptographically relevant one is built — the worldwide community must retire current encryption algorithms.\nPost-quantum encryption algorithms must be based on math problems that would be difficult for both conventional and quantum computers to solve.\nThe algorithms are designed for two main tasks for which encryption is typically used: general encryption, used to protect information such as passwords exchanged across a public network, and digital signatures, used for identity authentication.\nOf the four algorithms NIST has selected as the initial ones to be standardized, three are based on a family of math problems called structured lattices, while the fourth uses mathematical relationships known as hash functions.\nInstead of requiring a computer to factor large numbers, lattice and hash problems use other types of math that experts believe will be hard to solve for quantum computers and conventional computers alike.\nAdditional algorithms still under consideration are designed for general encryption and do not use structured lattices or hash functions in their approaches.\nTo put these algorithms into practice, NIST has led efforts to develop technical standards for post-quantum encryption.\nThese standards aim to provide solutions for different situations, employ varied approaches for encryption, and offer more than one algorithm for each kind of application in the event one proves vulnerable.\n...\nNIST kicked off the Post-Quantum Cryptography project in 2016 and late that year formally asked the world’s cryptography experts to submit algorithms that would prove intractable to both classical and quantum computers.\n...\nWe now have post-quantum encryption algorithms that are ready for use.\nNIST released the first three finalized PQC standards that incorporate them in 2024.",
+        "title": "What Is Post-Quantum Cryptography? | NIST",
+        "url": "https://www.nist.gov/cybersecurity-and-privacy/what-post-quantum-cryptography",
+        "date": "2024-08-13",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "",
+        "title": "Post-Quantum Cryptography (PQC) Standardization - 2025 Update",
+        "url": "https://postquantum.com/post-quantum/cryptography-pqc-nist/",
+        "date": "2025-09-24",
+        "last_updated": "2026-05-25"
+      },
+      {
+        "snippet": "",
+        "title": "Post-quantum cryptography - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Post-quantum_cryptography",
+        "date": "2010-03-18",
+        "last_updated": "2026-05-06"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<div id="enabling-automatic-classification">
+  ## 启用自动分类
+</div>
+
+可以将 Sonar Pro 配置为根据查询的复杂度自动归类为 Pro Search 或 Fast Search。对于大多数应用场景，推荐采用这种方式。
+
+设置 `search_type: "auto"`，即可让系统根据复杂度智能路由查询。
+
+<CodeGroup>
+  ```python Python SDK theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.chat.completions.create(
+      model="sonar-pro",
+      messages=[
+          {
+              "role": "user",
+              "content": "Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data."
+          }
+      ],
+      stream=True,
+      web_search_options={
+          "search_type": "auto"  # 自动分类
+      }
+  )
+
+  for chunk in response:
+      if chunk.choices[0].delta.content:
+          print(chunk.choices[0].delta.content, end="")
+  ```
+
+  ```typescript Typescript SDK theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.chat.completions.create({
+    model: 'sonar-pro',
+    messages: [
+      {
+        role: 'user',
+        content: 'Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data.'
+      }
+    ],
+    stream: true,
+    web_search_options: {
+      search_type: 'auto'  // 自动分类
+    }
+  });
+
+  for await (const chunk of response) {
+    if (chunk.choices[0]?.delta?.content) {
+      process.stdout.write((chunk.choices[0]?.delta?.content ?? '') as string);
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/v1/sonar \
+    --header "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "model": "sonar-pro",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data."
+        }
+      ],
+      "stream": true,
+      "web_search_options": {
+        "search_type": "auto"
+      }
+    }' --no-buffer
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "cab71ad3-867d-4139-997e-c36ce805351b",
+    "results": [
+      {
+        "snippet": "下表比较了美国环保署（EPA）对2015、2016、2017和2023车型年量产纯电动乘用车的官方燃油经济性评级（插电式电动汽车采用等效每加仑汽油英里数，mpg-e 或 MPGe），并与2016车型年中被EPA评为最高效的插电式混合动力车（雪佛兰 Volt——第二代）、汽油电力混合动力车（丰田普锐斯 Eco——第四代）以及该车型年新车平均水平进行对比，后者的燃油经济性为 25 mpg~‑US~（9.4 升/100 公里；30 mpg~‑imp~）。\nEPA 的评级数据来自制造商依据联邦法律规定的一系列测试对自家车辆进行的检测。\n...\n真实世界中的电动汽车效率也可用每千瓦时英里数（mi/kWh）表示，它将 EPA 的 MPGe 数值换算为直接的电能消耗，从而实现电动车与汽油车之间的横向比较。\n...\n|车辆|车型年|EPA 评定燃油经济性|EPA 评定燃油经济性|EPA 评定燃油经济性|备注| | |\n...\n|Toyota Prius HEV|2023|57 mpg|57 mpg|56 mpg|(9)| | |\n|Hyundai Ioniq 6 Long Range RWD w/ 18-inch wheels|2023|140 mpg‑e 24.1 kWh/100 mi; 15.0 kWh/100 km|153 mpg‑e 22.0 kWh/100 mi; 13.7 kWh/100 km|127 mpg‑e 26.5 kWh/100 mi; 16.5 kWh/100 km|(1)| | |\n...\n|Tesla Model Y AWD|2023|123 mpg‑e 27.4 kWh/100 mi; 17.0 kWh/100 km|129 mpg‑e 26.1 kWh/100 mi; 16.2 kWh/100 km|116 mpg‑e 29.1 kWh/100 mi; 18.1 kWh/100 km|(1)| | |\n|Tesla Model 3 Standard Range|2020|141 mpg‑e 23.9 kWh/100 mi; 14.9 kWh/100 km|148 mpg‑e 22.8 kWh/100 mi; 14.2 kWh/100 km|132 mpg‑e 25.5 kWh/100 mi; 15.9 kWh/100 km|(1)| | |\n...\n|Tesla Model 3 Long Range AWD|2020|121 mpg‑e 27.9 kWh/100 mi; 17.3 kWh/100 km|124 mpg‑e 27.2 kWh/100 mi; 16.9 kWh/100 km|116 mpg‑e 29.1 kWh/100 mi; 18.1 kWh/100 km|(1)| | |\n|Chevrolet Bolt EV|2017|119 mpg‑e 28.3 kWh/100 mi; 17.6 kWh/100 km|121 mpg‑e 27.9 kWh/100 mi; 17.3 kWh/100 km|110 mpg‑e 30.6 kWh/100 mi; 19.0 kWh/100 km| | | |\n...\n|Nissan Leaf (24 kW-h)|2013/14/15/16|114 mpg‑e 29.6 kWh/100 mi; 18.4 kWh/100 km|126 mpg‑e 26.8 kWh/100 mi; 16.6 kWh/100 km|101 mpg‑e 33.4 kWh/100 mi; 20.7 kWh/100 km|(1) (6)| | |\n...\n|Nissan Leaf (30 kW-h)|2016|112 mpg‑e 30.1 kWh/100 mi; 18.7 kWh/100 km|124 mpg‑e 27.2 kWh/100 mi; 16.9 kWh/100 km|101 mpg‑e 33.4 kWh/100 mi; 20.7 kWh/100 km|(1)| | |",
+        "title": "电动汽车 EPA 燃油经济性 - 维基百科",
+        "url": "https://en.wikipedia.org/wiki/Electric_car_EPA_fuel_economy",
+        "date": "2015-04-30",
+        "last_updated": "2026-05-05"
+      },
+      {
+        "snippet": "我们不关注电池容量或总续航里程，而是关注**能耗（每100英里千瓦时）**和**MPGe**，即 EPA 的等效每加仑英里数指标。\n...\n**方法**：Recurrent 评选的2026年最高效电动汽车，是根据向 EPA 报告的综合效率（kWh/100英里）确定的。\n...\n## 3.\n特斯拉 Model 3\n**效率：** 25 kWh/100 英里\n**MPGe：** 134.8\n**车身形式：** 紧凑型轿车\n...\n## 5.\n特斯拉 Model Y\n**效率：** 26 kWh/100 英里\n**MPGe：** 129.6\n**车身形式：** 紧凑型跨界 SUV\n...\n## 6.\n日产 LEAF\n**效率：** 28 kWh/100 英里\n**MPGe：** 120.4\n**车身形式：** 紧凑型跨界车（改款）",
+        "title": "根据测试得出的2026年各级别最高效电动汽车 - Recurrent",
+        "url": "https://www.recurrentauto.com/research/most-efficient-ev",
+        "date": "2026-03-02",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "|EPA MPG MPGe：等效每加仑英里数 1 加仑汽油=33.7 kWh 关于纯电动汽车|电力综合 MPG：111 MPGe 市区 MPG：123 高速 MPG：99 30 kWh/100 英里|",
+        "title": "查找并比较车辆",
+        "url": "https://www.fueleconomy.gov/feg/noframes/48400.shtml",
+        "date": "2023-01-01",
+        "last_updated": "2024-10-03"
+      },
+      {
+        "snippet": "MPGe 是美国环境保护署（EPA）使用的一种计量单位，用于以与汽油车通用的单位表示电动汽车的燃油经济性，其中 33.7 千瓦时电量相当于一加仑汽油所含的能量。\n在这 17 款车型中，共有 37 种不同配置达到了 100 MPGe 或更高。\n后轮驱动版特斯拉 Model 3 以 132 MPGe 取得了 2022 车型年的最高评级。\n||\n|--|\n|||\n|Tesla Model 3|132|\n|Lucid Air|131|\n|Tesla Model Y|129|\n|Chevrolet Bolt EV|120|\n|Hyundai Kona Electric|120|\n|Tesla Model S|120|\n|Kia EV6|117|\n|Chevrolet Bolt EUV|115|\n|Hyundai Ioniq 5|114|\n|Kia Niro Electric|112|\n|Nissan Leaf|111|\n|MINI Cooper SE|110|\n|BMW i4 Gran Coupe|109|\n|Polestar 2|107|\n|Volkswagen ID.4|107|\n|Ford Mustang Mach-E|103|\n|Tesla Model X|102|\n...\n**来源：**美国能源部与美国环境保护署燃油经济性网站，电动汽车并排比较。\n数据访问日期：2022年8月24日。",
+        "title": "FOTW 第1257期，2022年9月26日：十七款电动汽车车型达到……",
+        "url": "https://www.energy.gov/eere/vehicles/articles/fotw-1257-september-26-2022-seventeen-ev-models-achieved-epa-combined-rating",
+        "date": "2022-09-26",
+        "last_updated": "2025-10-09"
+      },
+      {
+        "snippet": "Nevertheless, the efficiency and range varies a lot from EV to EV.\nTo help you choose which electric car is more suitable for you, I made the table below with EPA efficiency and range figures – for different driving scenarios (city, highway and mixed/combined).\nElectric car range and efficiency (EPA)\n|Electric car\n|City\nrange\n|Combined\nrange\n|Highway\nrange\n|City\nefficiency\n|Combined\nefficiency\n|Highway\nefficiency\n|2019 Tesla Model 3 Long Range (RWD)\n|340 miles\n547 km\n|325 miles\n523 km\n|307 miles\n494 km\n|24,8 kWh/100 miles\n15,4 kWh/100 km\n|25,9 kWh/100 miles\n16,1 kWh/100 km\n|27,4 kWh/100 miles\n17 kWh/100 km\n|2019 Tesla Model 3 Long Range (AWD)\n|320 miles\n515 km\n|310 miles\n499 km\n|297 miles\n478 km\n|28,1 kWh/100 miles\n17,5 kWh/100 km\n|29,1 kWh/100 miles\n18,1 kWh/100 km\n|30,1 kWh/100 miles\n18,7 kWh/100 km\n|2019 Tesla Model 3 Standard Range Plus\n|253 miles\n407 km\n|240 miles\n386 km\n|224 miles\n361 km\n|24,1 kWh/100 miles\n15 kWh/100 km\n|25,3 kWh/100 miles\n15,7 kWh/100 km\n|27,2 kWh/100 miles\n16,9 kWh/100 km\n|2019 Tesla Model S Long Range\n|382 miles\n614 km\n|370 miles\n595 km\n|356 miles\n573 km\n|29,3 kWh/100 miles\n18,2 kWh/100 km\n|30,4 kWh/100 miles\n18,9 kWh/100 km\n|31,5 kWh/100 miles\n19,6 kWh/100 km\n|2019 Tesla Model X Long Range\n...\n22,5 kWh/100 km\n...\n|2017-2019 Chevrolet Bolt EV\n|255 miles\n411 km\n|238 miles\n383 km\n|217 miles\n350 km\n|26,3 kWh/100 miles\n16,4 kWh/100 km\n|28,3 kWh/100 miles\n17,6 kWh/100 km\n|30,6 kWh/100 miles\n19 kWh/100 km\n|2020 Chevrolet Bolt EV\n|279 miles\n449 km\n|259 miles\n417 km\n|237 miles\n381 km\n|26,5 kWh/100 miles\n16,5 kWh/100 km\n|28,6 kWh/100 miles\n17,7 kWh/100 km\n|31,2 kWh/100 miles\n19,4 kWh/100 km",
+        "title": "Electric car range and efficiency (EPA) - 🔋PushEVs",
+        "url": "https://pushevs.com/electric-car-range-efficiency-epa/",
+        "date": null,
+        "last_updated": "2024-02-21"
+      },
+      {
+        "snippet": "An efficient EV is simply a car that uses fewer kilowatt-hours of electricity to go the same distance.\n...\n53–140 MPGe\nEPA spread\nModel‑year 2024 EVs range from about 53 to 140 miles‑per‑gallon‑equivalent, nearly a 3x difference in efficiency.\n1.5–4.2 mi/kWh\nEnergy use\nOn the same test cycle, some EVs travel less than 1.5 miles per kWh while the best creep above 4 miles per kWh.\n...\nMPGe, or **miles per gallon equivalent**, is the EPA’s attempt to put EVs in gas‑car language.\nOne “gallon” of gasoline is treated as 33.7 kWh of energy.\nIf an EV uses 25 kWh to travel 100 miles, the math works out to roughly 135 MPGe.\n...\nElectricity is billed in **kilowatt‑hours** (kWh).\nSo the most honest unit is simply: how many kWh do you burn to go 100 miles?\n- **kWh/100 mi**: lower is better (like L/100 km)\n- **mi/kWh**: higher is better (like MPG)\nExample: a car that uses 25 kWh/100 mi delivers 4.0 mi/kWh.\nAt $0.15/kWh, those 100 miles cost about $3.75.\n...\nTake the EPA’s kWh/100‑mile number, divide by 100, and multiply by your home rate.\n...\nThat’s why EPA ratings show 2024 EVs spanning roughly 53–140 MPGe while gasoline cars live between 9–57 MPG for the same model year.\n...\nRecent EPA data and independent testing put a handful of EVs at the sharp end of the efficiency spear, especially in sedan form.\n### Sample of highly efficient EVs on sale (2024–2025)\nRepresentative trims; always confirm the exact configuration’s window sticker, as wheels, motors, and options change the numbers.\n|Model & year|Type|Energy use (kWh/100 mi)*|Approx. mi/kWh|EPA combined MPGe*|Notable trait|\n|--|--|--|--|--|--|\n|Lucid Air Pure (2025 RWD)|Sedan|≈23–24|≈4.2–4.3|High 130s–140s|Luxury sedan that somehow drinks like a subcompact.|\n|Hyundai Ioniq 6 SE (2024–2025 RWD)|Sedan|≈24–25|≈4.0–4.2|Around 140|Super‑slippery aero and efficient 800‑V platform.|\n|Tesla Model 3 Long Range RWD (2025)|Sedan|≈25|≈4.0|Low‑to‑mid 130s|The efficiency benchmark among mass‑market sedans.|\n|Tesla Model Y Long Range RWD (2025)|SUV|≈27–28|≈3.6–3.7|Mid‑120s|Roomier crossover form factor, small aero penalty.|\n|Lexus RZ 300e (2024–2025)|SUV|≈27|≈3.7|Mid‑120s|Luxury compact SUV that surprised everyone with its frugality.|\n|Kia EV6 / Hyundai Kona Electric / Kia Niro EV (2024–2025 RWD)|Crossovers|≈28–29|≈3.4–3.6|High teens/low 120s|The efficient heartland of the EV market.|\n|GMC Hummer EV Pickup/SUV|Truck/SUV|≈70+|≈1.4–1.5|Under 50|Off‑the‑charts consumption; think of it as a rolling coal plant with a conscience.|\n...\n### Sedans & hatchbacks\n- **Typical energy use:** ~24–30 kWh/100 mi\n- **Examples:** Hyundai Ioniq 6, Tesla Model 3, Lucid Air, Chevy Bolt (used)\n...\n#### 1.\nStart with kWh/100 mi, not just range\nRange is a product of pack size; kWh/100 mi is the diet.\n...\n#### 2.\nNormalize for body style and mission\nCompare sedans to sedans, crossovers to crossovers, trucks to trucks.\n...\nWhen you compare electric cars, focus less on the billboard range number and more on **kWh per 100 miles, body style, and real battery health**.\n- Use kWh/100 miles (or mi/kWh) as your primary yardstick; MPGe is just the translation into gas‑car language.",
+        "title": "Electric Car Efficiency Comparison: 2025 Buyer's Guide - Recharged",
+        "url": "https://recharged.com/articles/electric-car-efficiency-comparison-guide",
+        "date": "2025-11-17",
+        "last_updated": "2026-05-26"
+      },
+      {
+        "snippet": "With an EPA-rated efficiency of 111 MPGe, it’s middle-of-the-road in efficiency, far below the Tesla but way above the 2021 Ford Mustang Mach-E GT’s 84 MPGe.\n...\nRecent figures from the U.S. Environmental Protection Agency (EPA) show that the 2021 Tesla Model 3 Standard Range Plus RWD stands at the top of the efficiency range, boasting a combined 142 MPGe—the electrical equivalent of a gallon of fuel.\n...\nEV testing and analysis firm Recurrent crunched the numbers on a set of 99 cars—half Tesla Model 3s and half Nissan Leafs—and their 500,000 data points of efficiency metrics were logged between November 2021 and March 2022.\nUsing an EPA figure-based mile per kWh (mi/kWh) measurement as opposed to MPGe, the Tesla range was calculated from 3.33 to 4.17 mi/kWh, and the Nissan Leaf was 2.94 to 3.45 mi/kWh.\nTherefore, even bargain standard Model 3s will achieve greater road efficiency than the best Leaf.\nHowever, the EPA ratings weren’t what was measured when real-world driving conditions were considered.\nOver the four-month timeframe, Recurrent revealed the median observed efficiency for each vehicle as the Tesla Model 3 having 3.39 mi/kWh and the Nissan Leaf having 3.71 mi/kWh.",
+        "title": "Is the Nissan Leaf More Efficient Than the Tesla Model 3? Here's What 1 Study Found",
+        "url": "https://www.motorbiscuit.com/nissan-leaf-more-efficient-tesla-model-3-what-study-found/",
+        "date": "2022-08-11",
+        "last_updated": "2025-06-25"
+      },
+      {
+        "snippet": "Compare USA EV efficiency by kWh/100 mi and MPGe, with EPA and charging metrics across all models and trims.\nUpdated monthly (2026).",
+        "title": "Most Efficient EVs in the USA (kWh/100 mi) - BEV Database",
+        "url": "https://bev-database.com/cars-list-usa/most-efficient-electric-cars",
+        "date": "2026-02-28",
+        "last_updated": "2026-02-28"
+      },
+      {
+        "snippet": ",\nModel Year 2022 EVs Achieving EPA Combined Rating of 100 MPGe or more,\nMake and Model,Highest MPGe For Base Model\nTesla Model 3,132\nLucid Air,131\nTesla Model Y,129\nChevrolet Bolt EV,120\nHyundai Kona Electric,120\nTesla Model S,120\nKia EV6,117\nChevrolet Bolt EUV,115\nHyundai Ioniq 5,114\nKia Niro Electric,112\nNissan Leaf,111\nMINI Cooper SE,110\nBMW i4 Gran Coupe,109\nPolestar 2,107\nVolkswagen ID.4,107\nFord Mustang Mach-E,103\nTesla Model X,102\n,\n...\nEVs include only all-electric vehicles.,\n...\nOnly the base model names are shown and only the highest MPGe values are shown for each model name.\nSome models listed have configurations that fall below 100 MPGe.,\n...\n,\n\"Source: U.S. Department of Energy and U.S. Environmental Protection Agency’s Fuel Economy Website, Compare Electric Vehicles Side-by-Side.\nData accessed August 24, 2022.\",\n,\n,\nhttps://www.fueleconomy.gov/feg/evSelect.jsp,",
+        "title": "FOTW_1257_web.xlsx",
+        "url": "https://www.energy.gov/sites/default/files/2022-09/FOTW_1257_web.xlsx",
+        "date": null,
+        "last_updated": "2025-03-28"
+      },
+      {
+        "snippet": ",\nModel Year 2022 EVs Achieving EPA Combined Rating of 100 MPGe or more,\nMake and Model,Highest MPGe For Base Model\nTesla Model 3,132\nLucid Air,131\nTesla Model Y,129\nChevrolet Bolt EV,120\nHyundai Kona Electric,120\nTesla Model S,120\nKia EV6,117\nChevrolet Bolt EUV,115\nHyundai Ioniq 5,114\nKia Niro Electric,112\nNissan Leaf,111\nMINI Cooper SE,110\nBMW i4 Gran Coupe,109\nPolestar 2,107\nVolkswagen ID.4,107\nFord Mustang Mach-E,103\nTesla Model X,102\n,\n...\nEVs include only all-electric vehicles.,\n...\nOnly the base model names are shown and only the highest MPGe values are shown for each model name.\nSome models listed have configurations that fall below 100 MPGe.,\n...\n,\n\"Source: U.S. Department of Energy and U.S. Environmental Protection Agency’s Fuel Economy Website, Compare Electric Vehicles Side-by-Side.\nData accessed August 24, 2022.\",\n,\n,\nhttps://www.fueleconomy.gov/feg/evSelect.jsp,",
+        "title": "[XLS] FOTW #1257 - Energy.gov",
+        "url": "https://www.energy.gov/documents/fotw1257webxlsx",
+        "date": null,
+        "last_updated": "2026-03-05"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<div id="how-classification-works">
+  #### 分类机制的工作原理
+</div>
+
+分类器会分析你的查询，并自动将其路由至：
+
+* **Pro Search**：适用于需要以下能力的复杂查询：
+  * 多步推理或分析
+  * 跨多个来源的对比分析
+  * 深度研究工作流
+
+* **Fast Search**：适用于以下简单直接的查询：
+  * 简单的事实查找
+  * 直接的信息检索
+  * 基础的问答
+
+<div id="billing-with-auto-classification">
+  #### 自动分类下的计费
+</div>
+
+**计费取决于你的查询触发了哪种搜索类型：**
+
+* 若归类为 **Pro Search**：每 1,000 次请求 $14–$22 (视上下文大小而定)
+* 若归类为 **Fast Search**：每 1,000 次请求 $6–$14 (视上下文大小而定，与标准 Sonar Pro 相同)
+
+完整定价详情请参阅<a href="/zh/docs/sonar/pro-search/quickstart#pricing">定价</a>部分。
+
+<Tip>
+  大多数应用建议启用自动分类，它能在成本优化与查询性能之间取得平衡：需要时即可获得 Pro Search 能力，又不会为简单查询多付费用。
+</Tip>
+
+<div id="manually-specifying-the-search-type">
+  ### 手动指定搜索类型
+</div>
+
+如有需要，你可以手动指定搜索类型。当你明确知道某个查询需要 Pro Search 能力时，这种做法尤为有用。
+
+* **`"search_type": "pro"`**：当你确定需要多步工具调用时，为复杂查询手动指定 Pro Search
+* **`"search_type": "fast"`**：为简单查询手动指定 Fast Search，以优化速度和成本 (省略 `search_type` 时也默认使用该类型)
+
+<div id="built-in-tool-capabilities">
+  ## 内置工具能力
+</div>
+
+Pro Search 提供两个强大的内置工具，模型可自动调用：
+
+<CardGroup cols={1}>
+  <Card title="web_search" icon="search" href="/zh/docs/sonar/pro-search/tools#web_search">
+    根据不断深入的研究上下文，通过自定义查询、筛选条件和搜索策略执行有针对性的网页搜索。
+  </Card>
+
+  <Card title="fetch_url_content" icon="globe" href="/zh/docs/sonar/pro-search/tools#fetch_url_content">
+    抓取并分析指定 URL 的内容，获取搜索结果摘要之外的详细信息。
+  </Card>
+</CardGroup>
+
+<Info>
+  模型会自动判断使用哪些工具以及何时使用，为每个具体查询构建动态的研究工作流。这些内置工具由系统调用，不支持注册自定义工具。详见[内置工具能力](/zh/docs/sonar/pro-search/tools)指南。
+</Info>
+
+<div id="additional-capabilities">
+  ## 更多能力
+</div>
+
+Pro Search 还可使用 Sonar Pro 的高级特性，进一步提升开发体验：
+
+* **[流式模式指南](/zh/docs/sonar/pro-search/stream-mode)**：通过精简模式或完整模式控制流式响应格式，既能优化带宽占用，又能提升推理过程的可见性。
+
+<div id="pricing">
+  ## 定价
+</div>
+
+Pro Search 的定价包含 token 用量费用，以及随搜索类型和上下文大小变化的请求费用。
+
+<div>
+  <div>
+    <h3>Token 用量 (所有搜索类型相同) </h3>
+
+    <div>
+      <div>
+        <span>输入 Token</span>
+        <span>每 100 万 $3</span>
+      </div>
+
+      <div>
+        <span>输出 Token</span>
+        <span>每 100 万 $15</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <h3>请求费用 (每 1,000 次请求) </h3>
+
+    <div>
+      <h4>Pro Search (复杂查询) </h4>
+
+      <div>
+        <div>
+          <span>高上下文</span>
+          <span>$22</span>
+        </div>
+
+        <div>
+          <span>中上下文</span>
+          <span>$18</span>
+        </div>
+
+        <div>
+          <span>低上下文</span>
+          <span>$14</span>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <h4>Fast Search (简单查询) </h4>
+
+      <div>
+        <div>
+          <span>高上下文</span>
+          <span>$14</span>
+        </div>
+
+        <div>
+          <span>中上下文</span>
+          <span>$10</span>
+        </div>
+
+        <div>
+          <span>低上下文</span>
+          <span>$6</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<Info>
+  使用 `search_type: "auto"` 时，若查询被判定为复杂，则按 Pro Search 费率计费；若判定为简单，则按 Fast Search 费率计费。完整定价详情请见<a href="/zh/docs/getting-started/pricing">此处</a>。
+</Info>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Pro Search 工具" icon="brain" href="/zh/docs/sonar/pro-search/tools">
+    了解 Pro Search 中模型可使用的工具。
+  </Card>
+
+  <Card title="Pro Search 分类器" icon="brain" href="/zh/docs/sonar/pro-search/classifier">
+    了解自动判定查询应使用 Pro Search 还是 Fast Search 的分类器。
+  </Card>
+
+  <Card title="Pro Search 流式模式" icon="bolt" href="/zh/docs/sonar/pro-search/stream-mode">
+    了解 Pro Search 的流式模式。
+  </Card>
+
+  <Card title="Agent API 快速入门" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    开始使用 Agent API。
+  </Card>
+</CardGroup>

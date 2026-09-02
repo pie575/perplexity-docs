@@ -1,0 +1,3907 @@
+{
+  "components": {
+    "schemas": {
+      "AdditionalToolsItemParam": {
+        "description": "リクエストに追加ツールを提供するCodex互換の入力項目。",
+        "properties": {
+          "role": {
+            "description": "Codexがツールプレフィックスに割り当てるロール（常に`developer`）。",
+            "type": "string"
+          },
+          "tools": {
+            "description": "トップレベルのtoolsパラメータの後にマージするツール。",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesToolParam"
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "additional_tools",
+            "description": "項目の種類。常に`additional_tools`。",
+            "enum": [
+              "additional_tools"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "tools"
+        ],
+        "title": "Additional tools item",
+        "type": "object"
+      },
+      "AllowedToolChoice": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/ToolChoiceValueEnum"
+          },
+          "tools": {
+            "items": {
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FunctionToolChoice"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "allowed_tools",
+            "enum": [
+              "allowed_tools"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "tools",
+          "mode"
+        ],
+        "type": "object"
+      },
+      "AllowedToolsParam": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/ToolChoiceValueEnum"
+          },
+          "tools": {
+            "description": "このリクエストで許可されるツールのリスト。",
+            "items": {
+              "$ref": "#/components/schemas/SpecificToolChoiceParam"
+            },
+            "maxItems": 128,
+            "minItems": 1,
+            "type": "array"
+          },
+          "type": {
+            "default": "allowed_tools",
+            "description": "ツール選択のタイプ。常に`allowed_tools`。",
+            "enum": [
+              "allowed_tools"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "tools"
+        ],
+        "type": "object"
+      },
+      "Annotation": {
+        "description": "出力テキスト内の範囲に適用される注釈。",
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/UrlCitationBody"
+          }
+        ]
+      },
+      "AssistantMessageItemParam": {
+        "properties": {
+          "content": {
+            "description": "コンテンツパートの配列として表されるメッセージコンテンツ。",
+            "oneOf": [
+              {
+                "items": {
+                  "description": "テキストや拒否メッセージなどのアシスタントメッセージコンテンツの一部。",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/OutputTextContentParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/RefusalContentParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "description": "単一の文字列として表されるメッセージコンテンツ。",
+                "maxLength": 10485760,
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "description": "このメッセージ項目の一意のID。",
+            "example": "msg_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "phase": {
+            "description": "`assistant`メッセージを、中間コメント（`commentary`）または最終回答（`final_answer`）として分類します。`gpt-5.3-codex`以降のモデルでは、フォローアップリクエストを送信する際、すべてのアシスタントメッセージのphaseを保持して再送信してください。省略するとパフォーマンスが低下する可能性があります。ユーザーメッセージには使用されません。",
+            "enum": [
+              "commentary",
+              "final_answer"
+            ],
+            "type": "string",
+            "x-openresponses-added-in": "2026-04-24"
+          },
+          "role": {
+            "default": "assistant",
+            "description": "メッセージ作成者のロール。常に`assistant`。",
+            "enum": [
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "メッセージ項目のステータス。",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "message",
+            "description": "項目の種類。常に`message`。",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "CreateResponseBody": {
+        "properties": {
+          "include": {
+            "items": {
+              "$ref": "#/components/schemas/IncludeEnum"
+            },
+            "type": "array"
+          },
+          "input": {
+            "description": "このリクエストの範囲でモデルに提供するコンテキスト。文字列または入力項目の配列を指定できます。文字列を指定した場合は、ユーザーメッセージとして解釈されます。",
+            "oneOf": [
+              {
+                "maxLength": 10485760,
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ItemParam"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "instructions": {
+            "description": "このリクエストでモデルを導くための追加指示。",
+            "nullable": true,
+            "type": "string"
+          },
+          "max_output_tokens": {
+            "description": "モデルがこの応答で生成できるトークンの最大数。",
+            "minimum": 16,
+            "nullable": true,
+            "type": "integer"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/MetadataParam"
+          },
+          "model": {
+            "description": "Routerカタログの`creator/model-name` IDで指定する、リクエストを処理するモデル。",
+            "type": "string"
+          },
+          "parallel_tool_calls": {
+            "description": "モデルが複数のツールを並列に呼び出せるかどうか。",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "prompt_cache_key": {
+            "description": "プロンプトキャッシュの読み取りまたは書き込みに使用するキー。",
+            "maxLength": 64,
+            "nullable": true,
+            "type": "string"
+          },
+          "reasoning": {
+            "$ref": "#/components/schemas/ReasoningParam"
+          },
+          "safety_identifier": {
+            "description": "安全性の監視と不正使用の検出に使用する安定した識別子。",
+            "maxLength": 64,
+            "nullable": true,
+            "type": "string"
+          },
+          "service_tier": {
+            "$ref": "#/components/schemas/ServiceTierEnum"
+          },
+          "stream": {
+            "description": "応答イベントをサーバー送信イベントとしてストリーミングするかどうか。",
+            "type": "boolean"
+          },
+          "temperature": {
+            "description": "使用するサンプリング温度。0から2の範囲で指定します。値が大きいほど、出力のランダム性が高くなります。",
+            "nullable": true,
+            "type": "number"
+          },
+          "text": {
+            "$ref": "#/components/schemas/TextParam"
+          },
+          "tool_choice": {
+            "$ref": "#/components/schemas/ToolChoiceParam"
+          },
+          "tools": {
+            "description": "応答の生成中にモデルが呼び出せるツールのリスト。",
+            "items": {
+              "$ref": "#/components/schemas/ResponsesToolParam"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "top_p": {
+            "description": "0から1の範囲の核サンプリングパラメーター。モデルは、累積確率が上位のトークンのみを考慮します。",
+            "nullable": true,
+            "type": "number"
+          },
+          "truncation": {
+            "$ref": "#/components/schemas/TruncationEnum"
+          }
+        },
+        "required": [
+          "model",
+          "input"
+        ],
+        "type": "object"
+      },
+      "CustomToolCall": {
+        "description": "モデルによって生成されたカスタム（自由形式）ツール呼び出し。",
+        "properties": {
+          "call_id": {
+            "description": "生成されたカスタムツール呼び出しの一意の ID。",
+            "type": "string"
+          },
+          "id": {
+            "description": "カスタムツール呼び出し項目の一意の ID。",
+            "type": "string"
+          },
+          "input": {
+            "description": "生成された生の自由形式入力文字列。JSON を経由させることはありません。",
+            "type": "string"
+          },
+          "name": {
+            "description": "呼び出されたカスタムツールの名前。",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "存在する場合、カスタムツールに関連付けられた名前空間。",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "custom_tool_call",
+            "description": "項目のタイプ。常に `custom_tool_call`。",
+            "enum": [
+              "custom_tool_call"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "call_id",
+          "name",
+          "input",
+          "status"
+        ],
+        "title": "Custom tool call",
+        "type": "object"
+      },
+      "CustomToolCallItemParam": {
+        "description": "以前のレスポンスから再利用されるカスタム（自由形式）ツール呼び出し。",
+        "properties": {
+          "call_id": {
+            "description": "モデルが生成したカスタムツール呼び出しの一意のID。",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "このカスタムツール呼び出しの一意のID。",
+            "example": "ctc_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "input": {
+            "description": "そのまま転送される未加工の自由形式ツール入力文字列。",
+            "type": "string"
+          },
+          "name": {
+            "description": "呼び出すカスタムツールの名前。",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "カスタムツールに関連付けられた名前空間（ある場合）。",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "custom_tool_call",
+            "description": "項目の種類。常に`custom_tool_call`。",
+            "enum": [
+              "custom_tool_call"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "type",
+          "name",
+          "input"
+        ],
+        "title": "Custom tool call",
+        "type": "object"
+      },
+      "CustomToolCallOutputItemParam": {
+        "description": "カスタムツール呼び出しの出力。",
+        "properties": {
+          "call_id": {
+            "description": "モデルが生成したカスタムツール呼び出しの一意のID。",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "カスタムツール呼び出しの出力の一意のID。",
+            "example": "ctco_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "output": {
+            "description": "カスタムツール呼び出しのテキストまたは画像出力。",
+            "oneOf": [
+              {
+                "description": "カスタムツール呼び出しの文字列出力。",
+                "maxLength": 10485760,
+                "type": "string"
+              },
+              {
+                "description": "カスタムツール呼び出しのコンテンツ出力（テキスト、画像）の配列。",
+                "items": {
+                  "description": "テキストや画像などのメッセージコンテンツ。",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputImageContentParamAutoParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "custom_tool_call_output",
+            "description": "項目の種類。常に`custom_tool_call_output`。",
+            "enum": [
+              "custom_tool_call_output"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "type",
+          "output"
+        ],
+        "title": "Custom tool call output",
+        "type": "object"
+      },
+      "CustomToolParam": {
+        "description": "入力が生の文字列で、必要に応じて文法で制約できる自由形式のカスタムツール。",
+        "properties": {
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "format": {
+            "additionalProperties": true,
+            "description": "自由形式入力の形式制約（{\"type\":\"text\"}または{\"type\":\"grammar\",\"syntax\":...,\"definition\":...}）。生のJSONとして保持され、そのまま転送されます。",
+            "nullable": true,
+            "type": "object"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
+          "type": {
+            "default": "custom",
+            "enum": [
+              "custom"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type"
+        ],
+        "title": "Custom tool",
+        "type": "object"
+      },
+      "DeveloperMessageItemParam": {
+        "properties": {
+          "content": {
+            "description": "コンテンツパートの配列として表されるメッセージコンテンツ。",
+            "oneOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "description": "単一の文字列として表されるメッセージコンテンツ。",
+                "maxLength": 10485760,
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "description": "このメッセージ項目の一意のID。",
+            "example": "msg_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "default": "developer",
+            "description": "メッセージのロール。常に`developer`。",
+            "enum": [
+              "developer"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "メッセージ項目のステータス。",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "message",
+            "description": "項目の種類。常に`message`。",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "Error": {
+        "description": "応答の生成中に発生したエラー。",
+        "properties": {
+          "code": {
+            "description": "返された機械可読なエラーコード。",
+            "type": "string"
+          },
+          "message": {
+            "description": "返された、人間が読める形式のエラー説明。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "code",
+          "message"
+        ],
+        "title": "Error",
+        "type": "object"
+      },
+      "ErrorPayload": {
+        "description": "ストリーミングエラーイベントで発行されたエラーペイロード。",
+        "properties": {
+          "code": {
+            "description": "発行されたエラーコード（存在する場合）。",
+            "nullable": true,
+            "type": "string"
+          },
+          "headers": {
+            "additionalProperties": {
+              "description": "発行されたヘッダー値。",
+              "type": "string"
+            },
+            "description": "エラーとともに発行されたレスポンスヘッダー（存在する場合）。",
+            "type": "object"
+          },
+          "message": {
+            "description": "発行された人間が読めるエラーメッセージ。",
+            "type": "string"
+          },
+          "param": {
+            "description": "エラーに関連付けられたパラメーター名（存在する場合）。",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "description": "発行されたエラーの種類。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "code",
+          "message",
+          "param"
+        ],
+        "title": "Error payload",
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "description": "ストリーミング開始前に返されるエラー。",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorPayload"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "title": "Error response",
+        "type": "object"
+      },
+      "ErrorStreamingEvent": {
+        "description": "エラーが発行されたことを示すストリーミングイベント。",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorPayload"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "error",
+            "description": "イベントの種類。常に `error`。",
+            "enum": [
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "error"
+        ],
+        "title": "Error event",
+        "type": "object"
+      },
+      "FunctionCall": {
+        "description": "モデルによって生成された関数ツール呼び出し。",
+        "properties": {
+          "arguments": {
+            "description": "生成された引数の JSON 文字列。",
+            "type": "string"
+          },
+          "call_id": {
+            "description": "生成された関数ツール呼び出しの一意の ID。",
+            "type": "string"
+          },
+          "id": {
+            "description": "関数呼び出し項目の一意の ID。",
+            "type": "string"
+          },
+          "name": {
+            "description": "呼び出された関数の名前。",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "存在する場合、関数ツールに関連付けられた名前空間。",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "function_call",
+            "description": "項目のタイプ。常に `function_call`。",
+            "enum": [
+              "function_call"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "call_id",
+          "name",
+          "arguments",
+          "status"
+        ],
+        "title": "Function call",
+        "type": "object"
+      },
+      "FunctionCallItemParam": {
+        "properties": {
+          "arguments": {
+            "description": "JSON文字列として表される関数引数。",
+            "type": "string"
+          },
+          "call_id": {
+            "description": "モデルが生成した関数ツール呼び出しの一意のID。",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "この関数ツール呼び出しの一意のID。",
+            "example": "fc_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "呼び出す関数の名前。",
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
+          "namespace": {
+            "description": "関数ツールに関連付けられた名前空間（ある場合）。",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "function_call",
+            "description": "項目の種類。常に`function_call`。",
+            "enum": [
+              "function_call"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "type",
+          "name",
+          "arguments"
+        ],
+        "type": "object"
+      },
+      "FunctionCallOutput": {
+        "description": "ツールから返された関数ツール呼び出しの出力。",
+        "properties": {
+          "call_id": {
+            "description": "モデルによって生成された関数ツール呼び出しの一意の ID。",
+            "type": "string"
+          },
+          "id": {
+            "description": "関数ツール呼び出し出力の一意の ID。この項目が API 経由で返される場合に設定されます。",
+            "type": "string"
+          },
+          "output": {
+            "oneOf": [
+              {
+                "description": "関数ツール呼び出しの出力を表す JSON 文字列。",
+                "type": "string"
+              },
+              {
+                "description": "関数ツール呼び出しの出力コンテンツ（画像、ファイル、テキスト）の配列。",
+                "items": {
+                  "description": "入力項目または出力項目を構成するコンテンツ部分。",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputImageContent"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputFileContent"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallOutputStatusEnum"
+          },
+          "type": {
+            "default": "function_call_output",
+            "description": "関数ツール呼び出し出力のタイプ。常に `function_call_output`。",
+            "enum": [
+              "function_call_output"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "call_id",
+          "output",
+          "status"
+        ],
+        "title": "Function call output",
+        "type": "object"
+      },
+      "FunctionCallOutputItemParam": {
+        "description": "関数ツール呼び出しの出力。",
+        "properties": {
+          "call_id": {
+            "description": "モデルが生成した関数ツール呼び出しの一意のID。",
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "id": {
+            "description": "関数ツール呼び出し出力の一意のID。この項目がAPI経由で返される場合に設定されます。",
+            "example": "fc_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "output": {
+            "description": "関数ツール呼び出しのテキスト、画像、またはファイル出力。",
+            "oneOf": [
+              {
+                "description": "関数ツール呼び出しの出力を表すJSON文字列。",
+                "maxLength": 10485760,
+                "type": "string"
+              },
+              {
+                "description": "関数ツール呼び出しのコンテンツ出力（テキスト、画像、ファイル）の配列。",
+                "items": {
+                  "description": "テキスト、画像、ファイルなどのメッセージコンテンツの一部。",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputImageContentParamAutoParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "status": {
+            "$ref": "#/components/schemas/FunctionCallStatus"
+          },
+          "type": {
+            "default": "function_call_output",
+            "description": "関数ツール呼び出し出力の種類。常に`function_call_output`。",
+            "enum": [
+              "function_call_output"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "call_id",
+          "type",
+          "output"
+        ],
+        "title": "Function tool call output",
+        "type": "object"
+      },
+      "FunctionCallOutputStatusEnum": {
+        "description": "`FunctionCallStatus` と同様です。互換性のため、ここでは 3 つの選択肢すべてが許可されていますが、実際にはこれらの項目は開発者が提供するため、`completed` のみを使用してください。",
+        "enum": [
+          "in_progress",
+          "completed",
+          "incomplete"
+        ],
+        "type": "string"
+      },
+      "FunctionCallStatus": {
+        "enum": [
+          "in_progress",
+          "completed",
+          "incomplete"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "completed": "Model has finished sampling this item.",
+          "in_progress": "Model is currently sampling this item.",
+          "incomplete": "Model was interrupted from sampling this item partway through. This can occur, for example, if the model encounters a stop token or exhausts its output_token budget."
+        }
+      },
+      "FunctionTool": {
+        "description": "モデルが呼び出しを選択できる関数を独自のコードで定義します。[関数呼び出し](https://platform.openai.com/docs/guides/function-calling)の詳細をご覧ください。",
+        "properties": {
+          "description": {
+            "description": "関数の説明。モデルが関数を呼び出すかどうかを判断するために使用されます。",
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "description": "呼び出す関数の名前。",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": {},
+            "description": "関数のパラメーターを記述する JSON スキーマオブジェクト。",
+            "nullable": true,
+            "type": "object"
+          },
+          "strict": {
+            "description": "厳密なパラメーター検証を強制するかどうか。デフォルトは `true`。",
+            "nullable": true,
+            "type": "boolean"
+          },
+          "type": {
+            "default": "function",
+            "description": "関数ツールのタイプ。常に `function`。",
+            "enum": [
+              "function"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "description",
+          "parameters",
+          "strict"
+        ],
+        "title": "Function",
+        "type": "object"
+      },
+      "FunctionToolChoice": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "default": "function",
+            "enum": [
+              "function"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "FunctionToolParam": {
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "pattern": "^[a-zA-Z0-9_-]+$",
+            "type": "string"
+          },
+          "parameters": {
+            "additionalProperties": true,
+            "description": "関数パラメータのJSON Schema。生のJSONとして保持され、そのまま転送されます。",
+            "nullable": true,
+            "type": "object"
+          },
+          "strict": {
+            "type": "boolean"
+          },
+          "type": {
+            "default": "function",
+            "enum": [
+              "function"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "description"
+        ],
+        "type": "object"
+      },
+      "ImageDetail": {
+        "enum": [
+          "low",
+          "high",
+          "auto"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Choose the detail level automatically.",
+          "high": "Allows the model to \"see\" a higher-resolution version of the image, usually increasing input token costs.",
+          "low": "Restricts the model to a lower-resolution version of the image."
+        }
+      },
+      "IncludeEnum": {
+        "description": "",
+        "enum": [
+          "reasoning.encrypted_content"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "reasoning.encrypted_content": "includes encrypted reasoning content so that it may be rehydrated on a subsequent request."
+        }
+      },
+      "IncompleteDetails": {
+        "description": "応答が不完全だった理由の詳細。",
+        "properties": {
+          "reason": {
+            "description": "応答を完了できなかった理由。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "Incomplete details",
+        "type": "object"
+      },
+      "InputFileContent": {
+        "description": "モデルへのファイル入力。",
+        "properties": {
+          "file_url": {
+            "description": "モデルに送信するファイルのURL。",
+            "type": "string"
+          },
+          "filename": {
+            "description": "モデルに送信するファイルの名前。",
+            "type": "string"
+          },
+          "type": {
+            "default": "input_file",
+            "description": "入力項目のタイプ。常に`input_file`。",
+            "enum": [
+              "input_file"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Input file",
+        "type": "object"
+      },
+      "InputFileContentParam": {
+        "description": "モデルへのファイル入力。",
+        "properties": {
+          "file_data": {
+            "description": "モデルに送信するファイルのbase64エンコードデータ。",
+            "maxLength": 33554432,
+            "nullable": true,
+            "type": "string"
+          },
+          "file_url": {
+            "description": "モデルに送信するファイルのURL。",
+            "nullable": true,
+            "type": "string"
+          },
+          "filename": {
+            "description": "モデルに送信するファイルの名前。",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "input_file",
+            "description": "入力項目の種類。常に`input_file`。",
+            "enum": [
+              "input_file"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Input file",
+        "type": "object"
+      },
+      "InputImageContent": {
+        "description": "モデルへの画像入力。[画像入力](/docs/guides/vision)について詳しくは、こちらを参照してください。",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ImageDetail"
+          },
+          "image_url": {
+            "description": "モデルに送信する画像のURL。完全修飾URL、またはdata URL内のbase64エンコード画像を指定します。",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "input_image",
+            "description": "入力項目のタイプ。常に`input_image`。",
+            "enum": [
+              "input_image"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "image_url",
+          "detail"
+        ],
+        "title": "Input image",
+        "type": "object"
+      },
+      "InputImageContentParamAutoParam": {
+        "description": "モデルへの画像入力。[画像入力](/docs/guides/vision)について詳しく見る",
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/ImageDetail"
+          },
+          "image_url": {
+            "description": "モデルに送信する画像のURL。完全修飾URL、またはデータURL内のbase64エンコード画像。",
+            "maxLength": 20971520,
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "input_image",
+            "description": "入力項目の種類。常に`input_image`。",
+            "enum": [
+              "input_image"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Input image",
+        "type": "object"
+      },
+      "InputTextContent": {
+        "description": "モデルへのテキスト入力。",
+        "properties": {
+          "text": {
+            "description": "モデルへのテキスト入力。",
+            "type": "string"
+          },
+          "type": {
+            "default": "input_text",
+            "description": "入力項目のタイプ。常に`input_text`。",
+            "enum": [
+              "input_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Input text",
+        "type": "object"
+      },
+      "InputTextContentParam": {
+        "description": "モデルへのテキスト入力。",
+        "properties": {
+          "text": {
+            "description": "モデルへのテキスト入力。",
+            "maxLength": 10485760,
+            "type": "string"
+          },
+          "type": {
+            "default": "input_text",
+            "description": "入力項目の種類。常に`input_text`。",
+            "enum": [
+              "input_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Input text",
+        "type": "object",
+        "x-unionDisplay": "section",
+        "x-unionTitle": "Content Type"
+      },
+      "InputTokensDetails": {
+        "description": "記録された入力トークン使用量の内訳。",
+        "properties": {
+          "cache_write_tokens": {
+            "description": "プロンプトキャッシュに書き込まれた入力トークン数。キャッシュ書き込みが行われた場合にのみ含まれます。",
+            "type": "integer"
+          },
+          "cached_tokens": {
+            "description": "キャッシュから提供された入力トークン数。",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "cached_tokens"
+        ],
+        "title": "Input tokens details",
+        "type": "object"
+      },
+      "InputVideoContent": {
+        "description": "モデルへの動画入力を表すコンテンツブロック。",
+        "properties": {
+          "type": {
+            "description": "入力コンテンツの種類。常に `input_video`。",
+            "enum": [
+              "input_video"
+            ],
+            "type": "string"
+          },
+          "video_url": {
+            "description": "動画ファイルを指す base64 文字列またはリモート URL。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "video_url"
+        ],
+        "type": "object"
+      },
+      "ItemField": {
+        "description": "メッセージ、ツール呼び出し、ツール出力、推論、その他の応答要素を表す項目。",
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Message"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCall"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCallOutput"
+          },
+          {
+            "$ref": "#/components/schemas/CustomToolCall"
+          },
+          {
+            "$ref": "#/components/schemas/ReasoningBody"
+          }
+        ]
+      },
+      "ItemParam": {
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/AdditionalToolsItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/ReasoningItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/UserMessageItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/SystemMessageItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/DeveloperMessageItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/AssistantMessageItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCallItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/FunctionCallOutputItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/CustomToolCallItemParam"
+          },
+          {
+            "$ref": "#/components/schemas/CustomToolCallOutputItemParam"
+          }
+        ],
+        "x-unionDisplay": "section",
+        "x-unionTitle": "Input Item Types"
+      },
+      "ItemReferenceParam": {
+        "description": "参照する項目の内部識別子。",
+        "properties": {
+          "id": {
+            "description": "参照する項目のID。",
+            "type": "string"
+          },
+          "type": {
+            "default": "item_reference",
+            "description": "参照する項目の種類。常に`item_reference`。",
+            "enum": [
+              "item_reference"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "type"
+        ],
+        "title": "Item reference",
+        "type": "object"
+      },
+      "JsonObjectResponseFormat": {
+        "properties": {
+          "type": {
+            "default": "json_object",
+            "enum": [
+              "json_object"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "JsonSchemaResponseFormat": {
+        "properties": {
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "schema": {
+            "nullable": true
+          },
+          "strict": {
+            "type": "boolean"
+          },
+          "type": {
+            "default": "json_schema",
+            "enum": [
+              "json_schema"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "description",
+          "schema",
+          "strict"
+        ],
+        "type": "object"
+      },
+      "JsonSchemaResponseFormatParam": {
+        "properties": {
+          "description": {
+            "description": "レスポンス形式の用途の説明。モデルがその形式での応答方法を判断するために使用します。",
+            "type": "string"
+          },
+          "name": {
+            "description": "レスポンス形式の名前。a-z、A-Z、0-9、アンダースコア、ダッシュのみを使用でき、最大長は 64 です。",
+            "type": "string"
+          },
+          "schema": {
+            "additionalProperties": true,
+            "description": "JSON Schema オブジェクトとして記述されたレスポンス形式のスキーマ。",
+            "title": "JSON schema",
+            "type": "object"
+          },
+          "strict": {
+            "default": true,
+            "description": "出力の生成時に厳格なスキーマ準拠を有効にするかどうか。\ntrue に設定すると、モデルは常に `schema` フィールドで定義されたスキーマに厳密に従います。\n`strict` が `true` の場合にサポートされるのは、JSON Schema の一部のみです。",
+            "enum": [
+              true
+            ],
+            "nullable": true,
+            "type": "boolean"
+          },
+          "type": {
+            "description": "定義するレスポンス形式の種類。常に `json_schema`。",
+            "enum": [
+              "json_schema"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name",
+          "schema"
+        ],
+        "type": "object"
+      },
+      "LogProb": {
+        "description": "トークンの対数確率。",
+        "properties": {
+          "bytes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "logprob": {
+            "type": "number"
+          },
+          "token": {
+            "type": "string"
+          },
+          "top_logprobs": {
+            "items": {
+              "$ref": "#/components/schemas/TopLogProb"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "token",
+          "logprob",
+          "bytes",
+          "top_logprobs"
+        ],
+        "title": "Log probability",
+        "type": "object"
+      },
+      "Message": {
+        "description": "モデル宛てまたはモデルからのメッセージ。",
+        "properties": {
+          "content": {
+            "description": "メッセージのコンテンツ",
+            "items": {
+              "description": "入力項目または出力項目を構成するコンテンツ部分。",
+              "discriminator": {
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/OutputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/TextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/SummaryTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/ReasoningTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/RefusalContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputImageContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputFileContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputVideoContent"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "id": {
+            "description": "メッセージの一意のID。",
+            "type": "string"
+          },
+          "phase": {
+            "description": "`assistant` メッセージを、中間コメント（`commentary`）または最終回答（`final_answer`）としてラベル付けします。`gpt-5.3-codex` 以降のモデルでフォローアップリクエストを送信する際は、すべての assistant メッセージの phase を保持して再送信してください。省略するとパフォーマンスが低下する可能性があります。ユーザーメッセージには使用されません。",
+            "enum": [
+              "commentary",
+              "final_answer"
+            ],
+            "type": "string",
+            "x-openresponses-added-in": "2026-04-24"
+          },
+          "role": {
+            "$ref": "#/components/schemas/MessageRole"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MessageStatus"
+          },
+          "type": {
+            "default": "message",
+            "description": "メッセージのタイプ。常に`message`に設定します。",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "status",
+          "role",
+          "content"
+        ],
+        "title": "Message",
+        "type": "object"
+      },
+      "MessageRole": {
+        "enum": [
+          "user",
+          "assistant",
+          "system",
+          "developer"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "assistant": "Model-generated content in the conversation.",
+          "developer": "Developer-supplied guidance that shapes the assistant’s behavior.",
+          "system": "System-level instructions that set global behavior.",
+          "user": "End‑user input in the conversation."
+        }
+      },
+      "MessageStatus": {
+        "enum": [
+          "in_progress",
+          "completed",
+          "incomplete"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "completed": "Model has finished sampling this item.",
+          "in_progress": "Model is currently sampling this item.",
+          "incomplete": "Model was interrupted from sampling this item partway through. This can occur, for example, if the model encounters a stop token or exhausts its output_token budget."
+        }
+      },
+      "MetadataParam": {
+        "additionalProperties": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "description": "オブジェクトに付加できる16個のキーと値のペアのセット。オブジェクトに関する追加情報を構造化形式で保存したり、APIまたはダッシュボードを介してオブジェクトを照会したりする際に役立ちます。\n        キーは最大64文字の文字列です。値は最大512文字の文字列です。",
+        "maxProperties": 16,
+        "type": "object"
+      },
+      "NamespaceToolParam": {
+        "description": "関連する関数ツールをグループ化する名前空間。",
+        "properties": {
+          "description": {
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "maxLength": 64,
+            "minLength": 1,
+            "type": "string"
+          },
+          "tools": {
+            "description": "この名前空間にグループ化された関数ツール。",
+            "items": {
+              "$ref": "#/components/schemas/FunctionToolParam"
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "namespace",
+            "enum": [
+              "namespace"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "tools",
+          "type"
+        ],
+        "title": "Namespace tool",
+        "type": "object"
+      },
+      "OutputTextContent": {
+        "description": "モデルからのテキスト出力。",
+        "properties": {
+          "annotations": {
+            "description": "テキスト出力の注釈。",
+            "items": {
+              "$ref": "#/components/schemas/Annotation"
+            },
+            "type": "array"
+          },
+          "logprobs": {
+            "items": {
+              "$ref": "#/components/schemas/LogProb"
+            },
+            "type": "array"
+          },
+          "text": {
+            "description": "モデルからのテキスト出力。",
+            "type": "string"
+          },
+          "type": {
+            "default": "output_text",
+            "description": "出力テキストのタイプ。常に`output_text`。",
+            "enum": [
+              "output_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text",
+          "annotations"
+        ],
+        "title": "Output text",
+        "type": "object"
+      },
+      "OutputTextContentParam": {
+        "properties": {
+          "annotations": {
+            "description": "テキストコンテンツに関連付けられた引用。",
+            "oneOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/UrlCitationParam"
+                },
+                "type": "array"
+              }
+            ]
+          },
+          "text": {
+            "description": "テキストコンテンツ。",
+            "maxLength": 10485760,
+            "type": "string"
+          },
+          "type": {
+            "default": "output_text",
+            "description": "コンテンツの種類。常に`output_text`。",
+            "enum": [
+              "output_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "OutputTokensDetails": {
+        "description": "記録された出力トークン使用量の内訳。",
+        "properties": {
+          "reasoning_tokens": {
+            "description": "推論に割り当てられた出力トークン数。",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "reasoning_tokens"
+        ],
+        "title": "Output tokens details",
+        "type": "object"
+      },
+      "Reasoning": {
+        "description": "応答に使用された推論の設定とメタデータ。",
+        "properties": {
+          "effort": {
+            "description": "指定されている場合、モデルに要求された推論の労力。",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReasoningEffortEnum"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReasoningSummaryEnum"
+          }
+        },
+        "required": [
+          "effort",
+          "summary"
+        ],
+        "title": "Reasoning",
+        "type": "object"
+      },
+      "ReasoningBody": {
+        "description": "モデルによって生成された推論項目。",
+        "properties": {
+          "content": {
+            "description": "生成された推論コンテンツ。",
+            "items": {
+              "description": "入力項目または出力項目を構成するコンテンツ部分。",
+              "discriminator": {
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/OutputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/TextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/SummaryTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/ReasoningTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/RefusalContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputImageContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputFileContent"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "encrypted_content": {
+            "description": "生成された暗号化済みの推論コンテンツ。",
+            "type": "string"
+          },
+          "id": {
+            "description": "推論項目の一意の ID。",
+            "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/MessageStatus"
+          },
+          "summary": {
+            "description": "生成された推論要約コンテンツ。",
+            "items": {
+              "description": "入力項目または出力項目を構成するコンテンツ部分。",
+              "discriminator": {
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/InputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/OutputTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/TextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/SummaryTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/ReasoningTextContent"
+                },
+                {
+                  "$ref": "#/components/schemas/RefusalContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputImageContent"
+                },
+                {
+                  "$ref": "#/components/schemas/InputFileContent"
+                }
+              ]
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "reasoning",
+            "description": "項目のタイプ。常に `reasoning`。",
+            "enum": [
+              "reasoning"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "summary"
+        ],
+        "title": "Reasoning item",
+        "type": "object"
+      },
+      "ReasoningEffortEnum": {
+        "enum": [
+          "none",
+          "low",
+          "medium",
+          "high",
+          "xhigh"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "high": "Use a higher reasoning effort to improve answer quality.",
+          "low": "Use a lower reasoning effort for faster responses.",
+          "medium": "Use a balanced reasoning effort.",
+          "minimal": "Use the lowest non-zero reasoning effort.",
+          "none": "Restrict the model from performing any reasoning before emitting a final answer.",
+          "xhigh": "Use the maximum reasoning effort available."
+        }
+      },
+      "ReasoningItemParam": {
+        "properties": {
+          "content": {
+            "nullable": true
+          },
+          "encrypted_content": {
+            "description": "推論コンテンツの暗号化された表現。",
+            "nullable": true,
+            "type": "string"
+          },
+          "id": {
+            "description": "この推論項目の一意のID。",
+            "example": "rs_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "summary": {
+            "description": "この項目に関連付けられた推論の要約コンテンツ。",
+            "items": {
+              "$ref": "#/components/schemas/ReasoningSummaryContentParam"
+            },
+            "type": "array"
+          },
+          "type": {
+            "default": "reasoning",
+            "description": "項目の種類。常に`reasoning`。",
+            "enum": [
+              "reasoning"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "summary"
+        ],
+        "type": "object"
+      },
+      "ReasoningParam": {
+        "description": "**gpt-5およびoシリーズモデルのみ** [推論モデル](https://platform.openai.com/docs/guides/reasoning)の設定オプション。",
+        "properties": {
+          "effort": {
+            "description": "モデルが適用する推論の労力レベルを制御します。労力を増やすと、レイテンシーとコストが増加する場合があります。",
+            "nullable": true,
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ReasoningEffortEnum"
+              }
+            ]
+          },
+          "summary": {
+            "$ref": "#/components/schemas/ReasoningSummaryEnum"
+          }
+        },
+        "type": "object"
+      },
+      "ReasoningSummaryContentParam": {
+        "properties": {
+          "text": {
+            "description": "推論の要約テキスト。",
+            "maxLength": 10485760,
+            "type": "string"
+          },
+          "type": {
+            "default": "summary_text",
+            "description": "コンテンツの種類。常に`summary_text`。",
+            "enum": [
+              "summary_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ReasoningSummaryEnum": {
+        "enum": [
+          "concise",
+          "detailed",
+          "auto"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Allow the model to decide when to summarize.",
+          "concise": "Emit concise summaries of reasoning content.",
+          "detailed": "Emit details summaries of reasoning content."
+        }
+      },
+      "ReasoningTextContent": {
+        "description": "モデルによる推論テキスト。",
+        "properties": {
+          "text": {
+            "description": "モデルによる推論テキスト。",
+            "type": "string"
+          },
+          "type": {
+            "default": "reasoning_text",
+            "description": "推論テキストのタイプ。常に`reasoning_text`。",
+            "enum": [
+              "reasoning_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Reasoning text",
+        "type": "object"
+      },
+      "RefusalContent": {
+        "description": "モデルによる拒否。",
+        "properties": {
+          "refusal": {
+            "description": "モデルによる拒否の説明。",
+            "type": "string"
+          },
+          "type": {
+            "default": "refusal",
+            "description": "拒否のタイプ。常に`refusal`。",
+            "enum": [
+              "refusal"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "refusal"
+        ],
+        "title": "Refusal",
+        "type": "object"
+      },
+      "RefusalContentParam": {
+        "properties": {
+          "refusal": {
+            "description": "拒否メッセージ。",
+            "maxLength": 10485760,
+            "type": "string"
+          },
+          "type": {
+            "default": "refusal",
+            "description": "コンテンツの種類。常に`refusal`。",
+            "enum": [
+              "refusal"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "refusal"
+        ],
+        "type": "object"
+      },
+      "ResponseCompletedStreamingEvent": {
+        "description": "レスポンスが完了したことを示すストリーミングイベント。",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.completed",
+            "description": "イベントのタイプ。常に`response.completed`。",
+            "enum": [
+              "response.completed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response completed event",
+        "type": "object"
+      },
+      "ResponseContentPartAddedStreamingEvent": {
+        "description": "コンテンツパートが追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "content_index": {
+            "description": "追加されたコンテンツパートのインデックス。",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "更新された項目のID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "part": {
+            "description": "入力項目または出力項目を構成するコンテンツパート。",
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/OutputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/TextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/RefusalContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputFileContent"
+              }
+            ]
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.content_part.added",
+            "description": "イベントのタイプ。常に`response.content_part.added`。",
+            "enum": [
+              "response.content_part.added"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "part"
+        ],
+        "title": "Response content part added event",
+        "type": "object"
+      },
+      "ResponseContentPartDoneStreamingEvent": {
+        "description": "コンテンツパートが完了したことを示すストリーミングイベント。",
+        "properties": {
+          "content_index": {
+            "description": "完了したコンテンツパートのインデックス。",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "更新された項目のID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "part": {
+            "description": "入力項目または出力項目を構成するコンテンツパート。",
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/OutputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/TextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/RefusalContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputFileContent"
+              }
+            ]
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.content_part.done",
+            "description": "イベントのタイプ。常に`response.content_part.done`。",
+            "enum": [
+              "response.content_part.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "part"
+        ],
+        "title": "Response content part done event",
+        "type": "object"
+      },
+      "ResponseCreatedStreamingEvent": {
+        "description": "レスポンスが作成されたことを示すストリーミングイベント。",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.created",
+            "description": "イベントのタイプ。常に`response.created`。",
+            "enum": [
+              "response.created"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response created event",
+        "type": "object"
+      },
+      "ResponseCustomToolCallInputDeltaStreamingEvent": {
+        "description": "カスタムツール呼び出し入力が段階的に追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "delta": {
+            "description": "追加された入力の差分。",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "更新されたカスタムツール呼び出し項目の ID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.custom_tool_call_input.delta",
+            "description": "イベントの種類。常に `response.custom_tool_call_input.delta`。",
+            "enum": [
+              "response.custom_tool_call_input.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "delta"
+        ],
+        "title": "Response custom tool call input delta event",
+        "type": "object"
+      },
+      "ResponseCustomToolCallInputDoneStreamingEvent": {
+        "description": "カスタムツール呼び出し入力の完了を示すストリーミングイベント。",
+        "properties": {
+          "input": {
+            "description": "発行された最終的な入力文字列。",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "更新されたカスタムツール呼び出し項目の ID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.custom_tool_call_input.done",
+            "description": "イベントの種類。常に `response.custom_tool_call_input.done`。",
+            "enum": [
+              "response.custom_tool_call_input.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "input"
+        ],
+        "title": "Response custom tool call input done event",
+        "type": "object"
+      },
+      "ResponseFailedStreamingEvent": {
+        "description": "レスポンスが失敗したことを示すストリーミングイベント。",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.failed",
+            "description": "イベントのタイプ。常に`response.failed`。",
+            "enum": [
+              "response.failed"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response failed event",
+        "type": "object"
+      },
+      "ResponseFunctionCallArgumentsDeltaStreamingEvent": {
+        "description": "関数呼び出しの引数が段階的に追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "delta": {
+            "description": "追加された引数の差分。",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "更新されたツール呼び出し項目の ID。",
+            "type": "string"
+          },
+          "obfuscation": {
+            "description": "イベントペイロードのパディング用に追加された難読化文字列。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.function_call_arguments.delta",
+            "description": "イベントの種類。常に `response.function_call_arguments.delta`。",
+            "enum": [
+              "response.function_call_arguments.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "delta"
+        ],
+        "title": "Response function call arguments delta event",
+        "type": "object"
+      },
+      "ResponseFunctionCallArgumentsDoneStreamingEvent": {
+        "description": "関数呼び出しの引数の完了を示すストリーミングイベント。",
+        "properties": {
+          "arguments": {
+            "description": "発行された最終的な引数文字列。",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "更新されたツール呼び出し項目の ID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.function_call_arguments.done",
+            "description": "イベントの種類。常に `response.function_call_arguments.done`。",
+            "enum": [
+              "response.function_call_arguments.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "arguments"
+        ],
+        "title": "Response function call arguments done event",
+        "type": "object"
+      },
+      "ResponseInProgressStreamingEvent": {
+        "description": "レスポンスが処理中であることを示すストリーミングイベント。",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.in_progress",
+            "description": "イベントのタイプ。常に`response.in_progress`。",
+            "enum": [
+              "response.in_progress"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response in progress event",
+        "type": "object"
+      },
+      "ResponseIncompleteStreamingEvent": {
+        "description": "レスポンスが未完了であることを示すストリーミングイベント。",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.incomplete",
+            "description": "イベントのタイプ。常に`response.incomplete`。",
+            "enum": [
+              "response.incomplete"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response incomplete event",
+        "type": "object"
+      },
+      "ResponseOutputItemAddedStreamingEvent": {
+        "description": "出力項目がレスポンスに追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ItemField"
+          },
+          "output_index": {
+            "description": "追加された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.output_item.added",
+            "description": "イベントのタイプ。常に`response.output_item.added`。",
+            "enum": [
+              "response.output_item.added"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "output_index",
+          "item"
+        ],
+        "title": "Response output item added event",
+        "type": "object"
+      },
+      "ResponseOutputItemDoneStreamingEvent": {
+        "description": "出力項目が完了したことを示すストリーミングイベント。",
+        "properties": {
+          "item": {
+            "$ref": "#/components/schemas/ItemField"
+          },
+          "output_index": {
+            "description": "完了した出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.output_item.done",
+            "description": "イベントのタイプ。常に`response.output_item.done`。",
+            "enum": [
+              "response.output_item.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "output_index",
+          "item"
+        ],
+        "title": "Response output item done event",
+        "type": "object"
+      },
+      "ResponseOutputTextAnnotationAddedStreamingEvent": {
+        "description": "出力テキストの注釈が追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "annotation": {
+            "$ref": "#/components/schemas/Annotation"
+          },
+          "annotation_index": {
+            "description": "追加された注釈のインデックス。",
+            "type": "integer"
+          },
+          "content_index": {
+            "description": "更新された出力テキストコンテンツのインデックス。",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "更新された項目の ID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.output_text.annotation.added",
+            "description": "イベントの種類。常に `response.output_text.annotation.added`。",
+            "enum": [
+              "response.output_text.annotation.added"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "annotation_index",
+          "annotation"
+        ],
+        "title": "Response output text annotation added event",
+        "type": "object"
+      },
+      "ResponseOutputTextDeltaStreamingEvent": {
+        "description": "出力テキストが逐次追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "content_index": {
+            "description": "更新されたコンテンツパートのインデックス。",
+            "type": "integer"
+          },
+          "delta": {
+            "description": "追加されたテキスト差分。",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "更新された項目のID。",
+            "type": "string"
+          },
+          "logprobs": {
+            "description": "差分とともに発行されたトークンの対数確率（存在する場合）。",
+            "items": {
+              "$ref": "#/components/schemas/LogProb"
+            },
+            "type": "array"
+          },
+          "obfuscation": {
+            "description": "イベントペイロードをパディングするために追加された難読化文字列。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.output_text.delta",
+            "description": "イベントのタイプ。常に`response.output_text.delta`。",
+            "enum": [
+              "response.output_text.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "delta"
+        ],
+        "title": "Response output text delta event",
+        "type": "object"
+      },
+      "ResponseOutputTextDoneStreamingEvent": {
+        "description": "出力テキストが完了したことを示すストリーミングイベント。",
+        "properties": {
+          "content_index": {
+            "description": "完了したコンテンツパートのインデックス。",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "更新された項目のID。",
+            "type": "string"
+          },
+          "logprobs": {
+            "description": "最終テキストとともに発行されたトークンの対数確率（存在する場合）。",
+            "items": {
+              "$ref": "#/components/schemas/LogProb"
+            },
+            "type": "array"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "text": {
+            "description": "発行された最終テキスト。",
+            "type": "string"
+          },
+          "type": {
+            "default": "response.output_text.done",
+            "description": "イベントのタイプ。常に`response.output_text.done`。",
+            "enum": [
+              "response.output_text.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "text"
+        ],
+        "title": "Response output text done event",
+        "type": "object"
+      },
+      "ResponseQueuedStreamingEvent": {
+        "description": "レスポンスがキューに登録されたことを示すストリーミングイベント。",
+        "properties": {
+          "response": {
+            "$ref": "#/components/schemas/ResponseResource"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.queued",
+            "description": "イベントのタイプ。常に`response.queued`。",
+            "enum": [
+              "response.queued"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "response"
+        ],
+        "title": "Response queued event",
+        "type": "object"
+      },
+      "ResponseReasoningDeltaStreamingEvent": {
+        "description": "推論テキストが段階的に追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "content_index": {
+            "description": "更新された推論コンテンツのインデックス。",
+            "type": "integer"
+          },
+          "delta": {
+            "description": "追加された推論テキストの差分。",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "更新された項目の ID。",
+            "type": "string"
+          },
+          "obfuscation": {
+            "description": "イベントペイロードのパディング用に追加された難読化文字列。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.reasoning.delta",
+            "description": "イベントの種類。常に`response.reasoning.delta`。",
+            "enum": [
+              "response.reasoning.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "delta"
+        ],
+        "title": "Response reasoning delta event",
+        "type": "object"
+      },
+      "ResponseReasoningDoneStreamingEvent": {
+        "description": "推論テキストの完了を示すストリーミングイベント。",
+        "properties": {
+          "content_index": {
+            "description": "完了した推論コンテンツのインデックス。",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "更新された項目の ID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "text": {
+            "description": "発行された最終的な推論テキスト。",
+            "type": "string"
+          },
+          "type": {
+            "default": "response.reasoning.done",
+            "description": "イベントの種類。常に `response.reasoning.done`。",
+            "enum": [
+              "response.reasoning.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "text"
+        ],
+        "title": "Response reasoning done event",
+        "type": "object"
+      },
+      "ResponseReasoningSummaryDeltaStreamingEvent": {
+        "description": "推論要約が段階的に追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "delta": {
+            "description": "追加された要約テキストの差分。",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "更新された項目の ID。",
+            "type": "string"
+          },
+          "obfuscation": {
+            "description": "イベントペイロードのパディング用に追加された難読化文字列。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "summary_index": {
+            "description": "更新された要約コンテンツのインデックス。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.reasoning_summary_text.delta",
+            "description": "イベントの種類。常に `response.reasoning_summary.delta`。",
+            "enum": [
+              "response.reasoning_summary_text.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "summary_index",
+          "delta"
+        ],
+        "title": "Response reasoning summary delta event",
+        "type": "object"
+      },
+      "ResponseReasoningSummaryDoneStreamingEvent": {
+        "description": "推論要約の完了を示すストリーミングイベント。",
+        "properties": {
+          "item_id": {
+            "description": "更新された項目の ID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "summary_index": {
+            "description": "完了した要約コンテンツのインデックス。",
+            "type": "integer"
+          },
+          "text": {
+            "description": "発行された最終的な要約テキスト。",
+            "type": "string"
+          },
+          "type": {
+            "default": "response.reasoning_summary_text.done",
+            "description": "イベントの種類。常に `response.reasoning_summary.done`。",
+            "enum": [
+              "response.reasoning_summary_text.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "summary_index",
+          "text"
+        ],
+        "title": "Response reasoning summary done event",
+        "type": "object"
+      },
+      "ResponseReasoningSummaryPartAddedStreamingEvent": {
+        "description": "推論要約パートが追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "item_id": {
+            "description": "更新された項目のID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "part": {
+            "description": "入力項目または出力項目を構成するコンテンツパート。",
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/OutputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/TextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/RefusalContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputFileContent"
+              }
+            ]
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "summary_index": {
+            "description": "追加された要約パートのインデックス。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.reasoning_summary_part.added",
+            "description": "イベントのタイプ。常に`response.reasoning_summary_part.added`。",
+            "enum": [
+              "response.reasoning_summary_part.added"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "summary_index",
+          "part"
+        ],
+        "title": "Response reasoning summary part added event",
+        "type": "object"
+      },
+      "ResponseReasoningSummaryPartDoneStreamingEvent": {
+        "description": "推論要約パートが完了したことを示すストリーミングイベント。",
+        "properties": {
+          "item_id": {
+            "description": "更新された項目のID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "part": {
+            "description": "入力項目または出力項目を構成するコンテンツパート。",
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/InputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/OutputTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/TextContent"
+              },
+              {
+                "$ref": "#/components/schemas/SummaryTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/ReasoningTextContent"
+              },
+              {
+                "$ref": "#/components/schemas/RefusalContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputImageContent"
+              },
+              {
+                "$ref": "#/components/schemas/InputFileContent"
+              }
+            ]
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "summary_index": {
+            "description": "完了した要約パートのインデックス。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.reasoning_summary_part.done",
+            "description": "イベントのタイプ。常に`response.reasoning_summary_part.done`。",
+            "enum": [
+              "response.reasoning_summary_part.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "summary_index",
+          "part"
+        ],
+        "title": "Response reasoning summary part done event",
+        "type": "object"
+      },
+      "ResponseRefusalDeltaStreamingEvent": {
+        "description": "拒否テキストが段階的に追加されたことを示すストリーミングイベント。",
+        "properties": {
+          "content_index": {
+            "description": "更新された拒否コンテンツのインデックス。",
+            "type": "integer"
+          },
+          "delta": {
+            "description": "追加された拒否テキストの差分。",
+            "type": "string"
+          },
+          "item_id": {
+            "description": "更新された項目のID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.refusal.delta",
+            "description": "イベントの種類。常に`response.refusal.delta`。",
+            "enum": [
+              "response.refusal.delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "delta"
+        ],
+        "title": "Response refusal delta event",
+        "type": "object"
+      },
+      "ResponseRefusalDoneStreamingEvent": {
+        "description": "拒否テキストが完了したことを示すストリーミングイベント。",
+        "properties": {
+          "content_index": {
+            "description": "完了した拒否コンテンツのインデックス。",
+            "type": "integer"
+          },
+          "item_id": {
+            "description": "更新された項目のID。",
+            "type": "string"
+          },
+          "output_index": {
+            "description": "更新された出力項目のインデックス。",
+            "type": "integer"
+          },
+          "refusal": {
+            "description": "発行された最終拒否テキスト。",
+            "type": "string"
+          },
+          "sequence_number": {
+            "description": "発行されたイベントのシーケンス番号。",
+            "type": "integer"
+          },
+          "type": {
+            "default": "response.refusal.done",
+            "description": "イベントの種類。常に`response.refusal.done`。",
+            "enum": [
+              "response.refusal.done"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "sequence_number",
+          "item_id",
+          "output_index",
+          "content_index",
+          "refusal"
+        ],
+        "title": "Response refusal done event",
+        "type": "object"
+      },
+      "ResponseResource": {
+        "description": "Responses API から返された完全なレスポンスオブジェクト。",
+        "properties": {
+          "background": {
+            "description": "このリクエストがバックグラウンドで実行されたかどうか。",
+            "type": "boolean"
+          },
+          "completed_at": {
+            "description": "レスポンスが完了している場合は、その完了時刻の Unix タイムスタンプ（秒単位）。",
+            "nullable": true,
+            "type": "integer"
+          },
+          "created_at": {
+            "description": "レスポンスが作成された時刻の Unix タイムスタンプ（秒単位）。",
+            "type": "integer"
+          },
+          "error": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Error"
+              }
+            ],
+            "description": "レスポンスが失敗した場合に発生したエラー。",
+            "nullable": true
+          },
+          "frequency_penalty": {
+            "description": "これまでのテキスト内での出現頻度に基づいて、新しいトークンにペナルティを科すために使用された頻度ペナルティ。",
+            "type": "number"
+          },
+          "id": {
+            "description": "作成されたレスポンスの一意の ID。",
+            "type": "string"
+          },
+          "incomplete_details": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/IncompleteDetails"
+              }
+            ],
+            "description": "該当する場合、レスポンスが未完了である理由の詳細。",
+            "nullable": true
+          },
+          "instructions": {
+            "description": "このレスポンスでモデルを誘導するために使用された追加の指示。",
+            "nullable": true,
+            "oneOf": [
+              {
+                "type": "string"
+              }
+            ]
+          },
+          "max_output_tokens": {
+            "description": "このレスポンスでモデルが生成を許可されたトークンの最大数。",
+            "nullable": true,
+            "type": "integer"
+          },
+          "max_tool_calls": {
+            "description": "レスポンスの生成中にモデルが実行できるツール呼び出しの最大数。",
+            "nullable": true,
+            "type": "integer"
+          },
+          "metadata": {
+            "description": "レスポンスに関連付けられた開発者定義のメタデータ。"
+          },
+          "model": {
+            "description": "このレスポンスを生成したモデル。",
+            "type": "string"
+          },
+          "object": {
+            "default": "response",
+            "description": "常に `response` であるオブジェクト型。",
+            "enum": [
+              "response"
+            ],
+            "type": "string"
+          },
+          "output": {
+            "description": "モデルによって生成された出力項目。",
+            "items": {
+              "$ref": "#/components/schemas/ItemField"
+            },
+            "type": "array"
+          },
+          "parallel_tool_calls": {
+            "description": "モデルが複数のツールを並列に呼び出すことを許可されていたかどうか。",
+            "type": "boolean"
+          },
+          "presence_penalty": {
+            "description": "これまでのテキストに出現しているかどうかに基づいて、新しいトークンにペナルティを科すために使用された出現ペナルティ。",
+            "type": "number"
+          },
+          "previous_response_id": {
+            "description": "存在する場合、参照されたチェーン内の前のレスポンスの ID。",
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_key": {
+            "description": "プロンプトキャッシュの読み取りまたは書き込みに使用されるキー。",
+            "nullable": true,
+            "type": "string"
+          },
+          "reasoning": {
+            "additionalProperties": true,
+            "description": "このレスポンスに使用された推論設定。",
+            "nullable": true,
+            "type": "object"
+          },
+          "safety_identifier": {
+            "description": "安全性の監視と不正利用の検出に使用される安定した識別子。",
+            "nullable": true,
+            "type": "string"
+          },
+          "service_tier": {
+            "description": "このレスポンスに使用されたサービス階層。",
+            "type": "string"
+          },
+          "status": {
+            "description": "レスポンスに設定されたステータス。",
+            "type": "string"
+          },
+          "store": {
+            "description": "後で取得できるよう、このレスポンスが保存されたかどうか。",
+            "type": "boolean"
+          },
+          "temperature": {
+            "description": "このレスポンスに使用されたサンプリング温度。",
+            "type": "number"
+          },
+          "text": {
+            "additionalProperties": true,
+            "description": "このレスポンスに使用されたテキスト出力設定。",
+            "type": "object"
+          },
+          "tool_choice": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/FunctionToolChoice"
+              },
+              {
+                "$ref": "#/components/schemas/ToolChoiceValueEnum"
+              },
+              {
+                "$ref": "#/components/schemas/AllowedToolChoice"
+              }
+            ]
+          },
+          "tools": {
+            "description": "レスポンス生成中にモデルが使用できたツール。",
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "type": "array"
+          },
+          "top_logprobs": {
+            "description": "各位置で返された、対数確率を伴う最も確率の高いトークンの数。",
+            "type": "integer"
+          },
+          "top_p": {
+            "description": "このレスポンスに使用された核サンプリングパラメーター。",
+            "type": "number"
+          },
+          "truncation": {
+            "$ref": "#/components/schemas/TruncationEnum"
+          },
+          "usage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Usage"
+              }
+            ],
+            "description": "利用可能な場合、レスポンスについて記録されたトークン使用量の統計。",
+            "nullable": true
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created_at",
+          "completed_at",
+          "status",
+          "incomplete_details",
+          "model",
+          "previous_response_id",
+          "instructions",
+          "output",
+          "error",
+          "tools",
+          "tool_choice",
+          "truncation",
+          "parallel_tool_calls",
+          "text",
+          "top_p",
+          "presence_penalty",
+          "frequency_penalty",
+          "top_logprobs",
+          "temperature",
+          "reasoning",
+          "usage",
+          "max_output_tokens",
+          "max_tool_calls",
+          "store",
+          "background",
+          "service_tier",
+          "metadata",
+          "safety_identifier",
+          "prompt_cache_key"
+        ],
+        "title": "The response object",
+        "type": "object"
+      },
+      "ResponseStreamEvent": {
+        "description": "ストリーミングレスポンス内の 1 つのイベント。",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ResponseCreatedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseQueuedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseInProgressStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseCompletedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseFailedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseIncompleteStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputItemAddedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputItemDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningSummaryPartAddedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningSummaryPartDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseContentPartAddedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseContentPartDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputTextDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputTextDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseRefusalDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseRefusalDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningSummaryDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseReasoningSummaryDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseOutputTextAnnotationAddedStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseFunctionCallArgumentsDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseFunctionCallArgumentsDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseCustomToolCallInputDeltaStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ResponseCustomToolCallInputDoneStreamingEvent"
+          },
+          {
+            "$ref": "#/components/schemas/ErrorStreamingEvent"
+          }
+        ],
+        "title": "Response stream event"
+      },
+      "ResponsesToolParam": {
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FunctionToolParam"
+          },
+          {
+            "$ref": "#/components/schemas/CustomToolParam"
+          },
+          {
+            "$ref": "#/components/schemas/NamespaceToolParam"
+          }
+        ],
+        "x-unionDisplay": "section",
+        "x-unionTitle": "Tool Types"
+      },
+      "ServiceTierEnum": {
+        "enum": [
+          "auto",
+          "default",
+          "flex",
+          "priority"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Choose a service tier automatically based on current account state.",
+          "default": "Choose the default service tier.",
+          "flex": "Choose the flex service tier.",
+          "priority": "Choose the priority service tier."
+        }
+      },
+      "SpecificFunctionParam": {
+        "properties": {
+          "name": {
+            "description": "呼び出す関数ツールの名前。",
+            "type": "string"
+          },
+          "type": {
+            "default": "function",
+            "description": "呼び出すツール。常に`function`。",
+            "enum": [
+              "function"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name"
+        ],
+        "type": "object"
+      },
+      "SpecificToolChoiceParam": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SpecificFunctionParam"
+          }
+        ]
+      },
+      "StreamOptionsParam": {
+        "description": "ストリーミング応答の動作を制御するオプション。",
+        "properties": {
+          "include_obfuscation": {
+            "description": "ストリーミング出力内の機密情報を難読化するかどうか。デフォルトは`true`。",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "SummaryTextContent": {
+        "description": "モデルによる要約テキスト。",
+        "properties": {
+          "text": {
+            "description": "これまでのモデルの推論出力の要約。",
+            "type": "string"
+          },
+          "type": {
+            "default": "summary_text",
+            "description": "オブジェクトのタイプ。常に`summary_text`。",
+            "enum": [
+              "summary_text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Summary text",
+        "type": "object"
+      },
+      "SystemMessageItemParam": {
+        "properties": {
+          "content": {
+            "description": "コンテンツパートの配列として表されるメッセージコンテンツ。",
+            "oneOf": [
+              {
+                "items": {
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "description": "単一の文字列として表されるメッセージコンテンツ。",
+                "maxLength": 10485760,
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "description": "このメッセージ項目の一意のID。",
+            "example": "msg_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "default": "system",
+            "description": "メッセージのロール。常に`system`。",
+            "enum": [
+              "system"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "メッセージ項目のステータス。",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "message",
+            "description": "項目の種類。常に`message`。",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "TextContent": {
+        "description": "テキストコンテンツ。",
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "default": "text",
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Text Content",
+        "type": "object"
+      },
+      "TextField": {
+        "properties": {
+          "format": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/TextResponseFormat"
+              },
+              {
+                "$ref": "#/components/schemas/JsonObjectResponseFormat"
+              },
+              {
+                "$ref": "#/components/schemas/JsonSchemaResponseFormat"
+              }
+            ]
+          },
+          "verbosity": {
+            "$ref": "#/components/schemas/VerbosityEnum"
+          }
+        },
+        "required": [
+          "format"
+        ],
+        "type": "object"
+      },
+      "TextFormatParam": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextResponseFormat"
+          },
+          {
+            "$ref": "#/components/schemas/JsonSchemaResponseFormatParam"
+          }
+        ]
+      },
+      "TextParam": {
+        "properties": {
+          "format": {
+            "$ref": "#/components/schemas/TextFormatParam"
+          },
+          "verbosity": {
+            "$ref": "#/components/schemas/VerbosityEnum"
+          }
+        },
+        "type": "object"
+      },
+      "TextResponseFormat": {
+        "properties": {
+          "type": {
+            "default": "text",
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "Tool": {
+        "description": "応答の生成に使用できるツール。",
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/FunctionTool"
+          }
+        ]
+      },
+      "ToolChoiceParam": {
+        "description": "モデルが使用するツールを指定します（使用する場合）。",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SpecificToolChoiceParam"
+          },
+          {
+            "$ref": "#/components/schemas/ToolChoiceValueEnum"
+          }
+        ]
+      },
+      "ToolChoiceValueEnum": {
+        "enum": [
+          "none",
+          "auto",
+          "required"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Let the model choose the tools from among the provided set.",
+          "none": "Restrict the model from calling any tools.",
+          "required": "Require the model to call a tool."
+        }
+      },
+      "TopLogProb": {
+        "description": "トークンの最上位の対数確率。",
+        "properties": {
+          "bytes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "logprob": {
+            "type": "number"
+          },
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "logprob",
+          "bytes"
+        ],
+        "title": "Top log probability",
+        "type": "object"
+      },
+      "TruncationEnum": {
+        "enum": [
+          "disabled"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "auto": "Let the service decide how to truncate.",
+          "disabled": "Disable service truncation. Context over the model's context limit will result in a 400 error."
+        }
+      },
+      "UrlCitationBody": {
+        "description": "モデル応答の生成に使用されたウェブリソースの引用。",
+        "properties": {
+          "end_index": {
+            "description": "メッセージ内のURL引用の末尾文字のインデックス。",
+            "type": "integer"
+          },
+          "start_index": {
+            "description": "メッセージ内のURL引用の先頭文字のインデックス。",
+            "type": "integer"
+          },
+          "title": {
+            "description": "ウェブリソースのタイトル。",
+            "type": "string"
+          },
+          "type": {
+            "default": "url_citation",
+            "description": "URL引用のタイプ。常に`url_citation`。",
+            "enum": [
+              "url_citation"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "description": "ウェブリソースのURL。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "url",
+          "start_index",
+          "end_index",
+          "title"
+        ],
+        "title": "URL citation",
+        "type": "object"
+      },
+      "UrlCitationParam": {
+        "properties": {
+          "end_index": {
+            "description": "メッセージ内の引用の末尾文字のインデックス。",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "start_index": {
+            "description": "メッセージ内の引用の先頭文字のインデックス。",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "title": {
+            "description": "引用されたリソースのタイトル。",
+            "type": "string"
+          },
+          "type": {
+            "default": "url_citation",
+            "description": "引用の種類。常に`url_citation`。",
+            "enum": [
+              "url_citation"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "description": "引用されたリソースのURL。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "start_index",
+          "end_index",
+          "url",
+          "title"
+        ],
+        "type": "object"
+      },
+      "Usage": {
+        "description": "レスポンスについて記録されたトークン使用量の統計。",
+        "properties": {
+          "input_tokens": {
+            "description": "レスポンスの生成に使用された入力トークン数。",
+            "type": "integer"
+          },
+          "input_tokens_details": {
+            "$ref": "#/components/schemas/InputTokensDetails"
+          },
+          "output_tokens": {
+            "description": "モデルによって生成された出力トークン数。",
+            "type": "integer"
+          },
+          "output_tokens_details": {
+            "$ref": "#/components/schemas/OutputTokensDetails"
+          },
+          "total_tokens": {
+            "description": "使用されたトークンの合計数。",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "total_tokens",
+          "input_tokens_details",
+          "output_tokens_details"
+        ],
+        "title": "Usage",
+        "type": "object"
+      },
+      "UserMessageItemParam": {
+        "properties": {
+          "content": {
+            "description": "コンテンツパートの配列として表されるメッセージコンテンツ。",
+            "oneOf": [
+              {
+                "items": {
+                  "description": "テキスト、画像、ファイルなどのメッセージコンテンツの一部。",
+                  "discriminator": {
+                    "propertyName": "type"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/InputTextContentParam"
+                    },
+                    {
+                      "$ref": "#/components/schemas/InputImageContentParamAutoParam"
+                    }
+                  ]
+                },
+                "type": "array"
+              },
+              {
+                "description": "単一の文字列として表されるメッセージコンテンツ。",
+                "maxLength": 10485760,
+                "type": "string"
+              }
+            ]
+          },
+          "id": {
+            "description": "このメッセージ項目の一意のID。",
+            "example": "msg_123",
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "default": "user",
+            "description": "メッセージのロール。常に`user`。",
+            "enum": [
+              "user"
+            ],
+            "type": "string"
+          },
+          "status": {
+            "description": "メッセージ項目のステータス。",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "default": "message",
+            "description": "項目の種類。常に`message`。",
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "VerbosityEnum": {
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "type": "string",
+        "x-enumDescriptions": {
+          "high": "Instruct the model to emit more verbose final responses.",
+          "low": "Instruct the model to emit less verbose final responses.",
+          "medium": "Use the model's default verbosity setting."
+        }
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "description": "お使いの Perplexity API key。",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "複数のプロバイダーにまたがるモデルへのOpenAI Responses互換アクセス。スキーマ構造はApache-2.0ライセンスのOpenResponses仕様に基づいており、Routerでサポートされるリクエストとレスポンスの形式を文書化しています。",
+    "title": "Perplexity Router API (OpenAI Responses-compatible)",
+    "version": "2026-04-24"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/router/v1/responses": {
+      "post": {
+        "description": "OpenAI Responsesスキーマを使用してモデルのレスポンスを生成します。型付きのサーバー送信イベントと、それに続く`data: [DONE]`を受け取るには、`stream: true`を設定します。",
+        "operationId": "gateway_create_response",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateResponseBody"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseResource"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseStreamEvent"
+                }
+              }
+            },
+            "description": "成功時のレスポンス。非ストリーミングリクエストではJSON、`stream`がtrueの場合は型付きレスポンスイベントの`text/event-stream`。"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "無効なリクエスト — 本文の形式が不正、未サポートのパラメータ、またはRouterで利用できないモデル。"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "レート制限を超過したか、選択したモデルが過負荷状態です。`Retry-After`で指定された時間が経過してから再試行してください。"
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "サーバーエラーのため、リクエストを完了できませんでした。"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "レスポンスを作成"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.perplexity.ai"
+    }
+  ]
+}

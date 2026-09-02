@@ -1,0 +1,565 @@
+---
+title: "Gestion des erreurs"
+description: "Découvrez comment gérer proprement les erreurs d'API avec les SDK Perplexity pour Python et TypeScript."
+---
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Les SDK Perplexity offrent une gestion robuste des erreurs, avec des types d&#39;exceptions spécifiques selon les scénarios d&#39;erreur. Ce guide explique comment intercepter et traiter proprement les erreurs d&#39;API les plus courantes.
+
+<div id="common-error-types">
+  ## Types d&#39;erreurs courants
+</div>
+
+Les SDK fournissent des types d&#39;exception spécifiques selon les scénarios d&#39;erreur :
+
+* **APIConnectionError** – Problèmes de connexion réseau
+* **RateLimitError** – Limite de débit de l&#39;API dépassée
+* **APIStatusError** – Erreurs de statut HTTP (4xx, 5xx)
+* **AuthenticationError** – API key invalide ou problèmes d&#39;authentification
+* **ValidationError** – Paramètres de requête invalides
+
+<div id="basic-error-handling">
+  ## Gestion basique des erreurs
+</div>
+
+Gérez les erreurs d&#39;API courantes avec des blocs try-catch :
+
+<CodeGroup>
+  ```python Python theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  try:
+      search = client.search.create(query="OpenAI o-series reasoning model benchmarks")
+      print(search.results)
+  except perplexity.APIConnectionError as e:
+      print("Échec de la connexion réseau")
+      print(e.__cause__)
+  except perplexity.RateLimitError as e:
+      print("Limite de débit dépassée, veuillez réessayer plus tard")
+  except perplexity.APIStatusError as e:
+      print(f"Erreur d'API : {e.status_code}")
+      print(e.response)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  try {
+      const search = await client.search.create({ query: "OpenAI o-series reasoning model benchmarks" });
+      console.log(search.results);
+  } catch (error: any) {
+      if (error.constructor.name === 'APIConnectionError') {
+          console.log("Échec de la connexion réseau");
+          console.log(error.cause);
+      } else if (error.constructor.name === 'RateLimitError') {
+          console.log("Limite de débit dépassée, veuillez réessayer plus tard");
+      } else if (error.constructor.name === 'APIStatusError') {
+          console.log(`Erreur d'API : ${error.status}`);
+          console.log(error.response);
+      }
+  }
+  ```
+</CodeGroup>
+
+<Accordion title="Réponse">
+  ```json theme={null}
+  {
+    "id": "169d5d3b-272a-46ca-a59d-7c218f9d5ce2",
+    "results": [
+      {
+        "snippet": "",
+        "title": "Reasoning best practices | OpenAI API",
+        "url": "https://developers.openai.com/api/docs/guides/reasoning-best-practices",
+        "date": null,
+        "last_updated": "2026-05-21"
+      },
+      {
+        "snippet": "",
+        "title": "A Comparative Study on Reasoning Patterns of OpenAI's o1 Model",
+        "url": "https://arxiv.org/html/2410.13639v1",
+        "date": "2024-10-17",
+        "last_updated": "2026-03-22"
+      },
+      {
+        "snippet": "**OpenAI o1** is a generative pre-trained transformer (GPT), the first in OpenAI's \"o\" series of reasoning models.\nA preview of o1 was released by OpenAI on September 12, 2024.\no1 spends time \"thinking\" before it answers, making it better at complex reasoning tasks, science and programming than GPT-4o.\nThe full version was released to ChatGPT users on December 5, 2024.\n...\nOpenAI noted that o1 is the first of a series of \"reasoning\" models.\nOpenAI shared in December 2024 benchmark results for its successor, o3 (the name o2 was skipped to avoid trademark conflict with the mobile carrier brand named O2).\n...\no1 spends additional time thinking (generating a chain of thought) before generating an answer, which makes it better for complex reasoning tasks, particularly in science and mathematics.\n...\nOpenAI's test results suggest a correlation between accuracy and the logarithm of the amount of compute spent thinking before answering.\no1-preview performed approximately at a PhD level on benchmark tests related to physics, chemistry, and biology.\nOn the American Invitational Mathematics Examination, it solved 83% (12.5/15) of the problems, compared to 13% (1.8/15) for GPT-4o.\nIt also ranked in the 89th percentile in Codeforces coding competitions.\no1-mini is faster and 80% cheaper than o1-preview.\nIt is particularly suitable for programming and STEM-related tasks, but does not have the same \"broad world knowledge\" as o1-preview.\nOpenAI noted that o1's reasoning capabilities make it better at adhering to safety rules provided in the prompt's context window.\n...\nAccording to OpenAI's assessments, o1-preview and o1-mini crossed into \"medium risk\" in CBRN (biological, chemical, radiological, and nuclear) weapons.\nDan Hendrycks wrote that \"The model already outperforms PhD scientists most of the time on answering questions related to bioweapons.\"\n...\nAccording to OpenAI, o1 may \"fake alignment\", that is, generate a response that is contrary to accuracy and its own chain of thought, in about 0.38% of cases.\n...\nBy changing the numbers and names used in a math problem or simply running the same problem again, LLMs would perform somewhat worse than their best benchmark results.\nAdding extraneous but logically inconsequential information to the problems caused a much greater drop in performance, from −17.5% for o1-preview and −29.1% for o1-mini, to −65.7% for the worst model tested.",
+        "title": "OpenAI o1 - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/OpenAI_o1",
+        "date": "2024-09-12",
+        "last_updated": "2026-03-31"
+      },
+      {
+        "snippet": "",
+        "title": "OpenAI O3 & O4 Mini: The First True Reasoning Agents? - YouTube",
+        "url": "https://www.youtube.com/watch?v=TGnPcObHdLY",
+        "date": "2025-04-16",
+        "last_updated": "2026-04-08"
+      },
+      {
+        "snippet": "",
+        "title": "Safety",
+        "url": "https://openai.com/index/learning-to-reason-with-llms/",
+        "date": "2024-09-12",
+        "last_updated": "2026-03-29"
+      },
+      {
+        "snippet": "",
+        "title": "Introducing OpenAI o3 and o4-mini",
+        "url": "https://openai.com/index/introducing-o3-and-o4-mini/",
+        "date": "2025-04-16",
+        "last_updated": "2026-05-16"
+      },
+      {
+        "snippet": "",
+        "title": "OpenAI's o3 model scores 3% on the ARC-AGI-2 benchmark ...",
+        "url": "https://forum.effectivealtruism.org/posts/CoPNbwNqDai6orZhv/openai-s-o3-model-scores-3-on-the-arc-agi-2-benchmark",
+        "date": "2025-05-01",
+        "last_updated": "2026-05-17"
+      },
+      {
+        "snippet": "Built to handle hard problems — they take more time to think before responding, similar to how a person would approach a difficult task.\nThe “ OpenAI o1 preview ” model, specifically, shows incredible results for various hard problems: math, coding, and reasoning.\n...\nToday, OpenAI released the full version of the o1 model, making it production-ready for a wide range of use cases.\nIn this article, we’ll compare its capabilities with GPT-4o and Claude 3.5 Sonnet to see if it lives up to the claim.\n...\nWe compared these models across three key tasks:\nReasoning riddles, Math Problems, and Classifying customer tickets\nAlong the way, we explored the latest benchmarks, evaluated input and output token costs, assessed latency and throughput, and shared guidance on choosing the best model for your needs.\nFor up-to-date rankings, check our leaderboard , or keep reading to see the results of our evaluation.\nFrom this analysis we learn that:\nProduction apps: For apps in productions, we still recommend sing GPT-4o over o1, at least for one-off tasks like the ones we tested here.\nReasoning riddles: OpenAI o1 showed some inconsistency, refusing to answer one question and scoring 60% accuracy, similar to GPT-4o, though the difference isn’t major.\nGPT-4o is a great model for this task.\nClaude 3.5 Sonnet scored a lower accuracy of 56%.\n- Math equations: GPT-4o and the o1 model performed equally well on this task, raising questions about whether the higher cost of o1 is justified.\n- Surprisingly, the latest Claude 3.5 Sonnet lagged significantly behind, achieving only 39% accuracy on these examples.\n- Classification : All models performed similarly: GPT-4o (74%), O1 (73%), and Model 3.5 Sonnet (76%), with GPT-4o improving by 12% since September.\n- GPT-4o had the highest precision (86%) making it ideal for tasks where correct possitive predictions matter most.\nThe o1 model led in recall (82%) making it suitable when you need to capture as many TRUE cases as possible.\nThe Claude 3.5 Sonnet had best F1 score (77%) indicating robust overall classification performance.\n- Speed &amp; Cost: Given that we saw similar results across the three tasks we evaluated, we still can’t justify the cost of o1, and we recommend going with GPT-4o for most use-cases.\n- Complex Problems: Use OpenAI o1 when you need top-tier reasoning and latency isn’t a concern.\nIt’s ideal for agentic workflows with a “planning” stage, where the model creates a detailed plan that smaller, cheaper models can follow\n...\nAs expected, the new o1 models are slower due to their “reasoning” process.\nThis isn’t a drawback necessarily—it just makes them better suited for tasks where thoughtful problem-solving is essential.\nOpenAI o1 is approximately 30 times slower than GPT-4o.\nSimilarly, the o1 mini version is around 16 times slower than GPT-4o mini.\n## Cost comparison\nIt's evident that using OpenAI o1 will cost roughly 6x more than GPT-4o and Claude 3.5 Sonnet for input tokens, and about 5x more for output tokens.\n## Throughput (Output speed)\nOpenAI o1 stands out with the fastest throughput, generating 143 tokens per second.\nHowever, take this throughput data with a grain of salt — while its output speed is significantly higher than the other models, its latency, or time-to-think, is about 30x longer than GPT-4o and Claude 3.5 Sonnet.\n...\nWhen new models are released, we learn about their capabilities from benchmark data reported in the technical reports.\nThe new OpenAI o1 model improves on the most complex reasoning benchmarks:\nExceeds human PhD-level accuracy on challenging benchmark tasks in physics, chemistry, and biology on the GPQA benchmark Coding is easier — It ranks in the 89th percentile on competitive programming questions (Codeforces) It’s also very good at math — In a qualifying exam for the International Mathematics Olympiad (IMO), GPT-4o correctly solved only 13% of problems, while the reasoning model scored 83%.\nNow, this is next level.\nOn the standard ML benchmarks , it has huge improvements across the board:\n...\nThey’ve gathered over 6,000 votes, and the results show that the OpenAI o1 model is consistently ranked #1 across all categories, with Math being the most notable area of impact.\nThe o1-mini model is #1 in technical areas, #2 overall.\nCheck out the full results on this link.\n...\nThe results show that the newest model is great at complex tasks, but not preferred for some natural language tasks — suggesting that maybe the model is not the best for every use-case.\n...\nGPT-4o and the o1 model performed equally well on this task, raising questions about whether the higher cost of o1 is justified.\nSurprisingly, the latest Claude 3.5 Sonnet lagged significantly behind, achieving only 39% accuracy on these examples.\n...\nOpenAI o1 showed some inconsistency, refusing to answer one question and scoring 60% accuracy, similar to GPT-4o, though the difference isn’t major.\nGPT-4o is a great model for this task.\nClaude 3.5 Sonnet scored a lower accuracy of 56%.\n...\nWe ran the evaluation to test if the models' outputs matched our ground truth data for 100 labeled test cases, and we can see that they all got similar accuracies.\nGPT-4o got 74, O1 got 73, Claude 3.5 Sonnet got 76 answers right from total of 100.\nThis reinforces the idea that smarter, more cost-effective models without a \"reasoning module\" like o1 can perform just as well as o1, but without the added expense.\nIn a similar evaluation in September of 2024, we evaluated that GPT-4o had lower accuracy, and classified only 62 of the 100 examples correctly.\nToday, we’re seeing at a 12% improvement on this task!\n...\nToday, O1 has more production-ready properties and is starting to becomemore valuable for production use cases—though it’s best suited for those who can tolerate higher latency and need to tackle the toughest challenges.\nGPT-4O, however, remains the go-to model for many of the production use cases we see in the market.",
+        "title": "Analysis: OpenAI o1 vs GPT-4o vs Claude 3.5 Sonnet - Vellum",
+        "url": "https://www.vellum.ai/blog/analysis-openai-o1-vs-gpt-4o",
+        "date": "2024-12-17",
+        "last_updated": "2026-05-21"
+      },
+      {
+        "snippet": "",
+        "title": "THE RELATIONSHIP BETWEEN REASONING AND PERFORMANCE",
+        "url": "http://arxiv.org/pdf/2502.15631.pdf",
+        "date": null,
+        "last_updated": "2025-02-25"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<Info>
+  Codes de statut HTTP courants : 400 (requête invalide), 401 (authentification), 403 (accès refusé), 404 (ressource introuvable), 429 (limite de débit atteinte), 500+ (erreur serveur).
+</Info>
+
+<div id="advanced-error-handling">
+  ## Gestion avancée des erreurs
+</div>
+
+<div id="exponential-backoff-for-rate-limits">
+  ### Backoff exponentiel pour les limites de débit
+</div>
+
+Implémentez une logique de nouvelle tentative intelligente pour les erreurs de limite de débit :
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  import random
+  import perplexity
+  from perplexity import Perplexity
+
+  def search_with_retry(client, query, max_retries=3):
+      for attempt in range(max_retries):
+          try:
+              return client.search.create(query=query)
+          except perplexity.RateLimitError:
+              if attempt == max_retries - 1:
+                  raise  # Relancer l'exception à la dernière tentative
+              
+              # Backoff exponentiel avec jitter
+              delay = (2 ** attempt) + random.uniform(0, 1)
+              print(f"Rate limited. Retrying in {delay:.2f} seconds...")
+              time.sleep(delay)
+          except perplexity.APIConnectionError:
+              if attempt == max_retries - 1:
+                  raise
+              
+              # Délai plus court pour les erreurs de connexion
+              delay = 1 + random.uniform(0, 1)
+              print(f"Connection error. Retrying in {delay:.2f} seconds...")
+              time.sleep(delay)
+
+  # Utilisation
+  client = Perplexity()
+  result = search_with_retry(client, "artificial intelligence")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  async function searchWithRetry(
+      client: Perplexity, 
+      query: string, 
+      maxRetries: number = 3
+  ) {
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+          try {
+              return await client.search.create({ query });
+          } catch (error: any) {
+              if (attempt === maxRetries - 1) {
+                  throw error; // Relancer l'erreur à la dernière tentative
+              }
+
+              if (error.constructor.name === 'RateLimitError') {
+                  // Backoff exponentiel avec jitter
+                  const delay = (2 ** attempt + Math.random()) * 1000;
+                  console.log(`Rate limited. Retrying in ${delay}ms...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+              } else if (error.constructor.name === 'APIConnectionError') {
+                  // Délai plus court pour les erreurs de connexion
+                  const delay = (1 + Math.random()) * 1000;
+                  console.log(`Connection error. Retrying in ${delay}ms...`);
+                  await new Promise(resolve => setTimeout(resolve, delay));
+              } else {
+                  throw error; // Ne pas réessayer pour les autres erreurs
+              }
+          }
+      }
+  }
+
+  // Utilisation
+  const client = new Perplexity();
+  const result = await searchWithRetry(client, "artificial intelligence");
+  ```
+</CodeGroup>
+
+<div id="error-context-and-debugging">
+  ### Contexte d&#39;erreur et débogage
+</div>
+
+Extrayez des informations d&#39;erreur détaillées pour le débogage :
+
+<CodeGroup>
+  ```python Python theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  try:
+      response = client.responses.create(
+          preset="low",
+          input="Explain how the 10-year US Treasury yield is determined and how it influences mortgage rates."
+      )
+  except perplexity.APIStatusError as e:
+      print(f"Status Code: {e.status_code}")
+      print(f"Error Type: {e.type}")
+      print(f"Error Message: {e.message}")
+      
+      # Accéder à la réponse brute pour un débogage détaillé
+      if hasattr(e, 'response'):
+          print(f"Raw Response: {e.response.text}")
+          print(f"Request ID: {e.response.headers.get('X-Request-ID')}")
+          
+  except perplexity.ValidationError as e:
+      print(f"Validation Error: {e}")
+      # Gérer les erreurs de validation des paramètres
+      
+  except Exception as e:
+      print(f"Unexpected error: {type(e).__name__}: {e}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  try {
+      const response = await client.responses.create({
+          preset: "low",
+          input: "Explain how the 10-year US Treasury yield is determined and how it influences mortgage rates."
+      });
+  } catch (error: any) {
+      if (error.constructor.name === 'APIStatusError') {
+          console.log(`Status Code: ${error.status}`);
+          console.log(`Error Type: ${error.type}`);
+          console.log(`Error Message: ${error.message}`);
+          
+          // Accéder à la réponse brute pour un débogage détaillé
+          if (error.response) {
+              console.log(`Raw Response: ${await error.response.text()}`);
+              console.log(`Request ID: ${error.response.headers.get('X-Request-ID')}`);
+          }
+      } else if (error.constructor.name === 'ValidationError') {
+          console.log(`Validation Error: ${error.message}`);
+          // Gérer les erreurs de validation des paramètres
+      } else {
+          console.log(`Unexpected error: ${error.constructor.name}: ${error.message}`);
+      }
+  }
+  ```
+</CodeGroup>
+
+<div id="error-recovery-strategies">
+  ## Stratégies de récupération après erreur
+</div>
+
+<div id="graceful-degradation">
+  ### Dégradation progressive
+</div>
+
+Mettez en place des mécanismes de repli en cas d&#39;échec des appels API :
+
+<CodeGroup>
+  ```python Python theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  def get_ai_response(query, fallback_response="I'm sorry, I'm temporarily unavailable."):
+      client = Perplexity()
+      
+      try:
+          response = client.responses.create(
+              preset="low",
+              input=query
+          )
+          return response.output_text
+          
+      except perplexity.RateLimitError:
+          return fallback_response
+              
+      except perplexity.APIConnectionError:
+          # Problèmes réseau - renvoyer une réponse en cache ou de repli
+          return fallback_response
+          
+      except Exception as e:
+          print(f"Unexpected error: {e}")
+          return fallback_response
+
+  # Utilisation
+  response = get_ai_response("What is machine learning?")
+  print(response)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  async function getAIResponse(
+      query: string, 
+      fallbackResponse: string = "I'm sorry, I'm temporarily unavailable."
+  ): Promise<string> {
+      const client = new Perplexity();
+      
+      try {
+          const response = await client.responses.create({
+              preset: "low",
+              input: query
+          });
+          return response.output_text ?? fallbackResponse;
+          
+      } catch (error: any) {
+          if (error.constructor.name === 'RateLimitError') {
+              return fallbackResponse;
+          } else if (error.constructor.name === 'APIConnectionError') {
+              // Problèmes réseau - renvoyer une réponse en cache ou de repli
+              return fallbackResponse;
+          } else {
+              console.log(`Unexpected error: ${error.message}`);
+              return fallbackResponse;
+          }
+      }
+  }
+
+  // Utilisation
+  const response = await getAIResponse("What is machine learning?");
+  console.log(response);
+  ```
+</CodeGroup>
+
+<div id="best-practices">
+  ## Bonnes pratiques
+</div>
+
+<Steps>
+  <Step title="Gérez toujours les limites de requêtes">
+    La limitation de débit est fréquente lors de l&#39;utilisation d&#39;une API. Implémentez toujours une logique de nouvelle tentative avec backoff exponentiel.
+
+    <Warning>
+      N&#39;implémentez pas de boucles de nouvelles tentatives agressives sans délai : cela peut aggraver la limitation de débit.
+    </Warning>
+  </Step>
+
+  <Step title="Consignez les erreurs à des fins de surveillance">
+    Mettez en place une journalisation adaptée pour suivre les tendances d&#39;erreurs et l&#39;état de santé de l&#39;API.
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import logging
+      import perplexity
+      from perplexity import Perplexity
+
+      logging.basicConfig(level=logging.INFO)
+      logger = logging.getLogger(__name__)
+
+      client = Perplexity()
+
+      try:
+          result = client.search.create(query="discovery of penicillin by Alexander Fleming")
+      except perplexity.APIStatusError as e:
+          logger.error(f"API Error {e.status_code}: {e.message}", 
+                      extra={'request_id': e.response.headers.get('X-Request-ID')})
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      try {
+          const result = await client.search.create({ query: "discovery of penicillin by Alexander Fleming" });
+      } catch (error: any) {
+          console.error(`API Error ${error.status}: ${error.message}`, {
+              requestId: error.response?.headers.get('X-Request-ID')
+          });
+      }
+      ```
+    </CodeGroup>
+
+    <Accordion title="Réponse">
+      ```json theme={null}
+      {
+        "id": "cf46c6eb-bf6e-4ee4-97f8-9d4dcfd99dd4",
+        "results": [
+          {
+            "snippet": "",
+            "title": "Alexander Fleming : découverte et développement de la pénicilline",
+            "url": "https://www.acs.org/education/whatischemistry/landmarks/flemingpenicillin.html",
+            "date": null,
+            "last_updated": "2026-05-21"
+          },
+          {
+            "snippet": "« *Je n’ai pas inventé la pénicilline.\nC’est la nature qui l’a fait.\nJe l’ai seulement découverte par accident*. »\nAlexander Fleming était un médecin-scientifique écossais reconnu pour avoir découvert la pénicilline.\nLa simple découverte et l’utilisation de cet agent antibiotique ont sauvé des millions de vies et ont valu à Fleming – avec Howard Florey et Ernst Chain, qui ont mis au point des méthodes d’isolement et de production à grande échelle de la pénicilline – le prix Nobel de physiologie/médecine de 1945.\n...\nEn 1928, Fleming commença une série d’expériences portant sur la bactérie staphylococcique commune.\nUne boîte de Petri découverte, posée près d’une fenêtre ouverte, fut contaminée par des spores de moisissure.\nFleming observa que les bactéries se trouvant à proximité des colonies de moisissure mouraient, comme en témoignaient la dissolution et l’éclaircissement du gel d’agar environnant.\nIl parvint à isoler la moisissure et l’identifia comme appartenant au genre *Penicillium*.\nIl constata qu’elle était efficace contre tous les agents pathogènes à Gram positif, responsables de maladies telles que la scarlatine, la pneumonie, la gonorrhée, la méningite et la diphtérie.\nIl comprit que ce n’était pas la moisissure elle-même, mais un « jus » qu’elle avait produit qui avait tué les bactéries.\nIl nomma ce « jus de moisissure » pénicilline.\nPlus tard, il dira : « *Quand je me suis réveillé juste après l’aube le 28 septembre 1928, je n’avais certainement pas prévu de révolutionner toute la médecine en découvrant le premier antibiotique au monde, ou tueur de bactéries.\nMais je suppose que c’est exactement ce que j’ai fait*. »\nBien que Fleming ait publié la découverte de la pénicilline dans le British Journal of Experimental Pathology en 1929, la communauté scientifique accueillit ses travaux avec peu d’enthousiasme au départ.\nDe plus, Fleming eut du mal à isoler ce précieux « jus de moisissure » en grandes quantités.\nCe n’est qu’en 1940, alors qu’il envisageait de prendre sa retraite, que deux scientifiques, Howard Florey et Ernst Chain, s’intéressèrent à la pénicilline.\nAvec le temps, ils purent la produire en masse pour un usage pendant la Seconde Guerre mondiale.",
+            "title": "Alexander Fleming (1881–1955) : le découvreur de la pénicilline - PMC - NIH",
+            "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC4520913/",
+            "date": null,
+            "last_updated": "2026-04-11"
+          },
+          {
+            "snippet": "",
+            "title": "Alexander Fleming - Wikipédia",
+            "url": "https://en.wikipedia.org/wiki/Alexander_Fleming",
+            "date": "2001-09-18",
+            "last_updated": "2026-05-18"
+          },
+          {
+            "snippet": "",
+            "title": "Découverte de la pénicilline - Wikipédia",
+            "url": "https://en.wikipedia.org/wiki/Discovery_of_penicillin",
+            "date": "2009-09-13",
+            "last_updated": "2026-03-28"
+          },
+          {
+            "snippet": "",
+            "title": "La découverte de la pénicilline — nouvelles perspectives après plus de 75 ans ...",
+            "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC5403050/",
+            "date": null,
+            "last_updated": "2026-03-29"
+          },
+          {
+            "snippet": "La découverte accidentelle d’une boîte de Petri moisie en 1928 a lancé un parcours de 20 ans visant à mettre au point le premier médicament produit en masse au monde capable d’éliminer une infection bactérienne : la pénicilline.\n...\nEn 1928, le Dr Alexander Fleming revint de vacances et trouva de la moisissure poussant sur une boîte de Petri contenant des bactéries Staphylococcus.\nIl remarqua que la moisissure semblait empêcher les bactéries situées autour d’elle de se développer.\nIl identifia rapidement que la moisissure produisait une substance chimique de défense capable de tuer les bactéries.\nIl nomma cette substance pénicilline.\nFleming publia ses résultats et présenta sa découverte au Medical Research Club.\nÀ sa surprise, ses pairs manifestèrent peu d’intérêt pour ses travaux.\n...\nPrès de dix ans plus tard, en 1937, alors qu’ils étudiaient les micro-organismes et les substances qu’ils produisaient, Howard Florey et Ernst Chain découvrirent les recherches de Fleming et réunirent une équipe de scientifiques travaillant exclusivement sur le « Projet Pénicilline ».\n...\nLa moisissure produisit six fois plus de pénicilline que la souche originale de Fleming.\n...\nEn 1943, les États-Unis disposaient de stocks de pénicilline suffisants pour répondre aux besoins des forces armées américaines ainsi qu’à ceux de leurs Alliés.\n...\nEn 1946, la pénicilline devint disponible pour la première fois au Royaume-Uni pour un usage public ; elle transforma la médecine dans le monde entier et inaugura l’ère des antibiotiques.",
+            "title": "Comment la pénicilline a-t-elle été développée ?",
+            "url": "https://www.sciencemuseum.org.uk/objects-and-stories/how-was-penicillin-developed",
+            "date": "2021-02-23",
+            "last_updated": "2025-11-10"
+          },
+          {
+            "snippet": "Il y a quatre-vingt-trois ans jour pour jour, Sir Alexander Fleming découvrait la pénicilline, l’un des antibiotiques les plus utilisés.\nInspiré par ce qu’il avait vu sur les champs de bataille de la Première Guerre mondiale, il retourna dans son laboratoire de l’hôpital St Mary à Londres pour mettre au point un moyen de combattre les infections bactériennes.\nEn 1928, il laissa accidentellement découverte une boîte de Petri dans laquelle il cultivait des bactéries Staphylococcus aureus.\nPlus tard, il remarqua qu’une moisissure poussait sur la boîte et qu’autour de cette moisissure, les staphylocoques étaient morts.\nFleming l’isola et identifia la moisissure comme étant Penicillium notatum, un type de champignon semblable à la moisissure qui pousse sur le pain.\nFleming publia ses résultats dans le British Journal of Experimental Pathology en 1929, mais l’article ne suscita pas beaucoup d’intérêt.\nPuis, en 1938, Ernst Chain, un biochimiste travaillant avec le pathologiste Howard Florey à l’université d’Oxford, tomba sur l’article de Fleming alors qu’il faisait des recherches sur les composés antibactériens.\nLes scientifiques du laboratoire de Florey commencèrent à travailler avec la pénicilline, qu’ils finirent par injecter à des souris pour vérifier si elle pouvait traiter les infections bactériennes.\nLeurs expériences furent concluantes et ils la testèrent ensuite chez l’humain, où ils obtinrent également des résultats positifs.\nEn 1941, il existait une forme injectable pouvant servir à traiter les patients, ce qui fut particulièrement utile pour les soldats combattant durant la Seconde Guerre mondiale.\n...\nEn 1945, Fleming, Chain et Florey reçurent le prix Nobel de physiologie ou médecine pour « la découverte de la pénicilline et de ses effets curatifs dans diverses maladies infectieuses ».\nFleming mourut en 1955.",
+            "title": "La pénicilline : il y a 83 ans aujourd’hui",
+            "url": "https://www.publichealth.columbia.edu/research/center-infection-and-immunity/penicillin-83-years-ago-today",
+            "date": "2015-10-16",
+            "last_updated": "2026-03-12"
+          },
+          {
+            "snippet": "",
+            "title": "Histoire de la pénicilline - Wikipédia",
+            "url": "https://en.wikipedia.org/wiki/History_of_penicillin",
+            "date": "2006-03-31",
+            "last_updated": "2026-04-08"
+          },
+          {
+            "snippet": "Le bactériologiste écossais Alexander Fleming est surtout connu pour sa découverte de la pénicilline en 1928, qui a lancé la révolution des antibiotiques.\nPour sa découverte de la pénicilline, il a reçu une part du prix Nobel de physiologie ou médecine de 1945.\n### Comment Alexander Fleming a-t-il découvert la pénicilline ?\nEn 1928, Alexander Fleming remarqua qu'une boîte de culture de bactéries *Staphylococcus aureus* avait été contaminée par un champignon.\nLa moisissure, identifiée plus tard comme *Penicillium notatum* (aujourd'hui classée comme *P. chrysogenum*), avait inhibé la croissance des bactéries.\nIl établit par la suite que la moisissure empêchait la croissance bactérienne parce qu'elle produisait un antibiotique, la pénicilline.\n...\n**Alexander Fleming** (né le 6 août 1881 à Lochfield Farm, Darvel, Ayrshire, Écosse — mort le 11 mars 1955 à Londres, Angleterre) était un bactériologiste écossais surtout connu pour sa découverte de la pénicilline.\n...\nSes travaux sur l'infection des plaies et sur le lysozyme, une enzyme antibactérienne présente dans les larmes et la salive, lui ont garanti une place dans l'histoire de la bactériologie.\nMais c'est sa découverte de la pénicilline en 1928, qui a lancé la révolution des antibiotiques, qui a scellé sa réputation durable.\nFleming fut récompensé pour cet exploit en 1945, lorsqu'il reçut le prix Nobel de physiologie ou médecine, avec le pathologiste australien Howard Walter Florey et le biochimiste britannique d'origine allemande Ernst Boris Chain, qui tous deux isolèrent et purifièrent la pénicilline.\n...\nLe 3 septembre 1928, peu après sa nomination comme professeur de bactériologie, Fleming remarqua qu'une boîte de culture de *Staphylococcus aureus* sur laquelle il travaillait avait été contaminée par un champignon.\nUne moisissure, identifiée plus tard comme *Penicillium notatum* (aujourd'hui classée comme *P. chrysogenum*), avait inhibé la croissance des bactéries.\nIl appela d'abord la substance « jus de moisissure », puis « pénicilline », d'après la moisissure qui la produisait.\nFleming décida d'approfondir ses recherches, car il pensait avoir trouvé une enzyme plus puissante que le lysozyme.\nEn réalité, ce n'était pas une enzyme mais un antibiotique — l'un des premiers à être découverts.\n...\nLa pénicilline finit par être utilisée pendant la Seconde Guerre mondiale grâce aux travaux d'une équipe de scientifiques dirigée par Howard Florey à l'Université d'Oxford.",
+            "title": "Alexander Fleming | Biographie, éducation, découverte, prix Nobel ...",
+            "url": "https://www.britannica.com/biography/Alexander-Fleming",
+            "date": "2026-04-24",
+            "last_updated": "2026-04-25"
+          },
+          {
+            "snippet": "Fleming’s serendipitous discovery of penicillin changed the course of medicine and earned him a Nobel Prize.\n...\nIn 1928 Alexander Fleming (1881–1955) discovered penicillin, though he did not realize the full significance of his discovery for at least another decade.\nHe eventually received the Nobel Prize in Physiology or Medicine in 1945.\n...\nIn 1928 Alexander Fleming discovered penicillin, made from the *Penicillium notatum* mold, but he did not receive the Nobel Prize in Physiology or Medicine for his discovery until 1945.\nFleming himself did not realize how important his discovery was; for a decade after, he focused instead on penicillin’s potential use as a topical antiseptic for wounds and surface infections and as a means of isolating certain bacteria in laboratory cultures.\n...\nFleming’s legendary discovery of penicillin occurred in 1928, while he was investigating staphylococcus, a common type of bacteria that causes boils and can also cause disastrous infections in patients with weakened immune systems.\nBefore Fleming left for a two-week vacation, a petri dish containing a staphylococcus culture was left on a lab bench and never placed in the incubator as intended.\nSomehow, in preparing the culture, a *Penicillium* mold spore had been accidentally introduced into the medium—perhaps coming in through a window, or more likely floating up a stairwell from the lab below where various molds were being cultured.\nThe temperature conditions that prevailed during Fleming’s absence permitted both the bacteria and the mold spores to grow; had the incubator been used, only the bacteria could have grown.\n...\nHe discovered that the antibacterial substance was not produced by all molds, only by certain strains of *Penicillium*, namely, *Penicillium notatum*.",
+            "title": "Alexander Fleming | Science History Institute",
+            "url": "https://www.sciencehistory.org/education/scientific-biographies/alexander-fleming/",
+            "date": "2026-02-23",
+            "last_updated": "2026-05-07"
+          }
+        ],
+        "server_time": null
+      }
+      ```
+    </Accordion>
+  </Step>
+
+  <Step title="Définissez des délais d’expiration adaptés">
+    Configurez des délais d&#39;expiration pour éviter les requêtes qui restent bloquées.
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import httpx
+      from perplexity import Perplexity
+
+      client = Perplexity(
+          timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=10.0)
+      )
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity({
+          timeout: 30000 // 30 secondes
+      });
+      ```
+    </CodeGroup>
+  </Step>
+
+  <Step title="Gérer les erreurs d’authentification">
+    Détectez les clés API invalides et fournissez des messages d&#39;erreur explicites.
+
+    <CodeGroup>
+      ```python Python theme={null}
+      try:
+          result = client.search.create(query="Perplexity Search API Python SDK quickstart example")
+      except perplexity.AuthenticationError:
+          print("Invalid API key. Please check your PERPLEXITY_API_KEY environment variable.")
+      ```
+
+      ```typescript TypeScript theme={null}
+      try {
+          const result = await client.search.create({ query: "Perplexity Search API Python SDK quickstart example" });
+      } catch (error: any) {
+          if (error.constructor.name === 'AuthenticationError') {
+              console.log("Invalid API key. Please check your PERPLEXITY_API_KEY environment variable.");
+          }
+      }
+      ```
+    </CodeGroup>
+  </Step>
+</Steps>
+
+<div id="related-resources">
+  ## Ressources associées
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Configuration" icon="settings" href="/fr/docs/sdk/configuration">
+    Configurer les délais d&#39;expiration et les nouvelles tentatives
+  </Card>
+
+  <Card title="Bonnes pratiques" icon="star" href="/fr/docs/sdk/best-practices">
+    Variables d&#39;environnement et limitation de débit
+  </Card>
+</CardGroup>

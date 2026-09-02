@@ -1,0 +1,942 @@
+---
+title: "使用 Perplexity Embeddings 构建 RAG"
+description: "使用 Perplexity 的标准嵌入模型和上下文化嵌入模型，构建端到端的检索增强生成流水线。"
+---
+
+本指南将带你使用 Perplexity 的 Embeddings API 和 Agent API，构建一条完整的检索增强生成 (RAG) 流水线。
+
+内容涵盖文档分块、使用标准模型与上下文化模型生成嵌入、构建内存向量索引、检索相关上下文，以及生成有据可依的回答。
+
+<Info>
+  本指南聚焦端到端流水线。各类嵌入的 API 参考细节，请参阅[标准嵌入](/zh/docs/embeddings/standard-embeddings)和[上下文化嵌入](/zh/docs/embeddings/contextualized-embeddings)。
+</Info>
+
+<div id="pipeline-overview">
+  ## 流水线概览
+</div>
+
+RAG 流水线会在生成答案之前，先从你自己的文档中检索相关信息，使模型的回答基于你的数据，而不是仅依赖模型参数中的知识。
+
+<img src="https://mintcdn.com/perplexity/mJe6zlFqiKQDJxBJ/docs/assets/images/cookbook/articles/embeddings-rag-diagram.svg?fit=max&auto=format&n=mJe6zlFqiKQDJxBJ&q=85&s=586467bbbce4759a125dd4b49827259c" alt="RAG Pipeline Diagram" width="1200" className="block dark:hidden" data-path="docs/assets/images/cookbook/articles/embeddings-rag-diagram.svg" />
+
+<img src="https://mintcdn.com/perplexity/mJe6zlFqiKQDJxBJ/docs/assets/images/cookbook/articles/embeddings-rag-diagram-dark.svg?fit=max&auto=format&n=mJe6zlFqiKQDJxBJ&q=85&s=87b6b2f5f5e8e797edb54cfd98d2152c" alt="RAG Pipeline Diagram" width="1200" className="hidden dark:block" data-path="docs/assets/images/cookbook/articles/embeddings-rag-diagram-dark.svg" />
+
+步骤如下：
+
+1. **分块**：将源文档切分为大小适中、相互重叠的分块。
+2. **嵌入**：使用 Perplexity 嵌入模型为每个分块生成嵌入向量。
+3. **索引**：为嵌入向量建立索引，以支持相似度检索。
+4. **查询**：使用同一模型对用户问题生成嵌入向量。
+5. **检索**：取出相似度最高的 top-k 个分块。
+6. **生成**：将检索到的上下文传入 Agent API，生成答案。
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+安装 Perplexity SDK：
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+如果你还没有 API key：
+
+<Card title="获取你的 Perplexity API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="点击这里" href="https://perplexity.ai/account/api">
+  在 API 门户中打开 **API Keys** 标签页，生成一个新的 key。
+</Card>
+
+然后将 API key 导出为环境变量：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="document-chunking">
+  ## 文档分块
+</div>
+
+将文档切分为足够小的分块，以适配模型的上下文窗口，同时保持语义连贯。让相邻的分块相互重叠，可确保分块边界处的信息不会丢失。
+
+<CodeGroup>
+  ```python Python theme={null}
+  def chunk_text(text: str, chunk_size: int = 500, overlap: int = 100) -> list[str]:
+      """按字符数将文本切分为相互重叠的块。"""
+      chunks = []
+      start = 0
+      while start < len(text):
+          end = start + chunk_size
+          chunk = text[start:end].strip()
+          if chunk:
+              chunks.append(chunk)
+          start += chunk_size - overlap
+      return chunks
+
+  document = """Retrieval-augmented generation (RAG) is a technique that combines
+  information retrieval with text generation. Rather than relying solely on a
+  language model's training data, RAG systems first search a knowledge base for
+  relevant documents, then use those documents as context when generating a
+  response. This reduces hallucinations and allows the system to provide answers
+  grounded in specific, up-to-date sources."""
+
+  chunks = chunk_text(document, chunk_size=300, overlap=50)
+  for i, chunk in enumerate(chunks):
+      print(f"Chunk {i} ({len(chunk)} chars): {chunk[:60]}...")
+  ```
+
+  ```typescript TypeScript theme={null}
+  function chunkText(text: string, chunkSize: number = 500, overlap: number = 100): string[] {
+      const chunks: string[] = [];
+      let start = 0;
+      while (start < text.length) {
+          const end = start + chunkSize;
+          const chunk = text.slice(start, end).trim();
+          if (chunk) chunks.push(chunk);
+          start += chunkSize - overlap;
+      }
+      return chunks;
+  }
+
+  const document = `Retrieval-augmented generation (RAG) is a technique that combines
+  information retrieval with text generation. Rather than relying solely on a
+  language model's training data, RAG systems first search a knowledge base for
+  relevant documents, then use those documents as context when generating a
+  response. This reduces hallucinations and allows the system to provide answers
+  grounded in specific, up-to-date sources.`;
+
+  const chunks = chunkText(document, 300, 50);
+  chunks.forEach((chunk, i) => {
+      console.log(`Chunk ${i} (${chunk.length} chars): ${chunk.slice(0, 60)}...`);
+  });
+  ```
+</CodeGroup>
+
+<Tip>
+  在大多数场景下，分块大小取 300-500 个字符、重叠取 50-100 个字符即可获得不错的效果。对于结构化文档 (markdown、HTML) ，建议按标题或段落边界切分，而不是简单按字符数切分。
+</Tip>
+
+<div id="embedding-with-the-standard-model">
+  ## 使用标准模型生成嵌入
+</div>
+
+标准嵌入会独立处理每段文本。如果各个分块内容自成一体、不依赖上下文，就适合使用这种方式。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string: str) -> np.ndarray:
+      """将 base64 编码的 int8 嵌入解码为 float32 numpy 数组。"""
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  chunks = [
+      "RAG combines retrieval with generation to ground responses in real data.",
+      "Document chunking splits text into overlapping segments for embedding.",
+      "Cosine similarity measures the angle between two embedding vectors.",
+  ]
+
+  response = client.embeddings.create(input=chunks, model="pplx-embed-v1-4b")
+  embeddings = [decode_embedding(emb.embedding) for emb in response.data]
+  print(f"Embedded {len(embeddings)} chunks, each with {len(embeddings[0])} dimensions")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  const chunks = [
+      "RAG combines retrieval with generation to ground responses in real data.",
+      "Document chunking splits text into overlapping segments for embedding.",
+      "Cosine similarity measures the angle between two embedding vectors.",
+  ];
+
+  const response = await client.embeddings.create({
+      input: chunks,
+      model: "pplx-embed-v1-4b"
+  });
+  const embeddings = response.data.map(emb => decodeEmbedding(emb.embedding));
+  console.log(`Embedded ${embeddings.length} chunks, each with ${embeddings[0].length} dimensions`);
+  ```
+</CodeGroup>
+
+<div id="embedding-with-the-contextualized-model">
+  ## 使用上下文化模型生成嵌入
+</div>
+
+上下文化嵌入能够识别出多个分块属于同一文档。该模型采用跨分块注意力机制，使每个分块的嵌入都融合了相邻分块的信息。API 层面的关键差异在于嵌套数组结构：每个内层数组包含同一文档的分块。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 两个源文档，各自切分为多个分块
+  doc1_chunks = [
+      "RAG combines retrieval with generation to produce grounded answers.",
+      "The retrieval step searches a vector index for chunks similar to the query.",
+      "The generation step uses retrieved context to produce a final response."
+  ]
+  doc2_chunks = [
+      "Embedding models convert text into dense vector representations.",
+      "Cosine similarity is the standard metric for comparing embeddings."
+  ]
+
+  # 以嵌套数组形式传入（每个文档对应一个内层数组）
+  response = client.contextualized_embeddings.create(
+      input=[doc1_chunks, doc2_chunks],
+      model="pplx-embed-context-v1-4b"
+  )
+
+  # 嵌套响应：response.data[doc_idx].data[chunk_idx]
+  for doc in response.data:
+      for chunk in doc.data:
+          print(f"Doc {doc.index}, Chunk {chunk.index}: {chunk.embedding[:20]}...")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const doc1Chunks = [
+      "RAG combines retrieval with generation to produce grounded answers.",
+      "The retrieval step searches a vector index for chunks similar to the query.",
+      "The generation step uses retrieved context to produce a final response."
+  ];
+  const doc2Chunks = [
+      "Embedding models convert text into dense vector representations.",
+      "Cosine similarity is the standard metric for comparing embeddings."
+  ];
+
+  // 以嵌套数组形式传入（每个文档对应一个内层数组）
+  const response = await client.contextualizedEmbeddings.create({
+      input: [doc1Chunks, doc2Chunks],
+      model: "pplx-embed-context-v1-4b"
+  });
+
+  // 嵌套响应：response.data[docIdx].data[chunkIdx]
+  for (const doc of response.data) {
+      for (const chunk of doc.data) {
+          console.log(`Doc ${doc.index}, Chunk ${chunk.index}: ${chunk.embedding.slice(0, 20)}...`);
+      }
+  }
+  ```
+</CodeGroup>
+
+<Warning>
+  **分块顺序很重要。** 每个文档内的分块必须按原始先后顺序传入。上下文化模型依赖位置上下文来关联相邻分块，打乱顺序会降低嵌入质量。
+</Warning>
+
+<div id="querying-a-contextualized-index">
+  ## 查询上下文化索引
+</div>
+
+使用上下文化嵌入时，请将每个查询包装成只含一个元素的内层列表 (例如 `[[query]]`) ，以便 API 将其视为单分块文档：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+  import base64, numpy as np
+
+  client = Perplexity()
+
+  def decode_embedding(b64: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+      return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+  # 使用上下文化模型建立索引（各分块之间共享跨块注意力）
+  doc_chunks = [
+      "RAG combines retrieval with generation to produce grounded answers.",
+      "The retrieval step finds chunks similar to the user query.",
+      "The generation step uses retrieved context to produce a final response.",
+  ]
+  ctx_response = client.contextualized_embeddings.create(
+      input=[doc_chunks],  # 嵌套数组：每个文档对应一个内层列表
+      model="pplx-embed-context-v1-4b"
+  )
+  index = [
+      {"embedding": decode_embedding(chunk.embedding), "text": doc_chunks[chunk.index]}
+      for chunk in ctx_response.data[0].data
+  ]
+
+  # 查询索引
+  query = "How does retrieval work in RAG?"
+  q_response = client.contextualized_embeddings.create(
+      input=[[query]], model="pplx-embed-context-v1-4b"
+  )
+  q_emb = decode_embedding(q_response.data[0].data[0].embedding)
+  results = sorted(index, key=lambda x: cosine_similarity(q_emb, x["embedding"]), reverse=True)
+  print(f"Top result: {results[0]['text']}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64: string): Int8Array {
+      const buffer = Buffer.from(b64, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dot = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dot += a[i] * b[i]; normA += a[i] ** 2; normB += b[i] ** 2;
+      }
+      return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // 使用上下文化模型建立索引
+  const docChunks = [
+      "RAG combines retrieval with generation to produce grounded answers.",
+      "The retrieval step finds chunks similar to the user query.",
+      "The generation step uses retrieved context to produce a final response.",
+  ];
+  const ctxResponse = await client.contextualizedEmbeddings.create({
+      input: [docChunks],  // 嵌套数组：每个文档对应一个内层数组
+      model: "pplx-embed-context-v1-4b"
+  });
+  const index = ctxResponse.data[0].data.map(chunk => ({
+      embedding: decodeEmbedding(chunk.embedding),
+      text: docChunks[chunk.index],
+  }));
+
+  // 查询索引
+  const query = "How does retrieval work in RAG?";
+  const qResponse = await client.contextualizedEmbeddings.create({
+      input: [[query]], model: "pplx-embed-context-v1-4b"
+  });
+  const qEmb = decodeEmbedding(qResponse.data[0].data[0].embedding);
+  const results = [...index].sort((a, b) => cosineSimilarity(qEmb, b.embedding) - cosineSimilarity(qEmb, a.embedding));
+  console.log(`Top result: ${results[0].text}`);
+  ```
+</CodeGroup>
+
+<div id="building-a-vector-index">
+  ## 构建向量索引
+</div>
+
+本示例使用 numpy 计算余弦相似度，并搭配一个简单的内存索引。若生产系统需要处理数百万级向量，请改用专用的向量数据库 (Pinecone、Weaviate、Qdrant 等) 。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+      return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+  # 待索引的文档
+  documents = {
+      "RAG Overview": [
+          "Retrieval-augmented generation grounds LLM responses in external data.",
+          "RAG reduces hallucinations by providing factual context to the model.",
+          "A typical RAG pipeline has three stages: indexing, retrieval, and generation."
+      ],
+      "Embedding Models": [
+          "Embedding models map text to dense vector representations.",
+          "Similar texts produce vectors that are close in the embedding space.",
+          "Perplexity offers both standard and contextualized embedding models."
+      ]
+  }
+
+  # 构建索引：由 (embedding, text, doc_title) 元组组成的列表
+  index = []
+  for title, chunks in documents.items():
+      response = client.embeddings.create(input=chunks, model="pplx-embed-v1-4b")
+      for emb_obj in response.data:
+          index.append({
+              "embedding": decode_embedding(emb_obj.embedding),
+              "text": chunks[emb_obj.index],
+              "doc_title": title
+          })
+
+  print(f"Indexed {len(index)} chunks")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dot = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dot += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  const documents: Record<string, string[]> = {
+      "RAG Overview": [
+          "Retrieval-augmented generation grounds LLM responses in external data.",
+          "RAG reduces hallucinations by providing factual context to the model.",
+          "A typical RAG pipeline has three stages: indexing, retrieval, and generation."
+      ],
+      "Embedding Models": [
+          "Embedding models map text to dense vector representations.",
+          "Similar texts produce vectors that are close in the embedding space.",
+          "Perplexity offers both standard and contextualized embedding models."
+      ]
+  };
+
+  // 构建索引
+  const index: { embedding: Int8Array; text: string; docTitle: string }[] = [];
+  for (const [title, chunks] of Object.entries(documents)) {
+      const response = await client.embeddings.create({
+          input: chunks,
+          model: "pplx-embed-v1-4b"
+      });
+      for (const embObj of response.data) {
+          index.push({
+              embedding: decodeEmbedding(embObj.embedding),
+              text: chunks[embObj.index],
+              docTitle: title
+          });
+      }
+  }
+
+  console.log(`Indexed ${index.length} chunks`);
+  ```
+</CodeGroup>
+
+<div id="query-pipeline">
+  ## 查询流水线
+</div>
+
+完整的查询流水线会先将用户问题转换为嵌入向量，检索出最相似的 top-k 个分块，再将它们作为上下文传递给 Agent API 生成答案。
+
+<CodeGroup>
+  ```python Python theme={null}
+  def rag_query(question: str, index: list[dict], top_k: int = 3, min_score: float = 0.3) -> str:
+      """嵌入问题 -> 检索相似分块 -> 生成答案。"""
+      # 第 1 步：嵌入问题
+      query_response = client.embeddings.create(input=[question], model="pplx-embed-v1-4b")
+      query_emb = decode_embedding(query_response.data[0].embedding)
+
+      # 第 2 步：检索相似度高于最低阈值的 top-k 个分块
+      scored = sorted(
+          [{"score": cosine_similarity(query_emb, item["embedding"]), **item} for item in index],
+          key=lambda x: x["score"], reverse=True
+      )[:top_k]
+      scored = [item for item in scored if item["score"] >= min_score]
+
+      if not scored:
+          return "No relevant context found for this question."
+
+      # 在每个分块旁附上来源标注
+      context = "\n\n".join(
+          f"[Source: {item['doc_title']}]\n{item['text']}" for item in scored
+      )
+
+      # 第 3 步：通过 Agent API 生成答案
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=question,
+          instructions=(
+              "Answer based only on the provided context. "
+              "Cite sources by name when referencing specific information. "
+              "If the context does not contain enough information, say so.\n\n"
+              f"Context:\n{context}"
+          )
+      )
+      return response.output_text
+
+  answer = rag_query("What are the stages of a RAG pipeline?", index)
+  print(answer)
+  ```
+
+  ```typescript TypeScript theme={null}
+  async function ragQuery(question: string, idx: typeof index, topK: number = 3, minScore: number = 0.3): Promise<string> {
+      // 第 1 步：嵌入问题
+      const qResponse = await client.embeddings.create({
+          input: [question], model: "pplx-embed-v1-4b"
+      });
+      const qEmb = decodeEmbedding(qResponse.data[0].embedding);
+
+      // 第 2 步：检索相似度高于最低阈值的 top-k 个分块
+      const scored = idx
+          .map(item => ({ ...item, score: cosineSimilarity(qEmb, item.embedding) }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, topK)
+          .filter(item => item.score >= minScore);
+
+      if (scored.length === 0) {
+          return "No relevant context found for this question.";
+      }
+
+      // 在每个分块旁附上来源标注
+      const context = scored
+          .map(item => `[Source: ${item.docTitle}]\n${item.text}`)
+          .join("\n\n");
+
+      // 第 3 步：通过 Agent API 生成答案
+      const response = await client.responses.create({
+          model: "openai/gpt-5.4",
+          input: question,
+          instructions: `Answer based only on the provided context. Cite sources by name when referencing specific information. If the context does not contain enough information, say so.\n\nContext:\n${context}`
+      });
+      return response.output_text;
+  }
+
+  const answer = await ragQuery("What are the stages of a RAG pipeline?", index);
+  console.log(answer);
+  ```
+</CodeGroup>
+
+<Tip>
+  大多数场景下，建议以 `top_k=3` 和 `min_score=0.3` 作为起点。问题较为宽泛或分块较短时，可将 `top_k` 提高到 5–7。如果检索到的分块包含无关信息，可将 `min_score` 提高到 0.5–0.7；对于内容多样或语义模糊的查询，可将其下调至 0.2 左右。
+</Tip>
+
+<div id="standard-vs-contextualized-comparison">
+  ## 标准版与上下文化版对比
+</div>
+
+| 方面                   | 标准版 (`pplx-embed-v1-4b`)                  | 上下文化版 (`pplx-embed-context-v1-4b`)                        |
+| -------------------- | ----------------------------------------- | ---------------------------------------------------------- |
+| **输入格式**             | 扁平的文本列表                                   | 按文档分组的嵌套数组                                                 |
+| **上下文感知能力**          | 每段文本独立生成嵌入                                | 同一文档内各分块共享跨块上下文                                            |
+| **适用场景**             | FAQ 条目、独立文本、短文档                           | 文档段落、文章章节                                                  |
+| **分块顺序**             | 顺序无关                                      | 必须与文档原始顺序一致                                                |
+| **查询嵌入**             | `client.embeddings.create(input=[query])` | `client.contextualized_embeddings.create(input=[[query]])` |
+| **价格 (4b 模型)&#x20;**&#x20;| $0.03 / 100 万 token                       | $0.05 / 100 万 token                                        |
+
+<div id="when-to-use-standard-embeddings">
+  ### 何时使用标准嵌入
+</div>
+
+* 分块内容自足，不依赖周围上下文。
+* 内容为 FAQ 问答对、产品描述或简短的独立条目。
+* 你希望获得最低的单 token 成本。
+
+<div id="when-to-use-contextualized-embeddings">
+  ### 何时使用上下文化嵌入
+</div>
+
+* 分块来自较长的文档，其含义依赖于相邻文本。
+* 像“该方法将性能提升了 20%”这样的分块，只有结合上下文才有意义。
+* 你要嵌入的是文章、报告或技术文档中的段落。
+* 你希望以小幅成本增加换取更高的检索准确率。
+
+<div id="matryoshka-dimensions">
+  ## Matryoshka 维度
+</div>
+
+Perplexity 嵌入模型支持 Matryoshka 表示学习 (MRL) ，它将最重要的信息集中在前 N 个维度中。你可以直接通过 API 请求更低的维度，从而加快检索速度、减少存储占用。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  texts = ["Matryoshka embeddings allow dimension reduction without re-embedding."]
+
+  def decode_embedding(b64: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64), dtype=np.int8)
+
+  # 完整维度（4b 模型为 2560）
+  full = client.embeddings.create(input=texts, model="pplx-embed-v1-4b")
+
+  # 通过 API 降至 512 维
+  reduced = client.embeddings.create(input=texts, model="pplx-embed-v1-4b", dimensions=512)
+
+  print(f"Full: {len(decode_embedding(full.data[0].embedding))} dimensions")
+  print(f"Reduced: {len(decode_embedding(reduced.data[0].embedding))} dimensions")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const texts = ["Matryoshka embeddings allow dimension reduction without re-embedding."];
+
+  function decodeEmbedding(b64: string): Int8Array {
+      const buffer = Buffer.from(b64, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  // 完整维度（4b 模型为 2560）
+  const full = await client.embeddings.create({ input: texts, model: "pplx-embed-v1-4b" });
+
+  // 通过 API 降至 512 维
+  const reduced = await client.embeddings.create({
+      input: texts, model: "pplx-embed-v1-4b", dimensions: 512
+  });
+
+  console.log(`Full: ${decodeEmbedding(full.data[0].embedding).length} dimensions`);
+  console.log(`Reduced: ${decodeEmbedding(reduced.data[0].embedding).length} dimensions`);
+  ```
+</CodeGroup>
+
+`pplx-embed-v1-4b` 模型的降维取舍：
+
+|     维度     | 单个向量存储 | 相对质量 | 适用场景           |
+| :--------: | :----: | :--: | -------------- |
+| 2560 (完整)  | 2.5 KB |  最高  | 追求最高准确率、小规模数据集 |
+|    1024    |  1 KB  |  很高  | 兼顾各方面，适合大多数应用  |
+|     512    |  512 B |   高  | 大规模检索、快速搜索     |
+|     256    |  256 B |  中等  | 超大规模数据集、粗粒度筛选  |
+|     128    |  128 B |  较低  | 初轮候选筛选         |
+
+<Tip>
+  请在 API 调用中使用 `dimensions` 参数，不要手动截断向量。API 会针对所请求的维度数正确执行归一化。建议先用完整维度，仅当存储或延迟成为瓶颈时再降维。
+</Tip>
+
+<div id="batch-processing">
+  ## 批量处理
+</div>
+
+在为大规模文档集合生成嵌入时，请分批处理，以免超出 API 速率限制。标准 API 单次请求最多接受 512 条文本，合计上限为 120,000 个 token。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import base64
+  import numpy as np
+  from perplexity import AsyncPerplexity
+
+  def decode_embedding(b64_string: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  async def batch_embed(texts: list[str], batch_size: int = 100) -> list[np.ndarray]:
+      """分批为文本生成嵌入，并进行速率限制。"""
+      async with AsyncPerplexity() as client:
+          all_embeddings = []
+          for i in range(0, len(texts), batch_size):
+              batch = texts[i:i + batch_size]
+              response = await client.embeddings.create(
+                  input=batch, model="pplx-embed-v1-4b"
+              )
+              all_embeddings.extend(decode_embedding(e.embedding) for e in response.data)
+              print(f"Embedded {min(i + batch_size, len(texts))}/{len(texts)}")
+              if i + batch_size < len(texts):
+                  await asyncio.sleep(0.1)  # 批次之间短暂延迟
+          return all_embeddings
+
+  # 用法
+  texts = [f"Document chunk number {i} with content." for i in range(500)]
+  embeddings = asyncio.run(batch_embed(texts, batch_size=100))
+  print(f"Total: {len(embeddings)} embeddings")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  async function batchEmbed(texts: string[], batchSize: number = 100): Promise<Int8Array[]> {
+      const allEmbeddings: Int8Array[] = [];
+      for (let i = 0; i < texts.length; i += batchSize) {
+          const batch = texts.slice(i, i + batchSize);
+          const response = await client.embeddings.create({
+              input: batch, model: "pplx-embed-v1-4b"
+          });
+          allEmbeddings.push(...response.data.map(e => decodeEmbedding(e.embedding)));
+          console.log(`Embedded ${Math.min(i + batchSize, texts.length)}/${texts.length}`);
+          if (i + batchSize < texts.length) {
+              await new Promise(r => setTimeout(r, 100)); // 批次之间短暂延迟
+          }
+      }
+      return allEmbeddings;
+  }
+
+  // 用法
+  const texts = Array.from({ length: 500 }, (_, i) => `Document chunk number ${i} with content.`);
+  const embeddings = await batchEmbed(texts, 100);
+  console.log(`Total: ${embeddings.length} embeddings`);
+  ```
+</CodeGroup>
+
+<Info>
+  对于上下文化嵌入，可沿用同样的模式，在文档级别分批调用 `client.contextualized_embeddings.create(input=batch_of_doc_arrays)`。上下文化 API 单次请求最多接受 512 个文档、共计 16,000 个分块。
+</Info>
+
+<Warning>
+  **速率限制：** 请将批次大小控制在明显低于 API 限制的水平 (标准接口为 512 条文本 / 120,000 个 token；上下文化接口为 512 个文档 / 16,000 个分块) ，并在请求之间加入短暂延迟，以免被限流。
+</Warning>
+
+<div id="complete-example">
+  ## 完整示例
+</div>
+
+一个自包含的流水线：使用上下文化嵌入为两篇文档建立索引，并基于索引内容回答问题。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # --- 辅助函数 ---
+
+  def chunk_text(text: str, chunk_size: int = 400, overlap: int = 80) -> list[str]:
+      chunks, start = [], 0
+      while start < len(text):
+          chunk = text[start:start + chunk_size].strip()
+          if chunk:
+              chunks.append(chunk)
+          start += chunk_size - overlap
+      return chunks
+
+  def decode_embedding(b64: str) -> np.ndarray:
+      return np.frombuffer(base64.b64decode(b64), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a: np.ndarray, b: np.ndarray) -> float:
+      return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
+
+  # --- 源文档 ---
+
+  DOCUMENTS = {
+      "Quantum Computing": (
+          "Quantum computers use qubits that can exist in superposition, representing "
+          "0 and 1 simultaneously. Unlike classical bits, qubits leverage quantum "
+          "interference to perform calculations. Quantum entanglement allows qubits to "
+          "be correlated, enabling parallel processing at scale. Current quantum computers "
+          "from IBM, Google, and others have dozens to hundreds of physical qubits."
+      ),
+      "Machine Learning": (
+          "Machine learning enables computers to learn from data without explicit "
+          "programming. Supervised learning uses labeled examples to train models for "
+          "classification and regression. Neural networks with many layers (deep learning) "
+          "excel at image recognition and language tasks. Training requires large datasets "
+          "and significant compute, often using GPUs or TPUs."
+      ),
+  }
+
+  # --- 步骤 1：使用该 model 建立索引 ---
+
+  def build_index(documents: dict[str, str]) -> list[dict]:
+      index = []
+      for title, text in documents.items():
+          chunks = chunk_text(text)
+          response = client.contextualized_embeddings.create(
+              input=[chunks],
+              model="pplx-embed-context-v1-4b"
+          )
+          for chunk_obj in response.data[0].data:
+              index.append({
+                  "embedding": decode_embedding(chunk_obj.embedding),
+                  "text": chunks[chunk_obj.index],
+                  "doc_title": title,
+              })
+      print(f"Indexed {len(index)} chunks from {len(documents)} documents")
+      return index
+
+  # --- 步骤 2：查询索引、检索并生成 ---
+
+  def rag_query(question: str, index: list[dict], top_k: int = 3, min_score: float = 0.3) -> str:
+      q_resp = client.contextualized_embeddings.create(
+          input=[[question]], model="pplx-embed-context-v1-4b"
+      )
+      q_emb = decode_embedding(q_resp.data[0].data[0].embedding)
+
+      results = sorted(
+          [{"score": cosine_similarity(q_emb, item["embedding"]), **item} for item in index],
+          key=lambda x: x["score"], reverse=True
+      )[:top_k]
+      results = [r for r in results if r["score"] >= min_score]
+
+      if not results:
+          return "No relevant context found for this question."
+
+      context = "\n\n".join(f"[{r['doc_title']}]\n{r['text']}" for r in results)
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=question,
+          instructions=(
+              "Answer based only on the provided context. "
+              "Cite the source name in brackets when referencing information. "
+              "If the context is insufficient, say so.\n\n"
+              f"Context:\n{context}"
+          )
+      )
+      return response.output_text
+
+  # --- 运行 ---
+
+  if __name__ == "__main__":
+      index = build_index(DOCUMENTS)
+
+      questions = [
+          "What makes qubits different from classical bits?",
+          "What hardware is used to train machine learning models?",
+      ]
+      for q in questions:
+          print(f"\nQ: {q}")
+          print(f"A: {rag_query(q, index)}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // --- 辅助函数 ---
+
+  function chunkText(text: string, chunkSize = 400, overlap = 80): string[] {
+      const chunks: string[] = [];
+      let start = 0;
+      while (start < text.length) {
+          const chunk = text.slice(start, start + chunkSize).trim();
+          if (chunk) chunks.push(chunk);
+          start += chunkSize - overlap;
+      }
+      return chunks;
+  }
+
+  function decodeEmbedding(b64: string): Int8Array {
+      const buffer = Buffer.from(b64, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dot = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dot += a[i] * b[i]; normA += a[i] ** 2; normB += b[i] ** 2;
+      }
+      return dot / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // --- 源文档 ---
+
+  const DOCUMENTS: Record<string, string> = {
+      "Quantum Computing": "Quantum computers use qubits that can exist in superposition, representing 0 and 1 simultaneously. Unlike classical bits, qubits leverage quantum interference to perform calculations. Quantum entanglement allows qubits to be correlated, enabling parallel processing at scale. Current quantum computers from IBM, Google, and others have dozens to hundreds of physical qubits.",
+      "Machine Learning": "Machine learning enables computers to learn from data without explicit programming. Supervised learning uses labeled examples to train models for classification and regression. Neural networks with many layers (deep learning) excel at image recognition and language tasks. Training requires large datasets and significant compute, often using GPUs or TPUs.",
+  };
+
+  type IndexEntry = { embedding: Int8Array; text: string; docTitle: string };
+
+  // --- 步骤 1：使用该 model 建立索引 ---
+
+  async function buildIndex(documents: Record<string, string>): Promise<IndexEntry[]> {
+      const index: IndexEntry[] = [];
+      for (const [title, text] of Object.entries(documents)) {
+          const chunks = chunkText(text);
+          const response = await client.contextualizedEmbeddings.create({
+              input: [chunks],
+              model: "pplx-embed-context-v1-4b"
+          });
+          for (const chunkObj of response.data[0].data) {
+              index.push({
+                  embedding: decodeEmbedding(chunkObj.embedding),
+                  text: chunks[chunkObj.index],
+                  docTitle: title,
+              });
+          }
+      }
+      console.log(`Indexed ${index.length} chunks from ${Object.keys(documents).length} documents`);
+      return index;
+  }
+
+  // --- 步骤 2：查询索引、检索并生成 ---
+
+  async function ragQuery(
+      question: string,
+      index: IndexEntry[],
+      topK = 3,
+      minScore = 0.3
+  ): Promise<string> {
+      const qResp = await client.contextualizedEmbeddings.create({
+          input: [[question]], model: "pplx-embed-context-v1-4b"
+      });
+      const qEmb = decodeEmbedding(qResp.data[0].data[0].embedding);
+
+      const results = index
+          .map(item => ({ ...item, score: cosineSimilarity(qEmb, item.embedding) }))
+          .sort((a, b) => b.score - a.score)
+          .slice(0, topK)
+          .filter(r => r.score >= minScore);
+
+      if (results.length === 0) return "No relevant context found for this question.";
+
+      const context = results.map(r => `[${r.docTitle}]\n${r.text}`).join("\n\n");
+
+      const response = await client.responses.create({
+          model: "openai/gpt-5.4",
+          input: question,
+          instructions: `Answer based only on the provided context. Cite the source name in brackets when referencing information. If the context is insufficient, say so.\n\nContext:\n${context}`,
+      });
+      return response.output_text;
+  }
+
+  // --- 运行 ---
+
+  const index = await buildIndex(DOCUMENTS);
+
+  const questions = [
+      "What makes qubits different from classical bits?",
+      "What hardware is used to train machine learning models?",
+  ];
+  for (const q of questions) {
+      console.log(`\nQ: ${q}`);
+      console.log(`A: ${await ragQuery(q, index)}`);
+  }
+  ```
+</CodeGroup>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="标准嵌入" icon="cube" href="/zh/docs/embeddings/standard-embeddings">
+    标准嵌入的参数与响应格式 API 参考。
+  </Card>
+
+  <Card title="上下文化嵌入" icon="file-lines" href="/zh/docs/embeddings/contextualized-embeddings">
+    上下文化嵌入的参数与响应格式 API 参考。
+  </Card>
+
+  <Card title="最佳实践" icon="star" href="/zh/docs/embeddings/best-practices">
+    编码格式、相似度度量、归一化与错误处理。
+  </Card>
+
+  <Card title="Agent API" icon="robot" href="/zh/docs/agent-api">
+    进一步了解用于生成回答的 Responses API。
+  </Card>
+</CardGroup>

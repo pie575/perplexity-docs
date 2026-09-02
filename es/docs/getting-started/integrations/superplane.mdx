@@ -1,0 +1,156 @@
+---
+title: "Perplexity con SuperPlane"
+description: "Ejecuta agentes de Perplexity dentro de flujos de trabajo de SuperPlane: pasos de investigación, síntesis y análisis con búsqueda web, obtención de URL y citas de fuentes."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+[SuperPlane](https://superplane.com) es un plano de control de DevOps de código abierto para flujos de trabajo de larga duración basados en eventos. Expone Perplexity como un **componente** nativo del lienzo: basta con colocar un nodo de Perplexity en cualquier flujo de trabajo para ejecutar un agente de Perplexity con búsqueda web y obtención de URL, que luego emite la respuesta y las citas de las fuentes como payload para los nodos posteriores.
+
+<Info>
+  **SuperPlane** modela los flujos de trabajo como lienzos basados en eventos: los nodos emiten payloads, los nodos posteriores se suscriben a ellos y el entorno de ejecución hace seguimiento de cada ejecución con observabilidad completa. Más información en [superplane.com](https://superplane.com).
+</Info>
+
+<div id="component-perplexity">
+  ## Componente: Perplexity
+</div>
+
+El componente Perplexity ejecuta un agente de Perplexity AI como un paso del flujo de trabajo. Úsalo para investigación, síntesis, análisis automatizado y generación de contenido basada en fuentes web en tiempo real.
+
+<div id="action">
+  ### Acción
+</div>
+
+| Acción              | Descripción                                                                            |
+| ------------------- | -------------------------------------------------------------------------------------- |
+| **Ejecutar agente** | Ejecuta un agente de Perplexity AI con capacidades de búsqueda web y obtención de URL. |
+
+<div id="configuration">
+  ### Configuración
+</div>
+
+| Parámetro        | Descripción                                                                                                                                                                                                                      |
+| ---------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Preset**       | Preset de agente que se utilizará: `fast-search`, `pro-search`, `deep-research` o `advanced-deep-research`. Se corresponden con los niveles `fast` / `low` / `medium` / `high` de la Agent API. Si se define, se ignora `Model`. |
+| **Model**        | Identificador del model de la Agent API que se usará cuando no se especifique ningún preset (por ejemplo, `perplexity/sonar`).                                                                                                   |
+| **Input**        | El prompt o la pregunta para el agente. Admite [expresiones](https://docs.superplane.com/concepts/expressions) de SuperPlane.                                                                                                    |
+| **Instructions** | Instrucciones opcionales a nivel de sistema para el agente.                                                                                                                                                                      |
+| **Web Search**   | Habilita la herramienta `web_search` (valor predeterminado: `true`).                                                                                                                                                             |
+| **Fetch URL**    | Habilita la herramienta `fetch_url` (valor predeterminado: `true`).                                                                                                                                                              |
+
+<div id="output-payload">
+  ### Payload de salida
+</div>
+
+El componente emite un payload con estos campos, a los que los nodos posteriores pueden acceder mediante expresiones:
+
+| Campo       | Descripción                                   |
+| ----------- | --------------------------------------------- |
+| `text`      | La respuesta de texto generada.               |
+| `citations` | Citas de fuentes de los resultados web.       |
+| `model`     | El modelo específico usado en esta ejecución. |
+| `usage`     | Información de uso de tokens y costos.        |
+
+<div id="api-key-setup">
+  ## Configuración de la API key
+</div>
+
+Configura la integración de Perplexity en SuperPlane con tu API key. Abre los ajustes de **Integrations** de tu lienzo, añade una integración de Perplexity y pega tu clave.
+
+<Card title="Obtener API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Genera tu API key de Perplexity desde el portal de la API.
+</Card>
+
+<div id="quick-start">
+  ## Inicio rápido
+</div>
+
+Un flujo de trabajo mínimo que le hace una pregunta a Perplexity cada vez que se activa una ejecución manual:
+
+<Steps>
+  <Step title="Añade un disparador de ejecución manual">
+    Arrastra un nodo **Manual Run** al lienzo: es el punto de entrada del flujo de trabajo.
+  </Step>
+
+  <Step title="Añade un nodo de Perplexity">
+    Haz clic en **+ Components**, elige **Perplexity → Ejecutar agente** y arrástralo al lienzo. Conecta **Manual Run → Perplexity**.
+  </Step>
+
+  <Step title="Configura el agente">
+    En el nodo de Perplexity:
+
+    * **Preset**: `pro-search`
+    * **Input**: `What is the latest news on nuclear fusion?`
+    * **Web Search**: habilitado
+    * **Fetch URL**: habilitado
+  </Step>
+
+  <Step title="Ejecuta">
+    Haz clic en **Run** en el nodo Manual Run. El nodo de Perplexity emite un payload con `text`, `citations`, `model` y `usage`.
+  </Step>
+</Steps>
+
+<div id="reading-the-response-downstream">
+  ## Lectura de la respuesta en nodos posteriores
+</div>
+
+Usa expresiones de SuperPlane para enviar la salida de Perplexity al siguiente nodo, por ejemplo, un mensaje de Slack o una escritura en la base de datos:
+
+```
+Resultado de la investigación: {{ $['Perplexity'].data.text }}
+
+Fuentes:
+{{ $['Perplexity'].data.citations }}
+```
+
+En los campos de condición (If / Filter), escribe las expresiones sin `{{ }}`:
+
+```
+$['Perplexity'].data.usage.total_tokens > 1000
+```
+
+<div id="use-cases">
+  ## Casos de uso
+</div>
+
+* **Triaje de incidentes** — cuando se dispara una alerta, ejecuta un paso de investigación con Perplexity para reunir contexto sobre un proveedor, una biblioteca o un CVE antes de avisar al equipo de guardia.
+* **Síntesis de notas de versión** — convierte los diffs de commits de GitHub en notas de versión orientadas al cliente, con citas.
+* **Monitoreo de la competencia** — programa un lienzo diario que consulte a Perplexity sobre noticias del sector y publique un resumen en un canal de Slack.
+* **Fundamentación documental** — envía la salida de una ejecución de Perplexity a un componente posterior que actualice una página de Notion o una base de conocimiento.
+
+<div id="links-resources">
+  ## Enlaces y recursos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Componente de Perplexity en SuperPlane" icon="book" href="https://docs.superplane.com/components/perplexity">
+    Documentación oficial del componente.
+  </Card>
+
+  <Card title="Documentación de SuperPlane" icon="globe" href="https://docs.superplane.com">
+    Documentación completa de SuperPlane.
+  </Card>
+
+  <Card title="Agent API de Perplexity" icon="robot" href="/es/docs/agent-api/quickstart">
+    Cómo funciona la capa de agentes de Perplexity.
+  </Card>
+
+  <Card title="Modelos de la Agent API" icon="sparkles" href="/es/docs/agent-api/models">
+    Modelos disponibles y precios.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Soporte
+</div>
+
+¿Necesitas ayuda con la integración?
+
+* Consulta la [documentación de SuperPlane](https://docs.superplane.com)
+* Revisa nuestras [preguntas frecuentes](/es/docs/resources/faq)

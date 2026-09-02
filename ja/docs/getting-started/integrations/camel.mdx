@@ -1,0 +1,158 @@
+---
+title: "CAMEL-AI で Perplexity を使う"
+description: "CAMEL-AI のマルチエージェントシステム内で Perplexity の Search API をツールとして利用します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+CAMEL-AI の `SearchToolkit` には、[Perplexity Search API](/ja/docs/search/quickstart) をネイティブな CAMEL ツールとしてラップした `search_perplexity` メソッドが用意されています。このツールはランク付けされたウェブ検索結果 (タイトル、URL、スニペット、日付) を返すため、呼び出し元の `ChatAgent` は最新かつ引用可能な情報源に基づいて回答を生成できます。
+
+<Info>
+  **CAMEL-AI** は、対話型のマルチエージェントシステムを構築するためのオープンソースフレームワークです。詳細は [camel-ai.org](https://www.camel-ai.org) をご覧ください。
+</Info>
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+pip install camel-ai
+```
+
+<div id="api-key-setup">
+  ## API キーの設定
+</div>
+
+Perplexity API キーを環境変数に設定します。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  Perplexity のダッシュボードで API キーを生成します。
+</Card>
+
+<div id="quick-start">
+  ## クイックスタート
+</div>
+
+`search_perplexity` を `ChatAgent` にツールとして登録します。
+
+```python theme={null}
+from camel.agents import ChatAgent
+from camel.toolkits import FunctionTool, SearchToolkit
+
+agent = ChatAgent(
+    system_message=(
+        "You are a helpful assistant that can use the Perplexity "
+        "search engine to answer questions."
+    ),
+    tools=[FunctionTool(SearchToolkit().search_perplexity)],
+)
+
+response = agent.step(
+    input_message="What are the latest developments in multi-agent AI systems?",
+    response_format=None,
+)
+print(response.msgs[0].content)
+```
+
+このツールは内部で `POST https://api.perplexity.ai/search` を呼び出し、APIのレスポンスをそのまま返すため、エージェントはどの結果を引用するかを選択できます。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+Search API のすべてのパラメータは、`search_perplexity` で直接指定できます。
+
+```python theme={null}
+from camel.toolkits import SearchToolkit
+
+toolkit = SearchToolkit()
+
+results = toolkit.search_perplexity(
+    query="AI safety research",
+    max_results=5,
+    max_tokens_per_page=512,
+    country="US",
+    search_recency_filter="week",                         # hour | day | week | month | year
+    search_domain_filter=["arxiv.org", "-medium.com"],   # 先頭に '-' を付けると除外
+    search_language_filter=["en"],
+)
+```
+
+バッチ検索を行うためにクエリのリストを渡すこともできます。また、専用の引数として用意されていない Search API のフィールドを渡したい場合は、`extra_params` を使用します。
+
+```python theme={null}
+results = toolkit.search_perplexity(
+    query=["NVIDIA earnings", "AMD earnings"],
+    max_results=3,
+    extra_params={
+        "search_after_date_filter": "1/1/2026",
+        "search_before_date_filter": "5/1/2026",
+    },
+)
+```
+
+<div id="response-shape">
+  ## レスポンスの構造
+</div>
+
+`search_perplexity` は、Perplexity Search API の生のレスポンスを `Dict[str, Any]` として返します。成功時には、`id` と `server_time` とともに `results` リストが含まれます。
+
+```python theme={null}
+{
+    "id": "...",
+    "server_time": "...",
+    "results": [
+        {
+            "title": "...",
+            "url": "...",
+            "snippet": "...",
+            "date": "...",          # 存在する場合あり
+            "last_updated": "...",  # 存在する場合あり
+        },
+        # ...
+    ],
+}
+```
+
+失敗した場合、レスポンスは問題の内容を示す `error` キーを含む辞書になります (API キーの欠落、HTTP エラー、リクエスト例外のいずれか) 。
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="CAMEL-AI ドキュメント" icon="book" href="https://docs.camel-ai.org">
+    CAMEL-AI でマルチエージェントシステムを構築します。
+  </Card>
+
+  <Card title="ツールのソースコード" icon="brand-github" href="https://github.com/camel-ai/camel/blob/master/camel/toolkits/search_toolkit.py">
+    SearchToolkit.search&#95;perplexity の実装。
+  </Card>
+
+  <Card title="Search API クイックスタート" icon="search" href="/ja/docs/search/quickstart">
+    基盤となる Perplexity Search API について詳しく確認できます。
+  </Card>
+
+  <Card title="サンプルスクリプト" icon="code" href="https://github.com/camel-ai/camel/blob/master/examples/toolkits/search_toolkit.py">
+    Perplexity 検索を使った CAMEL のエンドツーエンドのサンプル。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+統合でお困りですか？
+
+* [CAMEL-AI ドキュメント](https://docs.camel-ai.org)を参照する
+* [FAQ](/ja/docs/resources/faq)を確認する

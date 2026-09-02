@@ -1,0 +1,146 @@
+---
+title: "Perplexity con n8n"
+description: "Añade búsqueda web en tiempo real, agentes de IA y embeddings a tus flujos de trabajo de n8n mediante el nodo nativo de Perplexity."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+n8n incluye un **nodo de Perplexity** nativo con recursos de Agent, Search y Embeddings, todos configurables desde el lienzo visual. Los modelos se cargan dinámicamente desde la API, por lo que el menú desplegable siempre refleja las opciones más recientes.
+
+<Info>
+  **n8n** es una plataforma de automatización de flujos de trabajo basada en nodos. Admite despliegues autoalojados y en la nube: todos los ejemplos siguientes funcionan en ambos casos. Si lo autoalojas, asegúrate de que tu instancia tenga salida hacia `api.perplexity.ai`. Más información en [n8n.io](https://n8n.io).
+</Info>
+
+El nodo admite tres recursos:
+
+* **Agent**: modelos de terceros (OpenAI, Anthropic, Google, xAI) con llamadas a herramientas y salida estructurada
+* **Search**: resultados web en bruto y ordenados por relevancia para que los procese tu propia lógica
+* **Embeddings**: generación de vectores para RAG y flujos de recuperación
+
+<div id="prerequisites">
+  ## Requisitos previos
+</div>
+
+* n8n 2.14.0+ (en la nube en [app.n8n.cloud](https://app.n8n.cloud) o autoalojado)
+* Una API key de Perplexity
+
+<Card title="Obtener API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Genera tu API key de Perplexity desde la consola.
+</Card>
+
+<div id="credential-setup">
+  ## Configuración de credenciales
+</div>
+
+<Steps>
+  <Step title="Abre Credentials">
+    En n8n, ve a **Settings → Credentials → Add credential**.
+  </Step>
+
+  <Step title="Selecciona Perplexity">
+    Busca **Perplexity API** y selecciónalo.
+  </Step>
+
+  <Step title="Añade tu clave">
+    Pega tu API key y guarda. El nodo usará esta credencial automáticamente.
+  </Step>
+</Steps>
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_credentials.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=43dac8012eb71603e45c77afad6959e8" alt="Perplexity credential setup" />
+
+***
+
+<div id="agent">
+  ## Agent
+</div>
+
+Usa el recurso Agent para enrutar solicitudes a modelos de terceros (OpenAI, Anthropic, Google, xAI) con las herramientas `web_search` y `fetch_url` de Perplexity.
+
+Establece **Resource** en `Agent` y configura:
+
+| Parámetro               | Descripción                                                                                              |
+| ----------------------- | -------------------------------------------------------------------------------------------------------- |
+| **Model**               | Cualquier modelo del menú desplegable dinámico (p. ej., `openai/gpt-5.5`, `anthropic/claude-sonnet-4-6`) |
+| **Input**               | Tu prompt: admite expresiones de n8n                                                                     |
+| **Tools**               | Selecciona `web_search`, `fetch_url` o ambas                                                             |
+| **System Instructions** | System prompt opcional para el agente                                                                    |
+| **Response Format**     | Esquema JSON opcional para salida estructurada                                                           |
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_agent_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=5ead62566997fab45106e72a292e8d92" alt="Configuración del recurso Agent" />
+
+***
+
+<div id="search">
+  ## Search
+</div>
+
+Obtén resultados web sin procesar, ordenados por relevancia y sin procesamiento por LLM. Establece **Resource** en `Search`:
+
+| Parámetro         | Descripción                                      |
+| ----------------- | ------------------------------------------------ |
+| **Query**         | La consulta de búsqueda — admite expresiones n8n |
+| **Recency**       | `day`, `week`, `month` o `year`                  |
+| **Domain Filter** | Limitar a dominios específicos                   |
+| **Language**      | Código de idioma ISO 639-1                       |
+| **Country**       | Código de país de dos letras                     |
+
+Cada resultado incluye `title`, `url`, `snippet` y `date`.
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_search_results.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=ce3da801cd5fe19dddd11d293084714f" alt="Search resource results" />
+
+***
+
+<div id="embeddings">
+  ## Embeddings
+</div>
+
+Genera vectores para pipelines de RAG y recuperación. Establece **Resource** en `Embeddings`:
+
+| Parámetro | Descripción                                                                     |
+| --------- | ------------------------------------------------------------------------------- |
+| **Model** | `pplx-embed-v1-4b` (2560 dimensiones) o `pplx-embed-v1-0.6b` (1024 dimensiones) |
+| **Input** | Texto que se va a incrustar: admite expresiones de n8n                          |
+
+El nodo también admite embeddings contextuales mediante `POST /v1/contextualizedembeddings` para generar vectores que tienen en cuenta los fragmentos del documento.
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_embeddings_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=3e84f575f042b158214dab7ce8ea6db0" alt="Configuración del recurso Embeddings" />
+
+***
+
+<div id="error-handling">
+  ## Manejo de errores
+</div>
+
+Usa el flujo de trabajo **Error Trigger** de n8n o la opción integrada **Retry on Fail** (configuración del nodo → Retry on Fail) para gestionar errores transitorios:
+
+* **429 Too Many Requests** — agrega un nodo **Wait** con retroceso exponencial antes de reintentar
+* **401 Unauthorized** — comprueba que la credencial de la Perplexity API esté guardada correctamente
+* **Errores 500** — activa Retry on Fail en la configuración del nodo
+
+<div id="links-resources">
+  ## Enlaces y recursos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Documentación de n8n" icon="book" href="https://docs.n8n.io">
+    Documentación oficial de n8n
+  </Card>
+
+  <Card title="Comunidad de n8n" icon="users" href="https://community.n8n.io">
+    Plantillas, flujos de trabajo y soporte de la comunidad
+  </Card>
+
+  <Card title="Referencia de la Perplexity API" icon="code" href="/es/api-reference">
+    Referencia completa de la API
+  </Card>
+
+  <Card title="Agent API" icon="sparkles" href="/es/docs/agent-api/models">
+    Modelos y capacidades disponibles
+  </Card>
+</CardGroup>

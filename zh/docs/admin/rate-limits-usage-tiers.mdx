@@ -1,0 +1,330 @@
+---
+title: "速率限制与用量层级"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<div id="what-are-usage-tiers">
+  ## 什么是使用层级？
+</div>
+
+使用层级根据你的 API 累计消费额，决定你的**速率限制**以及**测试版功能**的使用权限。随着 API 额度消费的累积，你会自动升级到速率限制更高的等级。等级越高，每分钟可发起的请求数显著增加；且一旦达到某一等级即永久保留，不会降级。
+
+<Info>
+  你可以在 API 控制台的[定价页面](https://console.perplexity.ai/project/pricing?tab=usage-tiers)查看当前的使用层级。
+</Info>
+
+***
+
+<div id="tier-progression">
+  ## 等级进阶
+</div>
+
+| 等级         | 累计购买额度  | 状态        |
+| ---------- | ------- | --------- |
+| **Tier 0** | $0      | 新账户，访问受限  |
+| **Tier 1** | $50+    | 轻度使用，基础限额 |
+| **Tier 2** | $250+   | 常规使用      |
+| **Tier 3** | $500+   | 重度使用      |
+| **Tier 4** | $1,000+ | 生产环境使用    |
+| **Tier 5** | $5,000+ | 企业级使用     |
+
+<Note>
+  等级依据账户生命周期内的**累计购买额**确定，而非当前余额。
+</Note>
+
+***
+
+<div id="router-api-rate-limits">
+  ## Router API 速率限制
+</div>
+
+Router API 请求受速率限制。当请求被限流，或上游 model 过载时，API 会返回 `429` 并附带 `Retry-After` 响应头——请在该响应头指示的时间间隔后重试。
+
+<Note>
+  返回 `429` 而被拒绝的请求不计费。
+</Note>
+
+***
+
+<div id="agent-api-rate-limits">
+  ## Agent API 速率限制
+</div>
+
+Agent API 会对每个请求应用两个相互独立的限制：API 全局的 QPS 限制，以及 Agent 模型的每分钟请求数 (RPM) 限制。请求必须同时满足这两项限制。RPM 值并非由 QPS 值推算得出。
+
+|     等级     | QPS (每秒查询数)  |  每分钟请求数  |
+| :--------: | :----------: | :------: |
+| **Tier 0** |     1 QPS    |   50/分钟  |
+| **Tier 1** |     3 QPS    |  150/分钟  |
+| **Tier 2** |     8 QPS    |  500/分钟  |
+| **Tier 3** |    17 QPS    | 1,000/分钟 |
+| **Tier 4** |    33 QPS    | 4,000/分钟 |
+| **Tier 5** |    33 QPS    | 8,000/分钟 |
+
+***
+
+<div id="search-api-rate-limits">
+  ## Search API 速率限制
+</div>
+
+Search API 有独立的速率限制，适用于所有使用层级：
+
+| 端点             | 速率限制        | 突发容量     |
+| -------------- | ----------- | -------- |
+| POST `/search` | 每秒 50 个查询单位 | 50 个查询单位 |
+
+**Search 速率限制器行为：**
+
+* **单查询请求**：消耗 1 个查询单位
+* **多查询请求**：数组中的每个查询各消耗 1 个查询单位
+* **突发**：可瞬时消耗 50 个查询单位
+* **持续**：平均每秒 50 个查询单位
+
+<Info>
+  计费与速率限制使用不同的单位。一个包含五条查询的成功请求算作一次可计费的 Search API 请求，但会消耗五个速率限制单位。Search 速率限制与使用层级无关，所有账户统一采用相同的漏桶算法。计费详情请参阅 [Search API 定价](/zh/docs/getting-started/pricing#search-api-pricing)。
+</Info>
+
+***
+
+<div id="sonar-api-rate-limits">
+  ## Sonar API 速率限制
+</div>
+
+<SonarDeprecationNotice />
+
+Sonar API 采用分层速率限制，限额随您的使用层级提升：
+
+<Tabs>
+  <Tab title="Tier 0">
+    | 模型                                 | 每分钟请求数 (RPM) |
+    | ---------------------------------- | ------------ |
+    | `sonar-deep-research`              | 5            |
+    | `sonar-reasoning-pro`              | 50           |
+    | `sonar-pro`                        | 50           |
+    | `sonar`                            | 50           |
+    | POST `/v1/async/sonar`             | 5            |
+    | GET `/v1/async/sonar`              | 3000         |
+    | GET `/v1/async/sonar/{request_id}` | 6000         |
+  </Tab>
+
+  <Tab title="Tier 1">
+    | 模型                                 | 每分钟请求数 (RPM) |
+    | ---------------------------------- | ------------ |
+    | `sonar-deep-research`              | 10           |
+    | `sonar-reasoning-pro`              | 150          |
+    | `sonar-pro`                        | 150          |
+    | `sonar`                            | 150          |
+    | POST `/v1/async/sonar`             | 10           |
+    | GET `/v1/async/sonar`              | 3000         |
+    | GET `/v1/async/sonar/{request_id}` | 6000         |
+  </Tab>
+
+  <Tab title="Tier 2">
+    | 模型                                 | 每分钟请求数 (RPM) |
+    | ---------------------------------- | ------------ |
+    | `sonar-deep-research`              | 20           |
+    | `sonar-reasoning-pro`              | 500          |
+    | `sonar-pro`                        | 500          |
+    | `sonar`                            | 500          |
+    | POST `/v1/async/sonar`             | 20           |
+    | GET `/v1/async/sonar`              | 3000         |
+    | GET `/v1/async/sonar/{request_id}` | 6000         |
+  </Tab>
+
+  <Tab title="Tier 3">
+    | 模型                                 | 每分钟请求数 (RPM) |
+    | ---------------------------------- | ------------ |
+    | `sonar-deep-research`              | 40           |
+    | `sonar-reasoning-pro`              | 1,000        |
+    | `sonar-pro`                        | 1,000        |
+    | `sonar`                            | 1,000        |
+    | POST `/v1/async/sonar`             | 40           |
+    | GET `/v1/async/sonar`              | 3000         |
+    | GET `/v1/async/sonar/{request_id}` | 6000         |
+  </Tab>
+
+  <Tab title="Tier 4">
+    | 模型                                 | 每分钟请求数 (RPM) |
+    | ---------------------------------- | ------------ |
+    | `sonar-deep-research`              | 60           |
+    | `sonar-reasoning-pro`              | 4,000        |
+    | `sonar-pro`                        | 4,000        |
+    | `sonar`                            | 4,000        |
+    | POST `/v1/async/sonar`             | 60           |
+    | GET `/v1/async/sonar`              | 3000         |
+    | GET `/v1/async/sonar/{request_id}` | 6000         |
+  </Tab>
+
+  <Tab title="Tier 5">
+    | 模型                                 | 每分钟请求数 (RPM) |
+    | ---------------------------------- | ------------ |
+    | `sonar-deep-research`              | 100          |
+    | `sonar-reasoning-pro`              | 4,000        |
+    | `sonar-pro`                        | 4,000        |
+    | `sonar`                            | 4,000        |
+    | POST `/v1/async/sonar`             | 100          |
+    | GET `/v1/async/sonar`              | 3000         |
+    | GET `/v1/async/sonar/{request_id}` | 6000         |
+  </Tab>
+</Tabs>
+
+***
+
+<div id="embeddings-api-rate-limits">
+  ## Embeddings API 速率限制
+</div>
+
+Embeddings API 采用分层速率限制，会随使用层级的提升而提高。由于每个请求仅在弹性后端上执行一次前向传播，其限制高于其他 API。
+
+|      等级      | QPS (每秒查询数)  |
+| :----------: | :----------: |
+|  **Tier 0**  |    85 QPS    |
+| **Tier 1–3** |    170 QPS   |
+| **Tier 4–5** |    335 QPS   |
+
+<div id="contextualized-embeddings">
+  ### 上下文化嵌入
+</div>
+
+上下文化嵌入有独立且更高的限额 (为标准嵌入各层级的 5 倍) ：
+
+|      层级      | QPS (每秒查询数)  |
+| :----------: | :----------: |
+|  **Tier 0**  |    415 QPS   |
+| **Tier 1–3** |    835 QPS   |
+| **Tier 4–5** |   1,670 QPS  |
+
+<Note>
+  上下文化嵌入的速率限制按**总分块数**计算，而非按请求数计算。
+</Note>
+
+***
+
+<div id="how-rate-limiting-works">
+  ## 速率限制的工作原理
+</div>
+
+我们的速率限制系统采用**漏桶算法**，既能容许突发流量，又能严格控制长期速率。
+
+<div id="technical-implementation">
+  ### 技术实现
+</div>
+
+<AccordionGroup>
+  <Accordion title="漏桶算法详解">
+    漏桶算法的工作方式就像一个底部带小孔的水桶：
+
+    * **桶容量**：你可以瞬时发出的最大请求数 (突发容量)
+    * **漏出速率**：token 从桶中漏出的速度 (即你的速率限制)
+    * **Token 补充**：token 按你的速率限制以固定间隔持续补充
+
+    这种设计既能在你需要时容纳合理的突发流量，又能防止持续滥用，并确保对所有用户的限流都可预期且公平。
+  </Accordion>
+
+  <Accordion title="速率限制器行为示例">
+    我们来看看**每秒 50 个请求**在实际中如何运作。桶容量为 50 个 token，漏出速率为每秒 50 个 token，即每 20 毫秒补充 1 个 token。
+
+    **场景 1：突发流量**
+
+    ```
+    时间 0.0s：桶已满（50 个 token）
+    → 瞬时发送 50 个请求 → 全部允许
+    → 发送第 51 个请求 → 被拒绝（桶已空）
+
+    时间 0.020s：补充 1 个 token
+    → 发送 1 个请求 → 允许
+    → 发送第 2 个请求 → 被拒绝
+
+    时间 0.040s：再补充 1 个 token
+    → 发送 1 个请求 → 允许
+    ```
+
+    **场景 2：稳定的 50 QPS**
+
+    ```
+    每 20ms 发送一个请求：
+    时间 0.0s：请求 → 允许（50→49 个 token）
+    时间 0.020s：请求 → 允许（49+1-1=49 个 token）
+    时间 0.040s：请求 → 允许（49+1-1=49 个 token）
+    ……token 维持在 49-50 个，所有请求均通过
+    ```
+
+    **场景 3：略高于 50 QPS**
+
+    ```
+    每 19ms 发送一个请求（≈52.6 QPS）：
+    → token 消耗最终快于补充速度
+    → 部分请求开始被拒绝
+    → 平均下来恰好为 50 QPS
+    ```
+  </Accordion>
+
+  <Accordion title="实际影响">
+    漏桶设计意味着你可以瞬时用满整个速率限制，非常适合批量操作或突发的流量高峰。只要还有可用的突发容量，就无需人为地把请求摊开发送。
+
+    该系统会严格控制长期的平均速率，同时允许在突发使用后快速恢复。这样既能在不同使用模式下提供稳定一致的性能，也能防止持续超限使用，并保持资源分配的公平性。
+
+    在构建应用时，可充分利用突发容量执行批量操作，监控使用模式以优化请求时序，并针对 429 响应实现完善的错误处理。
+  </Accordion>
+</AccordionGroup>
+
+***
+
+<div id="what-happens-when-you-hit-rate-limits">
+  ## 触发速率限制时会发生什么？
+</div>
+
+当你超出速率限制时：
+
+1. **429 错误** - 请求被拒绝，返回 &quot;Too Many Requests&quot;
+2. **持续补充** - token 会按你的速率限制持续补充
+3. **即时恢复** - 只要有 token 补充进来，就能立即发起新请求
+
+**恢复时间示例：**
+
+* **50 QPS 限制**：每 20 毫秒补充 1 个 token
+* **500 QPS 限制**：每 2 毫秒补充 1 个 token
+* **1,000 QPS 限制**：每 1 毫秒补充 1 个 token
+
+<Tip>
+  **最佳实践：**
+
+  * 监控使用情况，以预判何时需要升级到更高层级
+  * 对于生产环境应用，建议提前升级层级
+  * 在代码中实现带抖动 (jitter) 的指数退避
+  * 充分利用突发容量执行批量操作
+  * 如果尚有可用的突发容量，不要人为地分散请求
+</Tip>
+
+***
+
+<div id="upgrading-your-tier">
+  ## 升级你的层级
+</div>
+
+<Steps>
+  <Step title="查看当前层级">
+    在 API 控制台中打开[使用层级](https://console.perplexity.ai/project/pricing?tab=usage-tiers)，查看你当前所处的层级以及各层级对应的消费门槛。
+  </Step>
+
+  <Step title="购买更多额度">
+    在账单页面为账户充值额度。消费达到相应门槛后，层级会自动升级。
+  </Step>
+
+  <Step title="确认升级结果">
+    层级升级后，新的速率限制立即生效。可前往设置页面确认。
+  </Step>
+
+  <Step title="需要更高的限额？">
+    如果你需要超出 Tier 5 的自定义速率限制，请[填写速率限制提升申请表](https://perplexity.typeform.com/to/yctmfyVT)，我们会评估你的使用场景，尽量满足你的需求。
+  </Step>
+</Steps>
+
+<Check>
+  更高的层级带来更高的速率限制，可显著改善 API 使用体验，这对生产环境应用尤为重要。
+</Check>
+
+<Card title="需要更高的速率限制？" icon="file-pencil" iconType="solid" href="https://perplexity.typeform.com/to/yctmfyVT">
+  需要超出当前层级的自定义速率限制？请填写速率限制提升申请表，我们会评估你的使用场景，尽量满足你的需求。
+</Card>

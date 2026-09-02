@@ -1,0 +1,370 @@
+---
+title: "后台模式"
+description: "异步运行长时间的智能体任务——使用 background 提交任务，并通过 响应 id 轮询、流式获取、重连和取消。"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+长时间的智能体运行 (例如深度研究或繁重的 sandbox 任务) 可能耗时数分钟。后台模式会异步执行这些任务，从而避免应用出现超时和连接中断：提交运行任务，保存其响应 id，然后轮询获取结果。即使客户端断开连接，该运行仍会在服务端继续执行。
+
+<div id="submit-a-background-request">
+  ## 提交后台请求
+</div>
+
+创建响应时设置 `background=true`。提交端点为 `POST https://api.perplexity.ai/v1/agent`。创建调用会立即返回一个 Response 对象；请保存其 `id`，并查看其初始 `status`。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Research the current EV charging market and summarize the main segments.",
+      tools=[{"type": "web_search"}, {"type": "sandbox"}],
+      background=True,
+  )
+
+  print(f"Response ID: {response.id}")
+  print(f"Status: {response.status}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Research the current EV charging market and summarize the main segments.',
+    tools: [{ type: 'web_search' }, { type: 'sandbox' }],
+    background: true,
+  });
+
+  console.log(`Response ID: ${response.id}`);
+  console.log(`Status: ${response.status}`);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Research the current EV charging market and summarize the main segments.",
+      "tools": [{ "type": "web_search" }, { "type": "sandbox" }],
+      "background": true
+    }' | jq '{id, status}'
+  ```
+</CodeGroup>
+
+<div id="poll-for-the-result">
+  ## 轮询获取结果
+</div>
+
+使用 `GET https://api.perplexity.ai/v1/agent/{id}` 轮询后台响应。状态为 `queued` 或 `in_progress` 时，后台响应处于非终止状态；状态为 `completed`、`failed`、`cancelled` 或 `incomplete` 时则处于终止状态 (`incomplete` 表示运行在完成前中止，例如发生截断) 。
+
+持续轮询，直到响应进入任一终止状态，然后根据最终状态分支处理。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Write a sourced brief on grid-scale battery storage trends.",
+      tools=[{"type": "web_search"}, {"type": "sandbox"}],
+      background=True,
+  )
+
+  while response.status not in ("completed", "failed", "cancelled", "incomplete"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(f"Final status: {response.status}")
+
+  if response.status == "completed":
+      print(get_output_text(response))
+  elif response.status == "failed":
+      print(response.error)
+  elif response.status == "cancelled":
+      print("The response was cancelled.")
+  elif response.status == "incomplete":
+      print("The response stopped before finishing.")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Write a sourced brief on grid-scale battery storage trends.',
+    tools: [{ type: 'web_search' }, { type: 'sandbox' }],
+    background: true,
+  });
+
+  while (!['completed', 'failed', 'cancelled', 'incomplete'].includes(response.status)) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(`Final status: ${response.status}`);
+
+  if (response.status === 'completed') {
+    console.log(response.output_text);
+  } else if (response.status === 'failed') {
+    console.log(response.error);
+  } else if (response.status === 'cancelled') {
+    console.log('The response was cancelled.');
+  } else if (response.status === 'incomplete') {
+    console.log('The response stopped before finishing.');
+  }
+  ```
+
+  ```bash cURL theme={null}
+  # 1. 提交后台运行并保存其 id。
+  RESPONSE_ID=$(curl -s https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Write a sourced brief on grid-scale battery storage trends.",
+      "tools": [{ "type": "web_search" }, { "type": "sandbox" }],
+      "background": true
+    }' | jq -r '.id')
+
+  # 2. 轮询直到状态变为 completed、failed、cancelled 或 incomplete。
+  while true; do
+    RESPONSE=$(curl -s "https://api.perplexity.ai/v1/agent/$RESPONSE_ID" \
+      -H "Authorization: Bearer $PERPLEXITY_API_KEY")
+
+    STATUS=$(echo "$RESPONSE" | jq -r '.status')
+    echo "Status: $STATUS"
+
+    if [[ "$STATUS" == "completed" || "$STATUS" == "failed" || "$STATUS" == "cancelled" || "$STATUS" == "incomplete" ]]; then
+      echo "$RESPONSE"
+      break
+    fi
+
+    sleep 2
+  done
+  ```
+</CodeGroup>
+
+循环结束后，请对每种终止状态分别做显式处理：`completed` 时读取输出；`failed` 时检查 `error` 对象；`cancelled` 时视为该运行被主动停止；`incomplete` 时视为该运行在完成前中止 (例如发生截断) 。
+
+<div id="stream-and-reconnect">
+  ## 流式传输与重连
+</div>
+
+创建响应时同时设置 `background=true` 和 `stream=true`，即可以流式方式获取长时间运行的后台响应。请保存响应 id，并用每个流式事件的 `sequence_number` 维护一个游标。如果连接中断，可通过 `GET /v1/agent/{id}?stream=true&starting_after=N` 重连，从序列号 `N` 之后继续接收。
+
+<Info>
+  重连仅在该响应的重连窗口内有效。若窗口期已过，重连请求将返回 `400`；此时请改用普通的 `GET /v1/agent/{id}` 获取最终快照。
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import os
+  import requests
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response_id = None
+  cursor = None
+
+  stream = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Create a detailed research memo on satellite internet providers.",
+      tools=[{"type": "web_search"}],
+      background=True,
+      stream=True,
+  )
+
+  for event in stream:
+      cursor = getattr(event, "sequence_number", cursor)
+
+      # 从第一个带有响应 id的事件中获取该 id。
+      response = getattr(event, "response", None)
+      if response_id is None and response is not None:
+          response_id = getattr(response, "id", None)
+
+      print(event)
+
+  # 如果流在游标 N 之后断开，则从下一个事件继续。
+  if response_id and cursor is not None:
+      reconnect = requests.get(
+          f"https://api.perplexity.ai/v1/agent/{response_id}",
+          headers={"Authorization": f"Bearer {os.environ['PERPLEXITY_API_KEY']}"},
+          params={"stream": "true", "starting_after": cursor},
+          stream=True,
+          timeout=60,
+      )
+
+      if reconnect.status_code == 400:
+          final = client.responses.retrieve(response_id)
+          print(final.status)
+      else:
+          reconnect.raise_for_status()
+          for line in reconnect.iter_lines(decode_unicode=True):
+              if not line or not line.startswith("data: "):
+                  continue
+              data = line.removeprefix("data: ")
+              if data == "[DONE]":
+                  break
+              event = json.loads(data)
+              cursor = event.get("sequence_number", cursor)
+              print(event)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let responseId: string | undefined;
+  let cursor: number | undefined;
+
+  const stream = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Create a detailed research memo on satellite internet providers.',
+    tools: [{ type: 'web_search' }],
+    background: true,
+    stream: true,
+  });
+
+  for await (const event of stream) {
+    cursor = event.sequence_number;
+
+    // 从第一个带有响应 id的事件中获取该 id。
+    if (!responseId && 'response' in event && event.response) {
+      responseId = event.response.id;
+    }
+
+    console.log(event);
+  }
+
+  // 如果流在游标 N 之后断开，则从下一个事件继续。
+  if (responseId && cursor !== undefined) {
+    const reconnect = await fetch(
+      `https://api.perplexity.ai/v1/agent/${responseId}?stream=true&starting_after=${cursor}`,
+      { headers: { Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}` } },
+    );
+
+    if (reconnect.status === 400) {
+      // 重连窗口已过期：回退到最终快照。
+      const final = await client.responses.retrieve(responseId);
+      console.log(final.status);
+    } else {
+      // 以相同方式解析恢复后的 SSE 流，从 `cursor` 继续。
+      console.log(await reconnect.text());
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  # 1. 启动一个后台流。
+  curl -N https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Create a detailed research memo on satellite internet providers.",
+      "tools": [{ "type": "web_search" }],
+      "background": true,
+      "stream": true
+    }'
+
+  # 2. 如果连接中断，从收到的最后一个 sequence_number 之后继续。
+  curl -N "https://api.perplexity.ai/v1/agent/$RESPONSE_ID?stream=true&starting_after=$SEQUENCE_NUMBER" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+
+  # 3. 如果重连返回 400，则改为获取最新的最终快照。
+  curl "https://api.perplexity.ai/v1/agent/$RESPONSE_ID" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="cancel-a-run">
+  ## 取消运行
+</div>
+
+当不再需要结果时，可通过 `POST https://api.perplexity.ai/v1/agent/{id}/cancel` 取消正在执行的后台响应。
+取消操作是异步的：接口返回 `200` 及 `status: "cancelling"`，运行会在随后不久停止，因此需轮询 `GET /v1/agent/{id}` 直至出现终止 `cancelled`。
+取消已处于终止的响应会返回 `400`；id 不存在或响应归属于其他账户，则返回 `404`。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Run an extended literature review on heat pump adoption.",
+      tools=[{"type": "web_search"}],
+      background=True,
+  )
+
+  # 按 id 取消，然后轮询 GET 直到状态变为终止 "cancelled"。
+  cancelled = client.responses.cancel(response.id)
+  print(cancelled.response_id, cancelled.status)  # resp_... cancelling
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Run an extended literature review on heat pump adoption.',
+    tools: [{ type: 'web_search' }],
+    background: true,
+  });
+
+  // 按 id 取消，然后轮询 GET 直到状态变为终止 'cancelled'。
+  const cancelled = await client.responses.cancel(response.id);
+  console.log(cancelled.response_id, cancelled.status); // resp_... cancelling
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST "https://api.perplexity.ai/v1/agent/$RESPONSE_ID/cancel" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="处理文件" icon="file" href="/zh/docs/agent-api/working-with-files" />
+
+  <Card title="Sandbox" icon="layer-group" href="/zh/docs/agent-api/tools/sandbox" />
+
+  <Card title="Wide Research" icon="bars" href="/zh/docs/agent-api/wide-research" />
+
+  <Card title="流式传输与输出控制" icon="clock" href="/zh/docs/agent-api/output-control" />
+</CardGroup>

@@ -1,0 +1,649 @@
+---
+title: "配置"
+description: "了解如何为 Perplexity SDK 配置重试、超时和代理，并进行高级 HTTP 客户端自定义。"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+Perplexity SDK 提供了丰富的配置选项，可针对不同环境和使用场景自定义客户端行为。本指南介绍重试配置、超时设置以及自定义 HTTP 客户端的配置方法。
+
+<div id="retries-and-timeouts">
+  ## 重试与超时
+</div>
+
+<div id="basic-retry-configuration">
+  ### 基本重试配置
+</div>
+
+配置 SDK 处理失败请求的方式：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+  import httpx
+
+  client = Perplexity(
+      max_retries=3,  # 默认值为 2
+      timeout=httpx.Timeout(30.0, read=10.0, write=5.0, connect=2.0)
+  )
+
+  # 单个请求级别的配置
+  search = client.with_options(max_retries=5).search.create(
+      query="example"
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity({
+      maxRetries: 3, // 默认值为 2
+      timeout: 30000, // 30 秒（单位为毫秒）
+  });
+
+  // 单个请求级别的配置
+  const search = await client.withOptions({ maxRetries: 5 }).search.create({
+      query: "example"
+  });
+  ```
+</CodeGroup>
+
+<div id="advanced-timeout-configuration">
+  ### 高级超时配置
+</div>
+
+为请求的不同阶段设置精细的超时控制：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity
+
+  # 详细的超时配置
+  timeout_config = httpx.Timeout(
+      connect=5.0,    # 建立连接的时间
+      read=30.0,      # 读取响应的时间
+      write=10.0,     # 发送请求的时间
+      pool=10.0       # 从连接池获取连接的时间
+  )
+
+  client = Perplexity(timeout=timeout_config)
+
+  # 适用于长时间运行的操作
+  long_timeout = httpx.Timeout(
+      connect=5.0,
+      read=120.0,  # 复杂查询预留 2 分钟
+      write=10.0,
+      pool=10.0
+  )
+
+  client_long = Perplexity(timeout=long_timeout)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // 基础超时（作用于整个请求）
+  const client = new Perplexity({
+      timeout: 30000  // 30 秒
+  });
+
+  // 适用于长时间运行的操作
+  const clientLong = new Perplexity({
+      timeout: 120000  // 复杂查询预留 2 分钟
+  });
+
+  // 针对单个请求覆盖超时设置
+  const result = await client.withOptions({ 
+      timeout: 60000  // 该请求单独设置为 1 分钟
+  }).responses.create({
+      preset: "low",
+      input: "Complex research query..."
+  });
+  ```
+</CodeGroup>
+
+<div id="custom-http-client">
+  ## 自定义 HTTP 客户端
+</div>
+
+<div id="proxy-configuration">
+  ### 代理配置
+</div>
+
+配置 SDK 以通过企业代理访问：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # HTTP 代理
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="http://proxy.company.com:8080"
+      )
+  )
+
+  # 带身份验证的 HTTPS 代理
+  client_auth = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="http://username:password@proxy.company.com:8080"
+      )
+  )
+
+  # SOCKS 代理
+  client_socks = Perplexity(
+      http_client=DefaultHttpxClient(
+          proxy="socks5://proxy.company.com:1080"
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import { HttpsProxyAgent } from 'https-proxy-agent';
+  import { SocksProxyAgent } from 'socks-proxy-agent';
+
+  // HTTP/HTTPS 代理
+  const client = new Perplexity({
+      httpAgent: new HttpsProxyAgent('http://proxy.company.com:8080')
+  } as any);
+
+  // 带身份验证的代理
+  const clientAuth = new Perplexity({
+      httpAgent: new HttpsProxyAgent('http://username:password@proxy.company.com:8080')
+  } as any);
+
+  // SOCKS 代理
+  const clientSocks = new Perplexity({
+      httpAgent: new SocksProxyAgent('socks5://proxy.company.com:1080')
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="custom-headers-and-user-agent">
+  ### 自定义请求头与 User Agent
+</div>
+
+为所有请求添加自定义请求头：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # 自定义请求头
+  headers = {
+      "User-Agent": "MyApp/1.0",
+      "X-Custom-Header": "custom-value"
+  }
+
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          headers=headers
+      )
+  )
+
+  # 高级 HTTP 客户端配置
+  transport = httpx.HTTPTransport(
+      local_address="0.0.0.0",  # 绑定到指定网络接口
+      verify=True,              # SSL 验证
+      cert=None,                # 客户端证书
+      http2=True               # 启用 HTTP/2
+  )
+
+  client_advanced = Perplexity(
+      http_client=DefaultHttpxClient(
+          transport=transport,
+          headers=headers
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // 自定义请求头
+  const client = new Perplexity({
+      defaultHeaders: {
+          "User-Agent": "MyApp/1.0",
+          "X-Custom-Header": "custom-value"
+      }
+  });
+
+  // 高级 fetch 配置
+  const clientAdvanced = new Perplexity({
+      fetch: (url, options) => {
+          return fetch(url, {
+              ...options,
+              headers: {
+                  ...options?.headers,
+                  "User-Agent": "MyApp/1.0",
+                  "X-Custom-Header": "custom-value"
+              }
+          });
+      }
+  });
+  ```
+</CodeGroup>
+
+<div id="ssltls-configuration">
+  ### SSL/TLS 配置
+</div>
+
+配置 SSL 验证与证书：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  import ssl
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # 禁用 SSL 验证（不建议在生产环境中使用）
+  client_no_ssl = Perplexity(
+      http_client=DefaultHttpxClient(
+          verify=False
+      )
+  )
+
+  # 自定义 SSL 上下文
+  ssl_context = ssl.create_default_context()
+  ssl_context.check_hostname = False
+  ssl_context.verify_mode = ssl.CERT_NONE
+
+  client_custom_ssl = Perplexity(
+      http_client=DefaultHttpxClient(
+          verify=ssl_context
+      )
+  )
+
+  # 客户端证书认证
+  client_cert = Perplexity(
+      http_client=DefaultHttpxClient(
+          cert=("client.crt", "client.key")
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // 带 SSL 选项的自定义 HTTPS agent
+  const httpsAgent = new https.Agent({
+      rejectUnauthorized: false, // 禁用 SSL 验证（不推荐）
+      keepAlive: true,
+      maxSockets: 50
+  });
+
+  const client = new Perplexity({
+      httpAgent: httpsAgent
+  } as any);
+
+  // 适用于使用自定义 CA 证书的 Node.js 环境
+  const httpsAgentCA = new https.Agent({
+      ca: ['/* 你的 CA 证书 PEM */'],
+      cert: '/* 客户端证书 PEM */',
+      key: '/* 客户端私钥 PEM */',
+  } as any);
+
+  const clientCert = new Perplexity({
+      httpAgent: httpsAgentCA
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="connection-pooling">
+  ## 连接池
+</div>
+
+通过连接池优化性能：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # 配置连接数限制
+  limits = httpx.Limits(
+      max_keepalive_connections=20,  # 长连接（keep-alive）数量
+      max_connections=100,           # 连接总数
+      keepalive_expiry=30.0         # 长连接超时时间
+  )
+
+  client = Perplexity(
+      http_client=DefaultHttpxClient(
+          limits=limits
+      )
+  )
+
+  # 适用于高吞吐量场景
+  high_throughput_limits = httpx.Limits(
+      max_keepalive_connections=100,
+      max_connections=500,
+      keepalive_expiry=60.0
+  )
+
+  client_high_throughput = Perplexity(
+      http_client=DefaultHttpxClient(
+          limits=high_throughput_limits
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // 配置 agent 连接池参数
+  const httpsAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 30000,  // 30 秒
+      maxSockets: 50,         // 每个主机的最大连接数
+      maxFreeSockets: 10,     // 每个主机的最大空闲连接数
+      timeout: 60000          // 套接字超时时间
+  });
+
+  const client = new Perplexity({
+      httpAgent: httpsAgent
+  } as any);
+
+  // 适用于高吞吐量场景
+  const highThroughputAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 60000,
+      maxSockets: 200,
+      maxFreeSockets: 50,
+      timeout: 120000
+  });
+
+  const clientHighThroughput = new Perplexity({
+      httpAgent: highThroughputAgent
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="environment-specific-configuration">
+  ## 针对特定环境的配置
+</div>
+
+<div id="development-configuration">
+  ### 开发环境配置
+</div>
+
+针对开发与调试优化的配置：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # 开发环境配置
+  dev_client = Perplexity(
+      max_retries=1,           # 开发环境下快速失败
+      timeout=httpx.Timeout(10.0),  # 较短的超时时间
+      http_client=DefaultHttpxClient(
+          # 启用详细日志
+          event_hooks={
+              'request': [lambda request: print(f"Request: {request.method} {request.url}")],
+              'response': [lambda response: print(f"Response: {response.status_code}")]
+          }
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  // 开发环境配置
+  const devClient = new Perplexity({
+      maxRetries: 1,     // 开发环境下快速失败
+      timeout: 10000,    // 10 秒超时
+      
+      // 带日志记录的自定义 fetch
+      fetch: (url, options) => {
+          console.log(`Request: ${options?.method || 'GET'} ${url}`);
+          return fetch(url, options).then(response => {
+              console.log(`Response: ${response.status}`);
+              return response;
+          });
+      }
+  });
+  ```
+</CodeGroup>
+
+<div id="production-configuration">
+  ### 生产环境配置
+</div>
+
+针对生产环境优化的配置：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  # 生产环境配置
+  prod_limits = httpx.Limits(
+      max_keepalive_connections=50,
+      max_connections=200,
+      keepalive_expiry=60.0
+  )
+
+  prod_timeout = httpx.Timeout(
+      connect=5.0,
+      read=60.0,
+      write=10.0,
+      pool=10.0
+  )
+
+  prod_client = Perplexity(
+      max_retries=3,
+      timeout=prod_timeout,
+      http_client=DefaultHttpxClient(
+          limits=prod_limits,
+          verify=True,  # 生产环境中务必验证 SSL
+          http2=True    # 启用 HTTP/2 以提升性能
+      )
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  // 生产环境配置
+  const prodAgent = new https.Agent({
+      keepAlive: true,
+      keepAliveMsecs: 60000,
+      maxSockets: 100,
+      maxFreeSockets: 20,
+      timeout: 60000
+  });
+
+  const prodClient = new Perplexity({
+      maxRetries: 3,
+      timeout: 60000,
+      httpAgent: prodAgent
+  } as any);
+  ```
+</CodeGroup>
+
+<div id="configuration-patterns">
+  ## 配置模式
+</div>
+
+<div id="environment-based-configuration">
+  ### 基于环境变量的配置
+</div>
+
+通过环境变量配置客户端：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  def create_client():
+      # 基础配置
+      timeout = httpx.Timeout(
+          connect=float(os.getenv('PERPLEXITY_CONNECT_TIMEOUT', '5.0')),
+          read=float(os.getenv('PERPLEXITY_READ_TIMEOUT', '30.0')),
+          write=float(os.getenv('PERPLEXITY_WRITE_TIMEOUT', '10.0'))
+      )
+      
+      max_retries = int(os.getenv('PERPLEXITY_MAX_RETRIES', '3'))
+      
+      # 可选的代理配置
+      proxy = os.getenv('PERPLEXITY_PROXY')
+      http_client_kwargs = {}
+      if proxy:
+          http_client_kwargs['proxy'] = proxy
+      
+      return Perplexity(
+          max_retries=max_retries,
+          timeout=timeout,
+          http_client=DefaultHttpxClient(**http_client_kwargs)
+      )
+
+  client = create_client()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import { HttpsProxyAgent } from 'https-proxy-agent';
+
+  function createClient(): Perplexity {
+      const maxRetries = parseInt(process.env.PERPLEXITY_MAX_RETRIES || '3');
+      const timeout = parseInt(process.env.PERPLEXITY_TIMEOUT || '30000');
+      
+      const config: any = {
+          maxRetries,
+          timeout
+      };
+      
+      // 可选的代理配置
+      if (process.env.PERPLEXITY_PROXY) {
+          config.httpAgent = new HttpsProxyAgent(process.env.PERPLEXITY_PROXY);
+      }
+      
+      return new Perplexity(config);
+  }
+
+  const client = createClient();
+  ```
+</CodeGroup>
+
+<div id="configuration-factory">
+  ### 配置工厂
+</div>
+
+创建可复用的配置模式：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import httpx
+  from perplexity import Perplexity, DefaultHttpxClient
+
+  class PerplexityClientFactory:
+      @staticmethod
+      def development():
+          return Perplexity(
+              max_retries=1,
+              timeout=httpx.Timeout(10.0)
+          )
+      
+      @staticmethod
+      def production():
+          return Perplexity(
+              max_retries=3,
+              timeout=httpx.Timeout(connect=5.0, read=60.0, write=10.0),
+              http_client=DefaultHttpxClient(
+                  limits=httpx.Limits(
+                      max_keepalive_connections=50,
+                      max_connections=200
+                  )
+              )
+          )
+      
+      @staticmethod
+      def high_throughput():
+          return Perplexity(
+              max_retries=2,
+              timeout=httpx.Timeout(connect=2.0, read=30.0, write=5.0),
+              http_client=DefaultHttpxClient(
+                  limits=httpx.Limits(
+                      max_keepalive_connections=100,
+                      max_connections=500
+                  )
+              )
+          )
+
+  # 用法
+  client = PerplexityClientFactory.production()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import https from 'https';
+
+  class PerplexityClientFactory {
+      static development(): Perplexity {
+          return new Perplexity({
+              maxRetries: 1,
+              timeout: 10000
+          });
+      }
+      
+      static production(): Perplexity {
+          const agent = new https.Agent({
+              keepAlive: true,
+              maxSockets: 100,
+              timeout: 60000
+          });
+          
+          return new Perplexity({
+              maxRetries: 3,
+              timeout: 60000,
+              httpAgent: agent
+          } as any);
+      }
+      
+      static highThroughput(): Perplexity {
+          const agent = new https.Agent({
+              keepAlive: true,
+              maxSockets: 500,
+              maxFreeSockets: 100,
+              timeout: 30000
+          });
+          
+          return new Perplexity({
+              maxRetries: 2,
+              timeout: 30000,
+              httpAgent: agent
+          } as any);
+      }
+  }
+
+  // 用法
+  const client = PerplexityClientFactory.production();
+  ```
+</CodeGroup>
+
+<div id="related-resources">
+  ## 相关资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="错误处理" icon="alert-triangle" href="/zh/docs/sdk/error-handling">
+    处理超时和连接错误
+  </Card>
+
+  <Card title="性能" icon="bolt" href="/zh/docs/sdk/performance">
+    优化异步操作和连接池
+  </Card>
+</CardGroup>

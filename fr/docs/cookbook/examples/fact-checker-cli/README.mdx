@@ -1,0 +1,222 @@
+---
+title: "CLI de vérification des faits"
+description: "Un outil en ligne de commande qui repère les affirmations fausses ou trompeuses dans des articles ou des déclarations grâce à la Sonar API de Perplexity"
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="fact-checker-cli">
+  # CLI de vérification des faits
+</div>
+
+Un outil en ligne de commande qui repère les affirmations fausses ou trompeuses dans des articles ou des déclarations en s&#39;appuyant sur la Sonar API de Perplexity pour effectuer des recherches sur le web.
+
+<div id="features">
+  ## Fonctionnalités
+</div>
+
+* Analyser des affirmations ou des articles entiers pour en vérifier l&#39;exactitude factuelle
+* Identifier les affirmations fausses, trompeuses ou invérifiables
+* Fournir des explications et des corrections pour les informations inexactes
+* Restituer les résultats dans un format lisible par un humain ou en JSON structuré
+* Citer des sources fiables à l&#39;appui des évaluations de vérification des faits
+* Tirer parti des sorties structurées de Perplexity pour un parsing JSON fiable (pour les utilisateurs Tier 3+)
+
+<div id="installation">
+  ## Installation
+</div>
+
+<div id="1-install-required-dependencies">
+  ### 1. Installer les dépendances requises
+</div>
+
+```bash theme={null}
+# Installation à partir du fichier requirements (recommandé)
+pip install -r requirements.txt
+
+# Ou installation manuelle
+pip install requests pydantic newspaper3k
+```
+
+<div id="2-make-the-script-executable">
+  ### 2. Rendre le script exécutable
+</div>
+
+```bash theme={null}
+chmod +x fact_checker.py
+```
+
+<div id="api-key-setup">
+  ## Configuration de la clé API
+</div>
+
+L&#39;outil nécessite une clé API Perplexity pour fonctionner. Vous pouvez la fournir de l&#39;une des façons suivantes :
+
+<div id="1-as-a-command-line-argument">
+  ### 1. En tant qu&#39;argument de ligne de commande
+</div>
+
+```bash theme={null}
+./fact_checker.py --api-key YOUR_API_KEY
+```
+
+<div id="2-as-an-environment-variable">
+  ### 2. En tant que variable d&#39;environnement
+</div>
+
+```bash theme={null}
+export PPLX_API_KEY=YOUR_API_KEY
+```
+
+<div id="3-in-a-file">
+  ### 3. Dans un fichier
+</div>
+
+Créez un fichier nommé `pplx_api_key` ou `.pplx_api_key` dans le même répertoire que le script :
+
+```bash theme={null}
+echo "YOUR_API_KEY" > .pplx_api_key
+chmod 600 .pplx_api_key
+```
+
+**Remarque :** si vous utilisez la fonctionnalité de sorties structurées, vous devez disposer d&#39;un compte API Perplexity doté d&#39;un niveau d&#39;accès Tier 3 ou supérieur.
+
+<div id="quick-start">
+  ## Démarrage rapide
+</div>
+
+Exécutez la commande suivante juste après l&#39;installation :
+
+```bash theme={null}
+./fact_checker.py -t "The Earth is flat and NASA is hiding the truth."
+```
+
+L&#39;affirmation est alors analysée et vérifiée via la Sonar API de Perplexity, puis une vérification détaillée est renvoyée, accompagnée d&#39;évaluations, d&#39;explications et de sources.
+
+<div id="usage">
+  ## Utilisation
+</div>
+
+<div id="check-a-claim">
+  ### Vérifier une affirmation
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "The Earth is flat and NASA is hiding the truth."
+```
+
+<div id="check-an-article-from-a-file">
+  ### Vérifier un article à partir d&#39;un fichier
+</div>
+
+```bash theme={null}
+./fact_checker.py --file article.txt
+```
+
+<div id="check-an-article-from-a-url">
+  ### Vérifier un article à partir d&#39;une URL
+</div>
+
+```bash theme={null}
+./fact_checker.py --url https://www.example.com/news/article-to-check
+```
+
+<div id="specify-a-different-model">
+  ### Spécifier un autre modèle
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "Global temperatures have decreased over the past century." --model "sonar-pro"
+```
+
+<div id="output-results-as-json">
+  ### Produire les résultats en JSON
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "Mars has a breathable atmosphere." --json
+```
+
+<div id="use-a-custom-prompt-file">
+  ### Utiliser un fichier de prompt personnalisé
+</div>
+
+```bash theme={null}
+./fact_checker.py --text "The first human heart transplant was performed in the United States." --prompt-file custom_prompt.md
+```
+
+<div id="enable-structured-outputs-for-tier-3-users">
+  ### Activer les sorties structurées (pour les utilisateurs de Tier 3 et plus)
+</div>
+
+La sortie structurée est désactivée par défaut. Pour l&#39;activer, ajoutez l&#39;option `--structured-output` :
+
+```bash theme={null}
+./fact_checker.py --text "Vaccines cause autism." --structured-output
+```
+
+<div id="get-help">
+  ### Obtenir de l&#39;aide
+</div>
+
+```bash theme={null}
+./fact_checker.py --help
+```
+
+<div id="output-format">
+  ## Format de sortie
+</div>
+
+L&#39;outil produit une sortie comprenant :
+
+* **Évaluation globale** : MOSTLY&#95;TRUE, MIXED ou MOSTLY&#95;FALSE
+* **Résumé** : un bref aperçu des résultats de la vérification des faits
+* **Analyse des affirmations** : la liste des affirmations précises, assorties chacune d&#39;une évaluation :
+  * TRUE : exacte sur le plan factuel et étayée par des preuves
+  * FALSE : contredite par les preuves
+  * MISLEADING : contient une part de vérité, mais peut mener à des conclusions erronées
+  * UNVERIFIABLE : ne peut être vérifiée de façon concluante avec les informations disponibles
+* **Explications** : le raisonnement détaillé pour chaque affirmation
+* **Sources** : les citations et URL utilisées pour la vérification
+
+<div id="example">
+  ## Exemple
+</div>
+
+Exécutez la commande suivante :
+
+```bash theme={null}
+./fact_checker.py -t "The Great Wall of China is visible from the moon."
+```
+
+Exemple de sortie :
+
+```
+Vérification des faits en cours...
+
+🔴 ÉVALUATION GLOBALE : MOSTLY_FALSE
+
+📝 RÉSUMÉ :
+L'affirmation selon laquelle la Grande Muraille de Chine serait visible depuis la Lune est fausse. Il s'agit d'une idée reçue répandue, réfutée par les astronautes de la NASA et par les preuves scientifiques.
+
+🔍 ANALYSE DES AFFIRMATIONS :
+
+Affirmation 1 : ❌ FAUX  
+  Énoncé : « La Grande Muraille de Chine est visible depuis la Lune. »  
+  Explication : la Grande Muraille de Chine n'est pas visible à l'œil nu depuis la Lune. Les astronautes de la NASA l'ont confirmé, à commencer par Neil Armstrong, qui a déclaré ne pas avoir pu l'apercevoir depuis l'orbite lunaire. Elle est trop étroite et sa couleur se confond avec celle de son environnement lorsqu'on l'observe d'une telle distance.  
+  Sources :
+    - NASA.gov
+    - Scientific American
+    - National Geographic
+```
+
+<div id="limitations">
+  ## Limites
+</div>
+
+* L&#39;exactitude de la vérification des faits dépend de la qualité des informations accessibles via la Sonar API de Perplexity.
+* Comme tous les modèles de langage, l&#39;IA sous-jacente peut présenter des limites dans certains domaines spécialisés.
+* La fonctionnalité de sorties structurées nécessite un compte API Perplexity de Tier 3 ou supérieur.
+* Cet outil ne remplace pas les services professionnels de vérification des faits pour les contenus très sensibles ou complexes.

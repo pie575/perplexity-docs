@@ -1,0 +1,449 @@
+---
+title: "连接器"
+description: "在 Agent API 请求中使用 API Group 中的托管连接器。"
+---
+
+<Note>
+  **预览版：** 连接器功能目前处于预览阶段，支持的服务和行为可能会发生变化。
+</Note>
+
+<div id="overview">
+  ## 概述
+</div>
+
+连接器是针对各类服务的托管集成，由你所在的 API Group 在 [API Portal](https://console.perplexity.ai/group/connectors) 中完成连接。
+它们采用与 [MCP](/zh/docs/agent-api/tools/mcp) 相同的工具调用模型，但你无需在每次请求中提供服务器 URL 或访问令牌，
+只需通过连接器 ID 选择已连接的集成即可。
+部分连接器还会将其凭据提供给 [Sandbox](/zh/docs/agent-api/tools/sandbox) 命令使用，
+这样智能体就能在一次运行中同时完成服务访问、代码修改以及其他本地操作。
+
+<div id="available-connectors">
+  ## 可用连接器
+</div>
+
+当前提供的连接器包括：
+
+| 服务           | 连接器 ID                  |
+| ------------ | ----------------------- |
+| GitHub       | `connector_github`      |
+| Slack        | `connector_slack`       |
+| Google Drive | `connector_googledrive` |
+| Datadog      | `connector_datadog`     |
+
+<Note>
+  没有找到你需要的连接器？请发送邮件至 [api@perplexity.ai](mailto:api@perplexity.ai) 提交需求。在此之前，你可以将任意远程 [MCP 服务器](/zh/docs/agent-api/tools/mcp) 接入 Agent API 请求。
+</Note>
+
+<div id="add-a-connector">
+  ## 添加连接器
+</div>
+
+1. 打开 [API Portal 中的 Connectors](https://console.perplexity.ai/group/connectors)。
+2. 只有 API Group 管理员才能将受支持的服务连接到 API Group。
+3. 从服务卡片中复制连接器 ID。
+4. 在 Agent API 请求中添加 `connector` 条目。
+
+<Note>
+  连接器工具默认使用延迟发现。
+  请将 [`max_steps`](/zh/docs/agent-api/building-agents/define-the-run#customize-the-loop-max-steps) 设置得足够大，以便发现并使用这些工具。
+</Note>
+
+以下请求借助已连接的 Slack 工作区，总结近期与 AI 相关的消息。
+请将 `connector_slack` 替换为你从 API Portal 复制的连接器 ID。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Find and summarize recent messages about AI in my Slack workspace.",
+      max_steps=6,
+      tools=[
+          {
+              "type": "connector",
+              "id": "connector_slack",
+              "server_label": "slack",
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Find and summarize recent messages about AI in my Slack workspace.',
+    max_steps: 6,
+    tools: [
+      {
+        type: 'connector',
+        id: 'connector_slack',
+        server_label: 'slack',
+      },
+    ],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Find and summarize recent messages about AI in my Slack workspace.",
+      "max_steps": 6,
+      "tools": [
+        {
+          "type": "connector",
+          "id": "connector_slack",
+          "server_label": "slack"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+响应中的 `output` 数组会依次列出该连接器的工具、model 对该工具目录的搜索、每次工具调用以及最终消息。
+连接器默认采用延迟发现，因此 model 会先搜索工具目录 (`tool_search_output`) ，再调用具体工具。
+
+<Accordion title="响应输出（已截断）">
+  ```json theme={null}
+  [
+    {
+      "type": "mcp_list_tools",
+      "id": "mcpl_4826e99b-cae4-4c44-a613-d205823c2bc0",
+      "connector_id": "connector_slack",
+      "server_label": "slack",
+      "tools": [
+        {
+          "name": "slack_search_public",
+          "description": "Searches for messages, files in public Slack channels ...",
+          "input_schema": {
+            "type": "object",
+            "properties": { "query": { "type": "string" } },
+            "required": ["query"]
+          }
+        },
+        {
+          "name": "slack_send_message",
+          "description": "Sends a message to a Slack channel or user ...",
+          "input_schema": {
+            "type": "object",
+            "properties": { "channel_id": { "type": "string" }, "message": { "type": "string" } },
+            "required": ["channel_id", "message"]
+          }
+        }
+      ]
+    },
+    {
+      "type": "tool_search_output",
+      "id": "tso_call_opbSkWX14DwhfWlPdAE9wfH0",
+      "call_id": null,
+      "status": "completed",
+      "execution": "server",
+      "arguments": "{\"paths\":[\"slack\"],\"queries\":[\"search\",\"messages\"]}",
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "slack",
+          "tools": [
+            { "type": "function", "name": "slack_search_public", "description": "..." }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "mcp_call",
+      "id": "call_DUjlg6jMJoU92GMfrmD8SVcS",
+      "connector_id": "connector_slack",
+      "server_label": "slack",
+      "name": "slack_search_public",
+      "arguments": "{\"query\":\"AI\",\"content_types\":\"messages\",\"sort\":\"timestamp\", ...}",
+      "output": "{\"results\": ...}",
+      "error": null
+    },
+    {
+      "type": "message",
+      "id": "msg_...",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        { "type": "output_text", "text": "Here is a summary of recent messages about AI ...", "annotations": [] }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+<div id="deferred-tool-discovery">
+  ## 延迟工具发现
+</div>
+
+一个连接器可能暴露大量工具，若一开始就加载全部 schema 会浪费 token。
+因此连接器工具采用惰性发现：model 拿到连接器命名空间后，会在其中搜索，只加载需要的 schema 并发起调用——整个过程全自动完成。
+你只需把该连接器添加到 `tools` 中。
+
+`mcp_list_tools` 项仍会记录完整的工具目录；延迟发现控制的是哪些内容进入 model 的上下文，而不是响应中报告哪些内容。
+
+<div id="connector-parameters">
+  ## 连接器参数
+</div>
+
+| 字段                   | 类型     | 是否必填 | 说明                           |
+| -------------------- | ------ | ---- | ---------------------------- |
+| `type`               | string | 是    | 必须为 `"connector"`。           |
+| `id`                 | string | 是    | 从 API Portal 复制的连接器 ID。      |
+| `server_label`       | string | 是    | 该连接器在本次请求中使用的标签。             |
+| `server_description` | string | 否    | 面向 model 的连接器命名空间描述。         |
+| `allowed_tools`      | array  | 否    | 按精确名称配置的允许列表。省略或留空则公开所有可用工具。 |
+
+<div id="use-connectors-in-the-sandbox">
+  ## 在 sandbox 中使用连接器
+</div>
+
+部分连接器会将其凭据提供给 sandbox 命令使用，GitHub 就是典型的例子。
+
+<div id="github-connector">
+  ### GitHub 连接器
+</div>
+
+GitHub 连接器让 model 可以使用你已连接的 GitHub 账户下的 GitHub 工具。
+当任务需要 `git` 或 `gh` CLI 时，请搭配 [Sandbox](/zh/docs/agent-api/tools/sandbox) 一起使用。
+
+两个工具都启用后，智能体就能克隆私有仓库、审查和修改代码、提交更改、推送分支，以及创建或更新拉取请求。
+它会在 sandbox 中使用 `git` 和 `gh` CLI，并使用连接器提供的 GitHub 凭据。
+智能体只能访问你已连接的 GitHub 账户所允许的仓库，也只能执行该账户所允许的操作。
+
+<Info>
+  启用 sandbox 且未设置 `allowed_tools` 时，GitHub 通过 CLI 运行：响应中不含 `mcp_list_tools` 或 `mcp_call` 项，失败信息会以 `git` 或 `gh` 的输出形式呈现。若希望将其作为常规连接器使用并获得 `mcp_call` 项，请设置 `allowed_tools`，或不启用 sandbox。
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  stream = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.",
+      max_steps=12,
+      stream=True,
+      tools=[
+          {"type": "sandbox"},
+          {
+              "type": "connector",
+              "id": "connector_github",
+              "server_label": "github",
+          },
+      ],
+  )
+
+  for event in stream:
+      print(event)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const stream = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.',
+    max_steps: 12,
+    stream: true,
+    tools: [
+      { type: 'sandbox' },
+      {
+        type: 'connector',
+        id: 'connector_github',
+        server_label: 'github',
+      },
+    ],
+  });
+
+  for await (const event of stream) {
+    console.log(event);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -N --no-buffer --fail-with-body https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -H "Accept: text/event-stream" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.",
+      "max_steps": 12,
+      "stream": true,
+      "tools": [
+        { "type": "sandbox" },
+        {
+          "type": "connector",
+          "id": "connector_github",
+          "server_label": "github"
+        }
+      ]
+    }' \
+    | awk '/^data: / { sub(/^data: /, ""); sub(/\r$/, ""); if ($0 != "[DONE]") print }' \
+    | jq --unbuffered .
+  ```
+</CodeGroup>
+
+<div id="connectors-and-mcp">
+  ## 连接器与 MCP
+</div>
+
+连接器和 MCP 服务器都能让 Agent API 调用外部工具。
+如果该集成已在你的 API Group 中完成托管，请使用连接器。
+如果你需要连接自己的远程服务器，并在请求中提供其 URL 和身份验证信息，请使用 [MCP](/zh/docs/agent-api/tools/mcp)。
+
+|            | 连接器                                                                      | MCP 服务器                      |
+| ---------- | ------------------------------------------------------------------------------ | ---------------------------- |
+| 设置         | 在 API Portal 中连接一次即可。                                                          | 在每次请求中提供远程 `server_url`。     |
+| 身份验证       | 使用为 API Group 配置的连接。                                                           | 向远程服务器传递该请求专用的身份验证信息。        |
+| Sandbox 集成 | 部分托管连接器会将其凭据提供给 Sandbox 命令使用。例如，可将 GitHub 连接器与 `git`、`gh` 搭配使用。 | MCP 服务器的凭据无法在 Sandbox 命令中使用。 |
+| 适用场景       | 受支持的托管集成，例如 GitHub。                                                            | 你自己的或第三方的远程 MCP 服务器。         |
+
+<div id="error-handling">
+  ## 错误处理
+</div>
+
+连接器工具调用失败时，会以带有 `error` 字段的 `mcp_call` 项形式返回。
+这不会导致整个请求失败：运行会继续，错误会在带内传递给 model，因此 model 仍会作答，只是无法使用该连接器。
+
+需要重点处理的情况是 `AUTH_REQUIRED`：连接器的授权已过期，或被管理员撤销。
+你的请求仍能正常工作，只是在重新连接之前，model 无法使用该连接器；重新连接可以稍后再做。
+
+例如：
+
+```json theme={null}
+{
+  "type": "mcp_call",
+  "id": "call_h2rK8I109IvZC038Wcuudzhc",
+  "connector_id": "connector_slack",
+  "server_label": "slack",
+  "name": "slack_search_public",
+  "arguments": "{\"query\":\"AI\",\"content_types\":\"messages\", ...}",
+  "error": "AUTH_REQUIRED"
+}
+```
+
+由于请求仍会成功返回，这一点很容易被忽略。
+请在你的执行框架中检测该情况并将其发送到日志或告警系统，以便运维人员在 [API Portal](https://console.perplexity.ai/group/connectors) 中重新连接该连接器。
+
+你的执行框架可以根据 `error` 的值分支处理：
+
+| 值                          | 含义                    | 建议处理方式                               |
+| -------------------------- | --------------------- | ------------------------------------ |
+| `AUTH_REQUIRED`            | 连接器的授权已失效或被撤销。        | 请管理员在 API Portal 中重新连接。              |
+| `INVALID_ARGUMENTS`        | model 调用工具时传入了被拒绝的参数。 | 可恢复。该错误会返回给 model，model 可使用修正后的参数重试。 |
+| `POLICY_DENIED`            | 某项策略阻止了该工具调用。         | 请勿重试，该调用不被允许。                        |
+| `CONNECTOR_UNAVAILABLE`    | 无法访问连接器服务。            | 暂时性故障，请稍后重试。                         |
+| `CONNECTOR_INTERNAL_ERROR` | 连接器返回了无法使用的响应。        | 暂时性故障，请稍后重试。                         |
+| `TOOL_ERROR`               | 工具因其他原因失败。            | 按工具失败处理。                             |
+
+`error` 字段是自由格式字符串，因此请将其他任何值都视为工具失败。
+未连接的连接器不会列出任何工具 (`"tools": []`) ，也不会产生错误，因此还需留意工具列表为空的情况。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  CONNECTORS_URL = "https://console.perplexity.ai/group/connectors"
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Find and summarize recent messages about AI in my Slack workspace.",
+      max_steps=6,
+      tools=[
+          {
+              "type": "connector",
+              "id": "connector_slack",
+              "server_label": "slack",
+          }
+      ],
+  )
+
+  for item in response.output:
+      if getattr(item, "type", None) != "mcp_call" or not getattr(item, "error", None):
+          continue
+      if item.error == "AUTH_REQUIRED":
+          print(f"Ask an administrator to reconnect the {item.server_label} connector at {CONNECTORS_URL}")
+      else:
+          raise RuntimeError(f"Connector tool {item.name} failed: {item.error}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const CONNECTORS_URL = 'https://console.perplexity.ai/group/connectors';
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Find and summarize recent messages about AI in my Slack workspace.',
+    max_steps: 6,
+    tools: [
+      {
+        type: 'connector',
+        id: 'connector_slack',
+        server_label: 'slack',
+      },
+    ],
+  });
+
+  for (const item of response.output) {
+    if (item.type !== 'mcp_call' || !item.error) continue;
+    if (item.error === 'AUTH_REQUIRED') {
+      console.log(`Ask an administrator to reconnect the ${item.server_label} connector at ${CONNECTORS_URL}`);
+    } else {
+      throw new Error(`Connector tool ${item.name} failed: ${item.error}`);
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Find and summarize recent messages about AI in my Slack workspace.",
+      "max_steps": 6,
+      "tools": [
+        { "type": "connector", "id": "connector_slack", "server_label": "slack" }
+      ]
+    }' \
+    | jq '.output[] | select(.type == "mcp_call" and .error != null) | {connector_id, server_label, name, error}'
+  ```
+</CodeGroup>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="MCP" icon="plug" href="/zh/docs/agent-api/tools/mcp">
+    连接你自行管理的远程 MCP 服务器。
+  </Card>
+
+  <Card title="Sandbox" icon="box" href="/zh/docs/agent-api/tools/sandbox">
+    运行代码，并通过 `git` 和 `gh` 使用 GitHub 连接器。
+  </Card>
+</CardGroup>

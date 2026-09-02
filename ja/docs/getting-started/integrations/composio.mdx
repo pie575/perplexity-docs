@@ -1,0 +1,176 @@
+---
+title: "Composio で Perplexity を使う"
+description: "Composio を利用して、Perplexity の Agent、Search、Embeddings API を MCP ツールまたは直接の API アクションとして、あらゆる AI エージェントフレームワークに公開します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[Composio](https://composio.dev) は、AI エージェント向けの汎用ツールゲートウェイです。Composio の Perplexity ツールキットは、Perplexity の Agent、Search、Embeddings API を、あらゆるエージェントフレームワークから単一の MCP URL または API の直接統合を通じて呼び出せるツールとして公開します。
+
+<Info>
+  **Composio** は、1000 以上のアプリについて認証、認証情報の安全な保管、OAuth フロー、ツールルーティングを処理します。詳細は [composio.dev](https://composio.dev) をご覧ください。
+</Info>
+
+このツールキットが提供する Perplexity アクションは以下のとおりです。
+
+* **Execute Agent** — `POST /v1/agent` (Agent API のレスポンス)
+* **Perplexity Search (Raw Results)** — `POST /search`
+* **Create Embeddings** — `POST /v1/embeddings`
+* **Create Contextualized Embeddings** — `POST /v1/contextualizedembeddings`
+* **List Models** — `GET /v1/models`
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+* [Composio アカウント](https://composio.dev)と API キー
+* Perplexity API キー
+
+<Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  API ポータルから Perplexity API キーを生成します。
+</Card>
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+pip install composio
+```
+
+エージェントフレームワークと統合する場合は、Composio と併せてご利用のフレームワークの SDK もインストールしてください (Composio は Claude Agent SDK、OpenAI Agents SDK、LangChain、LlamaIndex、Mastra、Pydantic AI、AutoGen、CrewAI、Google ADK などに対応しています) 。
+
+<div id="quick-start-tool-router-mcp">
+  ## クイックスタート: Tool Router (MCP)
+</div>
+
+Tool Router は、エージェントから接続できる MCP サーバーとして Perplexity を公開します。MCP に対応したクライアント (Claude Code、Cursor、OpenCode など) であれば、どれでも利用できます。
+
+```python theme={null}
+from composio import Composio
+
+composio = Composio(api_key="your-composio-api-key")
+session = composio.create(user_id="your-user-id")
+url = session.mcp.url
+
+print(f"MCP URL: {url}")
+```
+
+このURLをエージェントのMCP設定に組み込みます。
+
+```python theme={null}
+import asyncio
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+
+options = ClaudeAgentOptions(
+    permission_mode="bypassPermissions",
+    mcp_servers={
+        "tool_router": {
+            "type": "http",
+            "url": url,
+            "headers": {"x-api-key": "your-composio-api-key"},
+        }
+    },
+    system_prompt="You are a helpful assistant with access to Perplexity tools.",
+    max_turns=10,
+)
+
+async def main():
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query("Summarize the latest AI research papers")
+        async for message in client.receive_response():
+            if hasattr(message, "content"):
+                for block in message.content:
+                    if hasattr(block, "text"):
+                        print(block.text)
+
+asyncio.run(main())
+```
+
+<div id="quick-start-direct-api-actions">
+  ## クイックスタート: API アクションの直接実行
+</div>
+
+MCP レイヤーを介さずに、Composio から Perplexity のアクションを直接実行することもできます。
+
+```python theme={null}
+from composio import Composio
+
+composio = Composio(api_key="your-composio-api-key")
+
+# ユーザーの Perplexity アカウントを一度だけ接続する
+composio.toolkits.authorize(
+    user_id="your-user-id",
+    toolkit="perplexityai",
+)
+
+# Agent API リクエストを実行する
+result = composio.tools.execute(
+    slug="PERPLEXITYAI_EXECUTE_AGENT",
+    user_id="your-user-id",
+    arguments={
+        "model": "openai/gpt-5.6-sol",
+        "tools": [{"type": "web_search"}],
+        "input": "What are the latest fusion-energy headlines?",
+    },
+)
+
+print(result["data"])
+```
+
+<div id="supported-agent-frameworks">
+  ## サポートされているエージェントフレームワーク
+</div>
+
+Composio の Perplexity ツールキットは、Composio がサポートするすべてのエージェントフレームワークで動作します。主なものは以下のとおりです。
+
+* ChatGPT、OpenAI Agents SDK、Codex
+* Claude Agents SDK、Claude Code
+* Cursor、VS Code、OpenCode
+* Google ADK、LangChain、AI SDK、Mastra AI
+* LlamaIndex、CrewAI、Pydantic AI、AutoGen
+
+各フレームワーク向けの専用セットアップガイドは、[Composio Perplexity toolkit](https://composio.dev/toolkits/perplexityai) のページに用意されています。
+
+<div id="authentication">
+  ## 認証
+</div>
+
+Composio は Perplexity API キー を安全に保管し、すべてのリクエストに自動的に挿入します。key を指定するのは、ツールキットの認可フローで一度だけです。Composio のダッシュボードから設定することも、`composio.toolkits.authorize(...)` を使ってプログラムから設定することもできます。token の更新、スコープ管理、リクエストの署名は、呼び出しごとに Composio が処理します。
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Composio Perplexity ツールキット" icon="toolbox" href="https://composio.dev/toolkits/perplexityai">
+    フレームワーク別ガイドを含むツールキットの完全なドキュメント。
+  </Card>
+
+  <Card title="Composio ドキュメント" icon="book" href="https://docs.composio.dev">
+    Composio プラットフォームのドキュメント。
+  </Card>
+
+  <Card title="Perplexity API リファレンス" icon="code" href="/ja/api-reference">
+    Perplexity API の完全なリファレンス。
+  </Card>
+
+  <Card title="Agent API のモデル" icon="sparkles" href="/ja/docs/agent-api/models">
+    利用可能なモデルと料金。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+統合でお困りですか？
+
+* [Composio のドキュメント](https://docs.composio.dev)を参照する
+* [FAQ](/ja/docs/resources/faq)を確認する

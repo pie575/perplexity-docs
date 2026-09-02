@@ -1,0 +1,328 @@
+---
+title: "Perplexity con Cursor"
+description: "Usa Perplexity dentro de Cursor: llama a la API desde el código de tu proyecto con el SDK oficial de TypeScript, usa la URL base compatible con OpenAI o configura el MCP alojado de Perplexity Docs para consultar la documentación sin salir del editor."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+[Cursor](https://cursor.com) es un editor de código centrado en la IA que puede llamar a cualquier API HTTP desde el código de tu proyecto y es compatible con el Model Context Protocol (MCP) para herramientas dentro del editor. Esta guía cubre tres vías de integración con Perplexity:
+
+<CardGroup cols={3}>
+  <Card title="SDK oficial de TypeScript" icon="code">
+    Llama a la Perplexity API directamente desde el código de tu proyecto mientras desarrollas en Cursor. **Recomendado.**
+  </Card>
+
+  <Card title="SDK compatible con OpenAI" icon="plug">
+    Reutiliza un cliente de OpenAI existente apuntando `baseURL` a `https://api.perplexity.ai/v1`.
+  </Card>
+
+  <Card title="MCP de Cursor" icon="book">
+    Configura el MCP alojado de Perplexity Docs en `.cursor/mcp.json` para que Cursor pueda consultar Perplexity Docs mientras programas.
+  </Card>
+</CardGroup>
+
+<Info>
+  **Vía recomendada:** usa el SDK oficial (o el SDK compatible con OpenAI) desde el código de tu aplicación y añade el MCP de Perplexity Docs a Cursor para consultar la documentación sin salir del editor. La opción de Cursor de «modelo personalizado compatible con OpenAI» apuntando a Perplexity es **experimental** y suele resultar menos fiable que la integración a nivel de código o mediante MCP: consulta [Sustitución de modelo personalizado (experimental)](#custom-model-override-experimental).
+</Info>
+
+<div id="prerequisites">
+  ## Requisitos previos
+</div>
+
+* Cursor instalado ([cursor.com/download](https://cursor.com/download))
+* Node.js 18+ para los ejemplos en TypeScript
+* Una API key de Perplexity
+
+<Card title="Obtener API key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Obtener clave" href="https://console.perplexity.ai/project/keys">
+  Genera una clave en el portal de la Perplexity API.
+</Card>
+
+<div id="api-key-handling">
+  ## Manejo de la API key
+</div>
+
+Nunca escribas tu API key directamente en los archivos fuente ni la subas a un repositorio. Guárdala en una variable de entorno y léela en tiempo de ejecución:
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title=".env (local del proyecto)">
+    Crea un archivo `.env` en la raíz de tu proyecto y añádelo a `.gitignore`:
+
+    ```bash theme={null}
+    # .env
+    PERPLEXITY_API_KEY=your_api_key_here
+    ```
+
+    Cárgalo al arrancar (por ejemplo, con [`dotenv`](https://www.npmjs.com/package/dotenv)):
+
+    ```typescript theme={null}
+    import "dotenv/config";
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  Trata `PERPLEXITY_API_KEY` como una contraseña. No la pegues en chats, prompts ni archivos compartidos. Si una clave queda expuesta, [rótala](https://console.perplexity.ai/project/keys) de inmediato.
+</Warning>
+
+***
+
+<div id="path-1-official-typescript-sdk-recommended">
+  ## Ruta 1: SDK oficial de TypeScript (recomendado)
+</div>
+
+Desarrolla tu aplicación en Cursor y llama a la Perplexity API desde tu código con el SDK oficial. Esta es la ruta más fiable: te ofrece seguridad de tipos completa, compatibilidad con presets y acceso a todas las funcionalidades de la API.
+
+<div id="install">
+  ### Instalación
+</div>
+
+```bash theme={null}
+npm install @perplexity-ai/perplexity_ai
+```
+
+<Tip>
+  `pnpm` y `yarn` funcionan igual: `pnpm add @perplexity-ai/perplexity_ai` / `yarn add @perplexity-ai/perplexity_ai`.
+</Tip>
+
+<div id="agent-api-with-low">
+  ### Agent API con `low`
+</div>
+
+La Agent API es la interfaz recomendada para la mayoría de las aplicaciones. Usa el preset `low` para obtener respuestas fundamentadas en la web con valores predeterminados razonables:
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity(); // lee PERPLEXITY_API_KEY del entorno
+
+const response = await client.responses.create({
+  preset: "low",
+  input: "Summarize the latest changes to the Perplexity Agent API.",
+});
+
+console.log(`Model used: ${response.model}`);
+console.log(response.output_text);
+```
+
+<Accordion title="Equivalente en Python">
+  ```python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()  # lee PERPLEXITY_API_KEY del entorno
+
+  response = client.responses.create(
+      preset="low",
+      input="Summarize the latest changes to the Perplexity Agent API.",
+  )
+
+  print(f"Model used: {response.model}")
+  print(response.output_text)
+  ```
+</Accordion>
+
+<div id="add-web-search">
+  ### Añadir búsqueda web
+</div>
+
+Habilita la herramienta `web_search` para controlar de forma explícita cuándo se utiliza la búsqueda:
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity();
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "What are the latest developments in AI inference hardware?",
+  tools: [{ type: "web_search" }],
+  instructions:
+    "You have access to a web_search tool. Use it for questions about current events, news, or recent developments.",
+});
+
+if (response.status === "completed") {
+  console.log(response.output_text);
+}
+```
+
+<Tip>
+  El chat con IA de Cursor puede generar y editar estos fragmentos por ti. Abre el chat con `Cmd+L` / `Ctrl+L`, pega tu objetivo y pídele a Cursor que &quot;use `@perplexity-ai/perplexity_ai` con el preset `low`&quot;.
+</Tip>
+
+Para conocer más presets, herramientas y opciones de configuración, consulta la [guía de inicio rápido de la Agent API](/es/docs/agent-api/quickstart) y la [descripción general del SDK](/es/docs/sdk/overview).
+
+***
+
+<div id="path-2-openai-compatible-sdk">
+  ## Ruta 2: SDK compatible con OpenAI
+</div>
+
+Si ya tienes un cliente de OpenAI en tu proyecto, puedes reutilizarlo apuntando `baseURL` a `https://api.perplexity.ai/v1`. Perplexity acepta `POST /v1/responses` como alias de la Agent API.
+
+<div id="install-2">
+  ### Instalación
+</div>
+
+```bash theme={null}
+npm install openai
+```
+
+<div id="use-it">
+  ### Úsalo
+</div>
+
+```typescript theme={null}
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  baseURL: "https://api.perplexity.ai/v1",
+});
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "Explain the key differences between REST and GraphQL APIs.",
+});
+
+console.log(response.output_text);
+```
+
+<Accordion title="Equivalente en Python">
+  ```python theme={null}
+  import os
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Explain the key differences between REST and GraphQL APIs.",
+  )
+
+  print(response.output_text)
+  ```
+</Accordion>
+
+<Info>
+  Usa `baseURL` (TypeScript) o `base_url` (Python): ambos deben incluir el sufijo `/v1`. Consulta la [guía de compatibilidad con OpenAI](/es/docs/agent-api/openai-compatibility) para ver la lista completa de parámetros admitidos y qué funciones de Perplexity están disponibles por esta vía.
+</Info>
+
+***
+
+<div id="path-3-cursor-mcp-for-docs-lookup">
+  ## Ruta 3: MCP de Cursor para consultar la documentación
+</div>
+
+Cursor es compatible con el Model Context Protocol (MCP). El **Perplexity Docs MCP** alojado en `https://docs.perplexity.ai/mcp` permite que Cursor busque y lea la documentación de Perplexity directamente desde el chat, algo útil para fundamentar las sugerencias de código en la documentación oficial sin tener que cambiar de contexto e ir al navegador.
+
+<div id="project-scoped-configuration">
+  ### Configuración con alcance de proyecto
+</div>
+
+Agrega un archivo `.cursor/mcp.json` en la raíz de tu proyecto. De esta forma, el servidor solo estará disponible para ese proyecto:
+
+```json theme={null}
+{
+  "mcpServers": {
+    "perplexity-docs": {
+      "url": "https://docs.perplexity.ai/mcp"
+    }
+  }
+}
+```
+
+<div id="global-configuration">
+  ### Configuración global
+</div>
+
+Para que el servidor esté disponible en todos los proyectos, añade la misma entrada en `~/.cursor/mcp.json`:
+
+```json theme={null}
+{
+  "mcpServers": {
+    "perplexity-docs": {
+      "url": "https://docs.perplexity.ai/mcp"
+    }
+  }
+}
+```
+
+<Steps>
+  <Step title="Añade la configuración">
+    Guarda el JSON anterior en `.cursor/mcp.json` (proyecto) o `~/.cursor/mcp.json` (global).
+  </Step>
+
+  <Step title="Recarga Cursor">
+    Abre **Cursor → Settings → MCP** y comprueba que `perplexity-docs` aparece con estado verde/listo. Reinicia Cursor si es necesario.
+  </Step>
+
+  <Step title="Úsalo desde el chat">
+    En el chat de Cursor, haz preguntas como *«Usando el MCP de la documentación de Perplexity, muéstrame cómo habilitar `low` en la Agent API».* Cursor llamará al servidor MCP y basará su respuesta en la documentación actual.
+  </Step>
+</Steps>
+
+<Tip>
+  El MCP de documentación es de solo lectura y no requiere una API key: solo sirve documentación de Perplexity. Para dar a Cursor acceso a las herramientas de **búsqueda y razonamiento** de Perplexity (y no solo a la documentación), instala el [servidor MCP de Perplexity](/es/docs/getting-started/integrations/mcp-server), que usa `@perplexity-ai/mcp-server` y requiere `PERPLEXITY_API_KEY`.
+</Tip>
+
+***
+
+<div id="custom-model-override-experimental">
+  ## Sustitución de modelo personalizado (experimental)
+</div>
+
+Cursor permite apuntar su selector de modelos integrado a una URL base compatible con OpenAI. Aunque es posible configurarla como `https://api.perplexity.ai/v1` y usar un nombre de modelo de Perplexity, esta vía tiene limitaciones:
+
+* Las prompts internas de Cursor no aprovechan por completo las capacidades de la Agent API (presets, llamadas estructuradas a herramientas, búsqueda de finanzas/personas).
+* Las funciones de autocompletado y edición de Cursor están ajustadas a comportamientos de modelos concretos y puede que no funcionen bien con modelos sustituidos.
+* El streaming, el uso de herramientas y la gestión de errores pueden comportarse de forma distinta a como lo harían en una integración a nivel de código.
+
+Por estos motivos, **recomendamos llamar a Perplexity desde el código de tu proyecto** (Vía 1 o Vía 2) y usar el **MCP de Perplexity Docs** (Vía 3) para consultar la documentación dentro del editor. Recurre a la sustitución de modelo personalizado solo si quieres específicamente que la interfaz de chat de Cursor se comunique con un modelo de Perplexity y asumes las contrapartidas.
+
+***
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Guía rápida de Agent API" icon="rocket" href="/es/docs/agent-api/quickstart">
+    Presets, herramientas y todas las capacidades de Agent API que utilizan los ejemplos anteriores.
+  </Card>
+
+  <Card title="Descripción general del SDK de Perplexity" icon="code-circle" href="/es/docs/sdk/overview">
+    Instala, configura y utiliza los SDK oficiales de Python y TypeScript.
+  </Card>
+
+  <Card title="Compatibilidad con OpenAI" icon="plug" href="/es/docs/agent-api/openai-compatibility">
+    Detalles sobre la compatibilidad directa, parámetros admitidos y consejos de migración.
+  </Card>
+
+  <Card title="Servidor MCP de Perplexity" icon="server" href="/es/docs/getting-started/integrations/mcp-server">
+    Añade las herramientas search, ask, research y reason de Perplexity a Cursor y a otros clientes MCP.
+  </Card>
+</CardGroup>
+
+<Info>
+  ¿Necesitas ayuda? Únete a la [comunidad de desarrolladores de Perplexity](https://community.perplexity.ai) para obtener soporte y participar en los debates.
+</Info>

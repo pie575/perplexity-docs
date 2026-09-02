@@ -1,0 +1,707 @@
+---
+title: "Analyse des citations en streaming"
+description: "Consommez les réponses en streaming de l'Agent API et extrayez, validez et affichez les citations en temps réel, au fur et à mesure de l'arrivée des fragments"
+---
+
+Ce guide explique comment consommer les réponses en streaming de l&#39;Agent API, extraire les citations au fur et à mesure de leur arrivée, valider les URL des sources et construire une sortie entièrement sourcée. Le streaming est indispensable pour obtenir des interfaces réactives et gérer des recherches de longue durée : vous pouvez afficher le texte et les sources progressivement au lieu d&#39;attendre la réponse complète.
+
+<Info>
+  Le preset `fast` est optimisé pour des réponses rapides et riches en citations. Le model insère dans le texte des références numérotées telles que `[1]`, `[2]`, tandis que les URL des sources correspondantes arrivent dans l&#39;élément de sortie `search_results`. Consultez la documentation [Presets de l&#39;Agent API](/fr/docs/agent-api/presets) pour connaître tous les presets disponibles.
+</Info>
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+Installez les SDK :
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai openai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai openai
+  ```
+</CodeGroup>
+
+Si vous n&#39;avez pas encore de clé API :
+
+<Card title="Obtenez votre clé API Perplexity" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Cliquez ici" href="https://perplexity.ai/account/api">
+  Rendez-vous dans l&#39;onglet **API Keys** du portail API et générez une nouvelle clé.
+</Card>
+
+Exportez ensuite votre clé API dans une variable d&#39;environnement :
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-streaming-citations-work">
+  ## Fonctionnement des citations en streaming
+</div>
+
+Lorsque vous diffusez une réponse de l&#39;Agent API avec un preset avec recherche activée, l&#39;API envoie une séquence d&#39;événements server-sent events (SSE). Le déroulement est le suivant :
+
+1. **Les résultats de recherche** arrivent via des événements `response.reasoning.search_results` — un événement par recherche exécutée par le model — contenant les URL, les titres et les extraits de chaque source.
+2. **Les fragments de contenu** arrivent progressivement, à mesure que le model génère du texte, via des événements `response.output_text.delta`.
+3. **Les références de citation** apparaissent dans le texte sous forme de marqueurs numérotés tels que `[1]` ou `[2]`, qui renvoient au champ `id` du résultat de recherche.
+
+Votre client accumule le texte, collecte les résultats de recherche, puis associe les références numérotées aux URL des sources à l&#39;aide du champ `id`.
+
+<Warning>
+  **Une réponse peut contenir plusieurs lots de résultats de recherche.** Les presets à une seule étape comme `fast` n&#39;effectuent généralement qu&#39;une recherche, tandis que les presets multi-étapes (comme la recherche approfondie) en lancent de nombreuses — un événement `search_results` (en streaming) ou un élément de sortie (hors streaming) par recherche, tous partageant un même espace d&#39;`id` de citation. Collectez toujours les résultats de **chaque** événement ou élément. Si vous ne conservez que le premier lot, la plupart des références `[N]` du texte ne pourront pas être résolues et les citations sembleront inventées.
+</Warning>
+
+<div id="basic-streaming-with-citations">
+  ## Streaming de base avec citations
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  from openai import OpenAI
+
+  # Le SDK OpenAI prend en charge le streaming de l'Agent API via l'alias /v1/responses
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+  stream = client.responses.create(
+      input="What are the latest breakthroughs in quantum computing?",
+      stream=True,
+      extra_body={"preset": "fast"},
+  )
+
+  full_content = ""
+  search_results = []
+
+  for event in stream:
+      event_type = event.type
+
+      # Collecte des résultats de recherche (un événement par recherche — accumuler, ne pas écraser)
+      if event_type == "response.reasoning.search_results":
+          search_results.extend(event.results or [])
+
+      # Accumulation du contenu de chaque delta
+      if event_type == "response.output_text.delta":
+          full_content += event.delta
+          print(event.delta, end="", flush=True)
+
+  print("\n\n--- Citations ---")
+  for result in search_results:
+      print(f"[{result['id']}] {result['title']} — {result['url']}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import OpenAI from "openai";
+
+  // Le SDK OpenAI prend en charge le streaming de l'Agent API via l'alias /v1/responses
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/v1",
+  });
+
+  const stream = await client.responses.create({
+      input: "What are the latest breakthroughs in quantum computing?",
+      stream: true,
+      preset: "fast",
+  } as any);
+
+  let fullContent = "";
+  let searchResults: Array<{ id: number; title: string; url: string }> = [];
+
+  for await (const event of stream) {
+      // Collecte des résultats de recherche (un événement par recherche — accumuler, ne pas écraser)
+      if (event.type === "response.reasoning.search_results") {
+          searchResults.push(...((event as any).results ?? []));
+      }
+
+      // Accumulation du contenu de chaque delta
+      if (event.type === "response.output_text.delta") {
+          fullContent += event.delta;
+          process.stdout.write(event.delta);
+      }
+  }
+
+  console.log("\n\n--- Citations ---");
+  searchResults.forEach((result) => {
+      console.log(`[${result.id}] ${result.title} — ${result.url}`);
+  });
+  ```
+
+  ```bash curl theme={null}
+  curl -N "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "fast",
+      "input": "What are the latest breakthroughs in quantum computing?",
+      "stream": true
+    }'
+  ```
+</CodeGroup>
+
+<div id="parsing-citation-references-from-text">
+  ## Analyser les références de citation dans le texte
+</div>
+
+Le model insère des références numérotées comme `[1]` ou `[2]` dans le texte généré. Pour produire une sortie enrichie avec des liens cliquables, analysez ces références et associez-les aux URL sources à l&#39;aide des résultats de recherche.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import re
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def extract_citation_refs(text: str) -> list[int]:
+      """Extrait tous les numéros de référence de citation du texte, p. ex. [1], [2]."""
+      return sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", text)))
+
+
+  def build_cited_output(content: str, search_results: list) -> str:
+      """Remplace les références [N] par des liens markdown et ajoute une section de références."""
+      cited_content = content
+
+      # Construit une correspondance entre l'id et l'URL
+      url_map = {r.id: r.url for r in search_results}
+      title_map = {r.id: r.title for r in search_results}
+
+      # Remplace les références en ligne par des liens markdown
+      for ref_id, url in url_map.items():
+          cited_content = cited_content.replace(
+              f"[{ref_id}]",
+              f"[[{ref_id}]]({url})"
+          )
+
+      # Ajoute une section de références avec toutes les sources citées
+      used_refs = extract_citation_refs(content)
+      if used_refs:
+          cited_content += "\n\n---\n**References:**\n"
+          for ref in used_refs:
+              if ref in url_map:
+                  cited_content += f"- [{ref}] {title_map[ref]} — {url_map[ref]}\n"
+
+      return cited_content
+
+
+  # Requête sans streaming pour obtenir le contenu + les résultats de recherche
+  response = client.responses.create(
+      preset="fast",
+      input="What is CRISPR gene editing and how does it work?",
+  )
+
+  # Extrait les résultats de recherche de la sortie de la réponse.
+  # Les presets multi-étapes renvoient un élément search_results par étape de recherche,
+  # tous partageant un même espace d'id — collectez les résultats de chaque élément.
+  content = response.output_text
+  search_results = []
+  for item in response.output:
+      if item.type == "search_results":
+          search_results.extend(item.results or [])
+
+  # Construit la sortie finale avec les citations liées
+  output = build_cited_output(content, search_results)
+  print(output)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const client = new Perplexity();
+
+  function extractCitationRefs(text: string): number[] {
+      const refs = new Set<number>();
+      for (const match of text.matchAll(/\[(\d+)\]/g)) {
+          refs.add(parseInt(match[1]));
+      }
+      return [...refs].sort((a, b) => a - b);
+  }
+
+  function buildCitedOutput(
+      content: string,
+      searchResults: Array<{ id: number; url: string; title: string }>
+  ): string {
+      let cited = content;
+
+      // Construit les correspondances entre l'id et l'URL puis le titre
+      const urlMap = new Map(searchResults.map((r) => [r.id, r.url]));
+      const titleMap = new Map(searchResults.map((r) => [r.id, r.title]));
+
+      // Remplace les références en ligne par des liens markdown
+      for (const [id, url] of urlMap) {
+          cited = cited.replaceAll(`[${id}]`, `[[${id}]](${url})`);
+      }
+
+      // Ajoute une section de références
+      const usedRefs = extractCitationRefs(content);
+      if (usedRefs.length > 0) {
+          cited += "\n\n---\n**References:**\n";
+          for (const ref of usedRefs) {
+              if (urlMap.has(ref)) {
+                  cited += `- [${ref}] ${titleMap.get(ref)} — ${urlMap.get(ref)}\n`;
+              }
+          }
+      }
+
+      return cited;
+  }
+
+  // Requête sans streaming pour obtenir le contenu + les résultats de recherche
+  const response = await client.responses.create({
+      preset: "fast",
+      input: "What is CRISPR gene editing and how does it work?",
+  });
+
+  // Extrait les résultats de recherche de la sortie de la réponse.
+  // Les presets multi-étapes renvoient un élément search_results par étape de recherche,
+  // tous partageant un même espace d'id — collectez les résultats de chaque élément.
+  const content = response.output_text;
+  const searchResults: Array<{ id: number; url: string; title: string }> = [];
+  for (const item of response.output) {
+      if (item.type === "search_results") {
+          searchResults.push(...((item as any).results ?? []));
+      }
+  }
+
+  const output = buildCitedOutput(content, searchResults);
+  console.log(output);
+  ```
+</CodeGroup>
+
+<div id="validating-citation-urls">
+  ## Valider les URL de citation
+</div>
+
+Dans les systèmes en production, vérifiez que les URL de citation sont bien formées et accessibles avant de les présenter aux utilisateurs. Cela évite les liens morts et renforce la confiance dans les réponses produites.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import aiohttp
+  from urllib.parse import urlparse
+
+
+  def is_valid_url(url: str) -> bool:
+      """Vérifie qu'une URL a une structure valide."""
+      try:
+          result = urlparse(url)
+          return all([result.scheme in ("http", "https"), result.netloc])
+      except Exception:
+          return False
+
+
+  async def check_url_reachable(url: str, timeout: float = 5.0) -> dict:
+      """Envoie une requête HEAD à une URL pour vérifier si elle est accessible."""
+      if not is_valid_url(url):
+          return {"url": url, "valid": False, "reason": "malformed URL"}
+
+      try:
+          async with aiohttp.ClientSession() as session:
+              async with session.head(url, timeout=aiohttp.ClientTimeout(total=timeout), allow_redirects=True) as resp:
+                  return {
+                      "url": url,
+                      "valid": resp.status < 400,
+                      "status": resp.status,
+                  }
+      except asyncio.TimeoutError:
+          return {"url": url, "valid": False, "reason": "timeout"}
+      except Exception as e:
+          return {"url": url, "valid": False, "reason": str(e)}
+
+
+  async def validate_citations(search_results: list) -> list[dict]:
+      """Valide en parallèle toutes les URL de citation issues des résultats de recherche."""
+      tasks = [check_url_reachable(r.url) for r in search_results]
+      return await asyncio.gather(*tasks)
+
+
+  # Utilisation après réception d'une réponse :
+  # results = asyncio.run(validate_citations(search_results))
+  # for r in results:
+  #     status = "OK" if r["valid"] else f"FAILED ({r.get('reason', r.get('status'))})"
+  #     print(f"  {r['url']}: {status}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  function isValidUrl(url: string): boolean {
+      try {
+          const parsed = new URL(url);
+          return parsed.protocol === "http:" || parsed.protocol === "https:";
+      } catch {
+          return false;
+      }
+  }
+
+  async function checkUrlReachable(url: string, timeoutMs = 5000): Promise<{ url: string; valid: boolean; reason?: string; status?: number }> {
+      if (!isValidUrl(url)) {
+          return { url, valid: false, reason: "malformed URL" };
+      }
+
+      try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          const resp = await fetch(url, { method: "HEAD", signal: controller.signal, redirect: "follow" });
+          clearTimeout(timer);
+          return { url, valid: resp.status < 400, status: resp.status };
+      } catch (e: any) {
+          return { url, valid: false, reason: e.message };
+      }
+  }
+
+  async function validateCitations(searchResults: Array<{ url: string }>): Promise<Array<{ url: string; valid: boolean; reason?: string }>> {
+      return Promise.all(searchResults.map(r => checkUrlReachable(r.url)));
+  }
+
+  // Utilisation après réception d'une réponse :
+  // const results = await validateCitations(searchResults);
+  // results.forEach(r => {
+  //     const status = r.valid ? "OK" : `FAILED (${r.reason ?? r.status})`;
+  //     console.log(`  ${r.url}: ${status}`);
+  // });
+  ```
+</CodeGroup>
+
+<Warning>
+  **Ne demandez jamais au modèle de générer des URL de sources.** Utilisez toujours la sortie `search_results` renvoyée par l&#39;API. Les URL générées par le modèle peuvent relever de l&#39;hallucination, tandis que les résultats de recherche contiennent des URL vérifiées, issues de véritables recherches sur le web.
+</Warning>
+
+<div id="progressive-display-with-live-citation-count">
+  ## Affichage progressif avec compteur de citations en direct
+</div>
+
+Dans les interfaces de chat, il est utile d&#39;afficher un compteur de citations en direct au fil de l&#39;arrivée du texte, puis d&#39;afficher la liste complète des références une fois le flux terminé.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import re
+  import sys
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+
+  def stream_with_progress(query: str):
+      """Diffuse une réponse en streaming avec un compteur de citations en direct."""
+      stream = client.responses.create(
+          input=query,
+          stream=True,
+          extra_body={"preset": "fast"},
+      )
+
+      full_content = ""
+      search_results = []
+      seen_refs = set()
+
+      for event in stream:
+          if event.type == "response.reasoning.search_results":
+              search_results.extend(event.results or [])
+
+          if event.type == "response.output_text.delta":
+              full_content += event.delta
+              sys.stdout.write(event.delta)
+              sys.stdout.flush()
+
+              # Suit les nouvelles références de citation dans le texte accumulé
+              # (les deltas individuels peuvent scinder [N] entre plusieurs fragments)
+              current_refs = set(int(m) for m in re.findall(r"\[(\d+)\]", full_content))
+              if current_refs - seen_refs:
+                  seen_refs = current_refs
+                  sys.stdout.write(f" [📚 {len(seen_refs)} sources]")
+                  sys.stdout.flush()
+
+      # Récapitulatif final
+      print(f"\n\n{'='*60}")
+      print(f"Response complete: {len(search_results)} sources found, {len(seen_refs)} cited")
+      print(f"{'='*60}")
+
+      # Construit une table des URL à partir des résultats de recherche
+      url_map = {r["id"]: r for r in search_results}
+      for ref_id in sorted(seen_refs):
+          if ref_id in url_map:
+              r = url_map[ref_id]
+              print(f"  ✓ [{ref_id}] {r['title']} — {r['url']}")
+
+      return full_content, search_results
+
+
+  content, results = stream_with_progress(
+      "What are the environmental impacts of lithium mining?"
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import OpenAI from "openai";
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/v1",
+  });
+
+  async function streamWithProgress(query: string) {
+      const stream = await client.responses.create({
+          input: query,
+          stream: true,
+          preset: "fast",
+      } as any);
+
+      let fullContent = "";
+      let searchResults: Array<{ id: number; title: string; url: string }> = [];
+      const seenRefs = new Set<number>();
+
+      for await (const event of stream) {
+          if (event.type === "response.reasoning.search_results") {
+              searchResults.push(...((event as any).results ?? []));
+          }
+
+          if (event.type === "response.output_text.delta") {
+              fullContent += event.delta;
+              process.stdout.write(event.delta);
+
+              // Suit les nouvelles références de citation dans le texte accumulé
+              // (les deltas individuels peuvent scinder [N] entre plusieurs fragments)
+              const prevSize = seenRefs.size;
+              for (const match of fullContent.matchAll(/\[(\d+)\]/g)) {
+                  seenRefs.add(parseInt(match[1]));
+              }
+              if (seenRefs.size > prevSize) {
+                  process.stdout.write(` [📚 ${seenRefs.size} sources]`);
+              }
+          }
+      }
+
+      console.log(`\n\n${"=".repeat(60)}`);
+      console.log(`Response complete: ${searchResults.length} sources found, ${seenRefs.size} cited`);
+      console.log("=".repeat(60));
+
+      const urlMap = new Map(searchResults.map((r) => [r.id, r]));
+      for (const refId of [...seenRefs].sort((a, b) => a - b)) {
+          const r = urlMap.get(refId);
+          if (r) {
+              console.log(`  ✓ [${refId}] ${r.title} — ${r.url}`);
+          }
+      }
+
+      return { fullContent, searchResults };
+  }
+
+  await streamWithProgress("What are the environmental impacts of lithium mining?");
+  ```
+</CodeGroup>
+
+<div id="handling-search-results">
+  ## Traiter les résultats de recherche
+</div>
+
+L&#39;Agent API renvoie un ou plusieurs éléments de sortie `search_results` accompagnés de métadonnées riches (id, titre, extrait, URL, date) pour chaque source — un élément par recherche effectuée par le model. C&#39;est bien plus complet qu&#39;une simple liste d&#39;URL : servez-vous en pour construire des fiches de sources, des barres latérales ou des sections de références détaillées.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Requête sans streaming pour montrer la structure complète de la réponse
+  response = client.responses.create(
+      preset="fast",
+      input="What is the current state of fusion energy research?",
+  )
+
+  content = response.output_text
+
+  # Extraire les résultats de recherche de chaque élément search_results de la sortie
+  search_results = []
+  for item in response.output:
+      if item.type == "search_results":
+          search_results.extend(item.results or [])
+
+  print("--- Answer ---")
+  print(content)
+
+  print("\n--- Search Results (rich metadata) ---")
+  for result in search_results:
+      print(f"  [{result.id}] {result.title}")
+      print(f"      URL:  {result.url}")
+      print(f"      Date: {result.date}")
+      print(f"      Snippet: {result.snippet[:100]}...")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      preset: "fast",
+      input: "What is the current state of fusion energy research?",
+  });
+
+  const content = response.output_text;
+
+  // Extraire les résultats de recherche de chaque élément search_results de la sortie
+  const searchResults: any[] = [];
+  for (const item of response.output) {
+      if (item.type === "search_results") {
+          searchResults.push(...((item as any).results ?? []));
+      }
+  }
+
+  console.log("--- Answer ---");
+  console.log(content);
+
+  console.log("\n--- Search Results (rich metadata) ---");
+  for (const result of searchResults) {
+      console.log(`  [${result.id}] ${result.title}`);
+      console.log(`      URL:  ${result.url}`);
+      console.log(`      Date: ${result.date}`);
+      console.log(`      Snippet: ${result.snippet?.slice(0, 100)}...`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<Tip>
+  Chaque résultat de recherche contient `id`, `title`, `url`, `snippet` et `date`. L&#39;`id` correspond directement aux références `[N]` présentes dans le texte. Utilisez-le pour construire des fiches de sources détaillées dans votre interface.
+</Tip>
+
+<div id="complete-example-streaming-research-assistant">
+  ## Exemple complet : assistant de recherche en streaming
+</div>
+
+Un script autonome qui diffuse en streaming une réponse de l&#39;Agent API, en extrait les citations, valide les URL et produit une sortie markdown formatée.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import re
+  from urllib.parse import urlparse
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+
+  def is_valid_url(url: str) -> bool:
+      try:
+          result = urlparse(url)
+          return all([result.scheme in ("http", "https"), result.netloc])
+      except Exception:
+          return False
+
+
+  def stream_and_collect(query: str) -> tuple[str, list[dict]]:
+      """Diffuse en streaming une réponse de l'Agent API et renvoie le contenu complet ainsi que les résultats de recherche."""
+      stream = client.responses.create(
+          input=query,
+          stream=True,
+          extra_body={"preset": "fast"},
+      )
+
+      content = ""
+      search_results = []
+
+      for event in stream:
+          if event.type == "response.reasoning.search_results":
+              search_results.extend(event.results or [])
+
+          if event.type == "response.output_text.delta":
+              content += event.delta
+              print(event.delta, end="", flush=True)
+
+      print()  # saut de ligne après le streaming
+      return content, search_results
+
+
+  def format_markdown_report(query: str, content: str, search_results: list[dict]) -> str:
+      """Construit un rapport markdown avec des liens de citation en ligne."""
+      # Construire la table des URL à partir des résultats de recherche
+      url_map = {r["id"]: r["url"] for r in search_results}
+      title_map = {r["id"]: r["title"] for r in search_results}
+
+      # Remplacer [N] par des liens markdown
+      formatted = content
+      for ref_id, url in url_map.items():
+          if is_valid_url(url):
+              formatted = formatted.replace(f"[{ref_id}]", f"[\\[{ref_id}\\]]({url})")
+
+      # Construire le rapport
+      report = f"# {query}\n\n{formatted}\n\n"
+
+      # Ajouter les sources
+      used_refs = sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", content)))
+      if search_results:
+          report += "## Sources\n\n"
+          for result in search_results:
+              marker = "→" if result["id"] in used_refs else " "
+              report += f"{marker} **[{result['id']}]** {result['title']} — {result['url']}\n\n"
+
+      return report
+
+
+  if __name__ == "__main__":
+      query = "What are the most promising approaches to carbon capture technology?"
+
+      print(f"Researching: {query}\n")
+      print("-" * 60)
+
+      content, search_results = stream_and_collect(query)
+
+      print(f"\n{'=' * 60}")
+      print(f"Collected {len(search_results)} sources\n")
+
+      # Écarter les URL malformées
+      valid_results = [r for r in search_results if is_valid_url(r["url"])]
+      invalid_count = len(search_results) - len(valid_results)
+      if invalid_count:
+          print(f"Warning: {invalid_count} sources had malformed URLs and were excluded.\n")
+
+      report = format_markdown_report(query, content, valid_results)
+      print(report)
+  ```
+</CodeGroup>
+
+<div id="tips-and-best-practices">
+  ## Conseils et bonnes pratiques
+</div>
+
+1. **Utilisez un preset avec recherche activée** comme `fast` ou `low` pour obtenir des réponses riches en citations. Les presets emploient des formats de citation différents : `fast` utilise `[1]`, tandis que `low` utilise `[web:1]`.
+
+2. **Accumulez les résultats de recherche de chaque événement ou élément.** Une réponse contient un événement `search_results` (en streaming) ou un élément de sortie (hors streaming) par recherche effectuée par le model — les presets multi-étapes en lancent de nombreuses. Ajoutez chaque lot à une seule et même liste : écraser la valeur à chaque événement ou ne lire que le premier élément fait disparaître silencieusement la plupart des sources.
+
+3. **Utilisez le champ `id` pour associer les citations.** Chaque résultat de recherche possède un `id` numérique qui correspond à la référence `[N]` dans le texte.
+
+4. **Validez les URL avant de les afficher.** Utilisez des requêtes HEAD assorties d&#39;un délai d&#39;expiration pour écarter les sources inaccessibles.
+
+5. **Ne générez jamais vos propres URL.** Utilisez uniquement les `search_results` de la réponse de l&#39;API. Les URL générées par le model peuvent être hallucinées.
+
+6. **Gérez proprement les références manquantes.** Si une référence `[N]` du texte ne correspond à aucun `id` parmi les résultats de recherche collectés, affichez le numéro de référence sans lien plutôt que de provoquer une erreur.
+
+7. **Envisagez de limiter le débit lors de la validation des URL.** Si la réponse comporte de nombreuses sources, validez-les en limitant la concurrence afin de ne pas surcharger les serveurs cibles.
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Presets de l'Agent API" icon="bolt" href="/fr/docs/agent-api/presets">
+    Découvrez tous les presets et leurs formats de citation.
+  </Card>
+
+  <Card title="Démarrage rapide de l'Agent API" icon="rocket" href="/fr/docs/agent-api/quickstart">
+    Lancez-vous avec l&#39;Agent API pour accéder à plusieurs fournisseurs et outils.
+  </Card>
+
+  <Card title="Streaming avec l'Agent API" icon="stream" href="/fr/docs/agent-api/output-control">
+    Schémas de streaming et types d&#39;événements pour l&#39;Agent API.
+  </Card>
+</CardGroup>

@@ -1,0 +1,385 @@
+---
+title: "Perplexity API MCP 服务器"
+sidebarTitle: "Perplexity API MCP"
+description: "通过 Model Context Protocol (MCP) 将 AI 助手接入 Perplexity 的搜索与推理能力。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+Perplexity MCP Server 让 AI 助手能够在自身工作流中直接调用 Perplexity 强大的搜索与推理能力。借助 Model Context Protocol (MCP) ，你可以将实时网页搜索、对话式 AI 和高级推理集成到任何兼容 MCP 的客户端中。
+
+连接方式有两种：
+
+* **远程 MCP 服务器 (推荐) ：** 由 Perplexity 托管在 `https://api.perplexity.ai/mcp`。无需安装、无需更新，适用于任何支持远程 MCP 服务器的客户端。
+* **本地 MCP 服务器：** 在本机通过 stdio 运行开源服务器。如果你的客户端仅支持 stdio 服务器，或你需要锁定某个版本，请采用这种方式。
+
+两者提供的工具相同，行为也完全一致。
+
+<Info>
+  **Model Context Protocol (MCP)&#x20;**&#x20;是一项开放标准，用于将 AI 助手与外部数据源和工具连接起来。详见 [modelcontextprotocol.io](https://modelcontextprotocol.io/introduction)。
+</Info>
+
+<Note>
+  本页面介绍如何在 Claude Code、Cursor、VS Code、Claude Desktop 等客户端中将 Perplexity 添加为 MCP 工具。若要在应用代码中调用 Perplexity API，请先阅读[快速开始](/zh/docs/getting-started/quickstart)。若要通过 Agent API 选择 Claude 模型，请使用 [Agent API 模型](/zh/docs/agent-api/models)中的 Anthropic 模型 ID。
+</Note>
+
+<div id="remote-mcp-server">
+  ## 远程 MCP 服务器
+</div>
+
+连接到 `https://api.perplexity.ai/mcp` (Streamable HTTP) ，并将你的 API key 作为 bearer token 进行身份验证：
+
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+<Card title="生成 API key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="获取密钥" href="https://console.perplexity.ai/project/keys">
+  前往 API 门户，生成新的密钥。
+</Card>
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash theme={null}
+    claude mcp add --transport http perplexity https://api.perplexity.ai/mcp --header "Authorization: Bearer YOUR_API_KEY"
+    ```
+  </Tab>
+
+  <Tab title="Cursor">
+    [一键安装到 Cursor](https://cursor.com/install-mcp?name=perplexity\&config=eyJ1cmwiOiJodHRwczovL2FwaS5wZXJwbGV4aXR5LmFpL21jcCIsImhlYWRlcnMiOnsiQXV0aG9yaXphdGlvbiI6IkJlYXJlciBZT1VSX0FQSV9LRVkifX0%3D)，然后将 `YOUR_API_KEY` 替换为你的密钥。
+
+    或手动添加到 `~/.cursor/mcp.json`：
+
+    ```json theme={null}
+    {
+      "mcpServers": {
+        "perplexity": {
+          "url": "https://api.perplexity.ai/mcp",
+          "headers": {
+            "Authorization": "Bearer YOUR_API_KEY"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="VS Code">
+    [一键安装到 VS Code](https://vscode.dev/redirect/mcp/install?name=perplexity\&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapi.perplexity.ai%2Fmcp%22%2C%22headers%22%3A%7B%22Authorization%22%3A%22Bearer%20%24%7Binput%3Aperplexity-api-key%7D%22%7D%7D\&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22perplexity-api-key%22%2C%22description%22%3A%22Perplexity%20API%20Key%22%2C%22password%22%3Atrue%7D%5D)，VS Code 会提示你输入密钥。
+
+    也可以手动添加到 `.vscode/mcp.json`。`inputs` 块会让 VS Code 提示输入密钥 (以掩码显示) ，而不是把密钥存放在可能被提交到仓库的文件中：
+
+    ```json theme={null}
+    {
+      "inputs": [
+        {
+          "type": "promptString",
+          "id": "perplexity-api-key",
+          "description": "Perplexity API Key",
+          "password": true
+        }
+      ],
+      "servers": {
+        "perplexity": {
+          "type": "http",
+          "url": "https://api.perplexity.ai/mcp",
+          "headers": {
+            "Authorization": "Bearer ${input:perplexity-api-key}"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Anthropic API">
+    通过 MCP 连接器在 Messages API 请求中使用 Perplexity 的工具：
+
+    ```bash theme={null}
+    curl https://api.anthropic.com/v1/messages \
+      -H "content-type: application/json" \
+      -H "x-api-key: $ANTHROPIC_API_KEY" \
+      -H "anthropic-version: 2023-06-01" \
+      -H "anthropic-beta: mcp-client-2025-11-20" \
+      -d '{
+        "model": "claude-opus-5",
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": "What happened in AI this week?"}],
+        "mcp_servers": [{
+          "type": "url",
+          "url": "https://api.perplexity.ai/mcp",
+          "name": "perplexity",
+          "authorization_token": "YOUR_PERPLEXITY_API_KEY"
+        }],
+        "tools": [{
+          "type": "mcp_toolset",
+          "mcp_server_name": "perplexity"
+        }]
+      }'
+    ```
+
+    `authorization_token` 可直接接受你的 Perplexity API key (无需 OAuth) ，并以 bearer token 的形式发送至我们的服务器。Anthropic 照常对 Messages 请求计费；Perplexity 的工具调用则计费到你的 Perplexity API key 上。
+
+    若要限制 model 可调用的工具，请默认禁用全部工具，再逐一启用所需的工具：
+
+    ```json theme={null}
+    "tools": [{
+      "type": "mcp_toolset",
+      "mcp_server_name": "perplexity",
+      "default_config": {"enabled": false},
+      "configs": {
+        "perplexity_search": {"enabled": true}
+      }
+    }]
+    ```
+  </Tab>
+
+  <Tab title="其他客户端">
+    任何支持通过 Streamable HTTP 连接远程 MCP 服务器的客户端都可以按以下配置接入：
+
+    | 设置项  | 值                                    |
+    | ---- | ------------------------------------ |
+    | URL  | `https://api.perplexity.ai/mcp`      |
+    | 传输方式 | Streamable HTTP                      |
+    | 请求头  | `Authorization: Bearer YOUR_API_KEY` |
+
+    如果你的客户端仅支持 stdio 服务器，请使用下方的[本地 MCP 服务器](#local-mcp-server)。
+
+    <Note>
+      claude.ai (网页版) 上的自定义连接器目前需要 OAuth，无法发送静态的 API key 请求头。请改用 Claude Code、Claude Desktop 或 Anthropic API。
+    </Note>
+  </Tab>
+</Tabs>
+
+<Note>
+  工具调用会按标准 API 定价计费到你连接时使用的 API key 上。该 key 现有的速率限制同样适用。
+</Note>
+
+<div id="local-mcp-server">
+  ## 本地 MCP 服务器
+</div>
+
+在本地通过 stdio 运行同一个服务器。
+
+<div id="one-click-install">
+  ### 一键安装
+</div>
+
+<CardGroup cols={2}>
+  <Card
+    title="在 Cursor 中安装"
+    icon={
+<svg
+xmlns="http://www.w3.org/2000/svg"
+viewBox="0 0 466.73 532.09"
+>
+<path
+d="M457.43 125.94 244.42 2.96a22.127 22.127 0 0 0-22.12 0L9.3 125.94C3.55 129.26 0 135.4 0 142.05v247.99c0 6.65 3.55 12.79 9.3 16.11l213.01 122.98a22.127 22.127 0 0 0 22.12 0l213.01-122.98c5.75-3.32 9.3-9.46 9.3-16.11V142.05c0-6.65-3.55-12.79-9.3-16.11h-.01Zm-13.38 26.05L238.42 508.15c-1.39 2.4-5.06 1.42-5.06-1.36V273.58c0-4.66-2.49-8.97-6.53-11.31L24.87 145.67c-2.4-1.39-1.42-5.06 1.36-5.06h411.26c5.84 0 9.49 6.33 6.57 11.39h-.01Z"
+style={{ fill: "var(--color-foreground)" }}
+/>
+</svg>
+}
+    href="https://cursor.com/en/install-mcp?name=perplexity&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBwZXJwbGV4aXR5LWFpL21jcC1zZXJ2ZXIiXSwiZW52Ijp7IlBFUlBMRVhJVFlfQVBJX0tFWSI6IiJ9fQ=="
+  >
+    一键在 Cursor 中自动配置 Perplexity MCP 服务器。
+  </Card>
+
+  <Card
+    title="在 VS Code 中安装"
+    icon={
+<svg
+xmlns="http://www.w3.org/2000/svg"
+viewBox="0 0 100 100"
+>
+<path
+d="M70.912 99.572a6.193 6.193 0 0 0 4.96-.191l20.588-9.958a6.285 6.285 0 0 0 3.54-5.661V16.239a6.286 6.286 0 0 0-3.54-5.662L75.873.62a6.2 6.2 0 0 0-7.104 1.216L29.355 37.98l-17.168-13.1a4.146 4.146 0 0 0-5.318.238l-5.506 5.035a4.205 4.205 0 0 0-.004 6.194L16.247 50 1.36 63.654a4.205 4.205 0 0 0 .004 6.194l5.506 5.034a4.145 4.145 0 0 0 5.318.238l17.168-13.1L68.77 98.166a6.205 6.205 0 0 0 2.143 1.407Zm4.103-72.39L45.11 50 75.015 72.82V27.18Z"
+fillRule="evenodd"
+style={{ fill: "var(--color-foreground)" }}
+/>
+</svg>
+}
+    href="https://vscode.dev/redirect/mcp/install?name=perplexity&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22%22%7D%7D"
+  >
+    一键在 VS Code 中自动配置 Perplexity MCP 服务器。
+  </Card>
+</CardGroup>
+
+<div id="agent-plugin-install">
+  ### Agent Plugin 安装
+</div>
+
+本地服务器同时也打包为 [Agent Plugin](https://agent-plugins.org)，因此支持该标准的客户端可直接从 [`perplexityai/modelcontextprotocol`](https://github.com/perplexityai/modelcontextprotocol) 仓库安装。该插件格式不包含密钥，因此安装完成后，请在客户端的插件或 MCP 设置中配置 `PERPLEXITY_API_KEY` 环境变量。
+
+<div id="manual-setup">
+  ### 手动设置
+</div>
+
+<Steps>
+  <Step title="获取 API 密钥">
+    <Card title="生成 API 密钥" icon="key" arrow="True" horizontal="True" iconType="solid" cta="获取密钥" href="https://console.perplexity.ai/project/keys">
+      前往 API 门户，生成一个新的密钥。
+    </Card>
+  </Step>
+
+  <Step title="配置客户端">
+    将 MCP 服务器添加到客户端配置中：
+
+    <Tabs>
+      <Tab title="Claude Code">
+        **方式一：CLI 命令 (推荐)&#x20;**
+
+        最简单的上手方式：
+
+        ```bash theme={null}
+        claude mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
+        ```
+
+        **方式二：插件安装**
+
+        通过插件安装：
+
+        ```bash theme={null}
+        export PERPLEXITY_API_KEY="your_key_here"
+        claude
+        # 然后运行：/plugin marketplace add perplexityai/modelcontextprotocol
+        # 然后运行：/plugin install perplexity
+        ```
+
+        **方式三：手动配置**
+
+        添加到 `claude.json`：
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "type": "stdio",
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Cursor">
+        建议使用上面的一键安装方式在 Cursor 中配置 MCP 服务器。
+
+        如需手动配置，请将以下内容添加到 `mcp.json`：
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Codex">
+        ```bash theme={null}
+        codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
+        ```
+      </Tab>
+
+      <Tab title="其他客户端">
+        大多数兼容 MCP 的客户端 (包括 Claude Desktop、VS Code 和 Windsurf) 都使用 `mcpServers` 格式。配置文件位置如下：
+
+        | 客户端                | 配置文件                                    |
+        | ------------------ | --------------------------------------- |
+        | Cursor             | `~/.cursor/mcp.json`                    |
+        | VS Code            | `.vscode/mcp.json`                      |
+        | Claude Desktop     | `claude_desktop_config.json`            |
+        | Windsurf           | `~/.codeium/windsurf/mcp_config.json`   |
+        | Google Antigravity | `~/.gemini/antigravity/mcp_config.json` |
+
+        **标准 `mcpServers` 格式：**
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+
+        **VS Code 使用的格式略有不同：**
+
+        ```json theme={null}
+        {
+          "servers": {
+            "perplexity": {
+              "type": "stdio",
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+
+        如果这些格式在你的客户端中不适用，请查阅其文档，确认正确的包装格式。
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="开始使用">
+    重启 MCP 客户端，即可在 AI 工作流中使用 Perplexity 的工具。
+  </Step>
+</Steps>
+
+<div id="available-tools">
+  ## 可用工具
+</div>
+
+<CardGroup cols={2}>
+  <Card title="perplexity_search" icon="search">
+    使用 Perplexity Search API 直接进行网页搜索。返回按相关性排序的搜索结果，包含标题、URL、摘要片段和元数据。
+
+    **最适合：** 查找最新信息、新闻、事实或特定网页内容。
+  </Card>
+
+  <Card title="perplexity_ask" icon="message">
+    具备实时网页搜索能力的通用对话式 AI，底层基于 [Agent API](/zh/docs/agent-api/quickstart) 的 `fast` preset。
+
+    **最适合：** 快速提问、日常搜索，以及需要网页上下文的对话式查询。
+  </Card>
+
+  <Card title="perplexity_research" icon="book">
+    深入全面的研究能力，底层基于 Agent API 的 `high` preset，提供带引用来源的详尽分析。
+
+    **最适合：** 需要细致调研的复杂主题、综合报告和深度分析。
+  </Card>
+
+  <Card title="perplexity_reason" icon="brain">
+    高级推理与问题求解，底层基于 Agent API 的 `medium` preset。
+
+    **最适合：** 逻辑问题、复杂分析、决策判断，以及需要逐步推理的任务。
+  </Card>
+</CardGroup>
+
+<Info>
+  如需详细的安装说明、故障排查和代理配置，请访问我们的 [GitHub 仓库](https://github.com/perplexityai/modelcontextprotocol)。
+</Info>

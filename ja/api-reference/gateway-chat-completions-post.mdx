@@ -1,0 +1,40 @@
+---
+title: "チャット補完の作成"
+description: "OpenAI Chat Completions スキーマを使用して、任意の Router モデルに会話を送信します。`stream:
+  true` を設定するとサーバー送信イベントを受信できます。`stream_options: {\"include_usage\": true}`
+  を追加すると、最終チャンクでトークン使用量を取得できます。"
+openapi: "/ja/openapi/openapi-gateway-chat.json POST /router/v1/chat/completions"
+---
+
+<Info>
+  Router API は OpenAI Chat Completions スキーマを受け付けますが、対応するパラメータは定義されたサブセットに限られます。サポートされていないパラメータを含むリクエストは、該当するパラメータ名を示す 400 エラーで失敗します。
+</Info>
+
+<Accordion title="パラメータのサポート状況">
+  **有効なもの:** `model`、`messages`、`stream`、`stream_options.include_usage`、`max_completion_tokens`、`max_tokens`、`temperature`、`top_p`、`stop`、`reasoning_effort`、`service_tier` (`auto`、`default`、`flex`、`priority`) 、`response_format` (`text`、`json_schema`、`json_object`) 、`tools`、`tool_choice` (`allowed_tools` を含む) 、`parallel_tool_calls`、`prompt_cache_key`、`prompt_cache_options`、`prompt_cache_retention`、およびメッセージパートの `prompt_cache_breakpoint` フィールド。
+
+  **受け付けるがモデルには転送されないもの:** `user`、`safety_identifier`、`metadata`。
+
+  **既定値の場合のみ受け付けるもの:** `n` (`1`) 、`logprobs` (`false`) 、`store` (`false`) 、`presence_penalty` (`0`) 、`frequency_penalty` (`0`) 。
+
+  **400 で拒否されるもの:** `seed`、`logit_bias`、`top_logprobs`、`functions` (`tools` を使用してください) 、`function_call` (`tool_choice` を使用してください) 、`modalities`、`audio`、`prediction`、`web_search_options`、`moderation`、`verbosity`、`true` に設定された `stream_options.include_obfuscation`、および認識できないトップレベルフィールドすべて。
+
+  **注意:** `reasoning_effort` を省略した場合は、そのモデルにおけるプロバイダーの既定値が適用されます。既定値はプロバイダーやモデルによって異なります。`response_format.json_schema` は常に strict モードで動作します。アシスタントメッセージおよびストリーミングされるデルタには `reasoning_content` が含まれる場合があります。これをアシスタントメッセージとして送り返すことで、リクエストをまたいで推論のコンテキストを保持できます。Function ツールには description が必須です。
+</Accordion>
+
+<Accordion title="エラー">
+  エラーは OpenAI のエンベロープ形式を使用します:
+
+  ```json
+  {
+    "error": {
+      "code": null,
+      "message": "Invalid model 'example/does-not-exist'. Permitted models can be found in the documentation at https://docs.perplexity.ai/docs/getting-started/models.",
+      "param": null,
+      "type": "invalid_request_error"
+    }
+  }
+  ```
+
+  `type` は、4xx エラーでは `invalid_request_error`、429 では `rate_limit_error` (レート制限またはモデルの過負荷 — `Retry-After` の間隔を空けて再試行してください) 、5xx では `server_error` になります。出力の生成前に失敗したリクエストは課金されません。
+</Accordion>

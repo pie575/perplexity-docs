@@ -1,0 +1,208 @@
+---
+title: "在 Vercel AI SDK 中使用 Perplexity"
+description: "通过 @ai-sdk/open-responses provider，在 Vercel AI SDK（Next.js）应用中调用 Perplexity 的 Agent API。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概述
+</div>
+
+[Vercel AI SDK](https://ai-sdk.dev) 是一个用于构建 AI 应用 (Next.js 和 React) 的 TypeScript 工具包，提供流式处理原语以及 `useChat` 等 UI 钩子。
+
+借助 [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses) provider 并将其指向 Perplexity 的 `/v1/responses` 端点，即可接入 [Agent API](/zh/docs/agent-api/quickstart)，得到一个原生的 AI SDK 模型，可直接传入 `generateText`、`streamText` 和 `useChat`。
+
+<Info>
+  请在服务端创建该 provider (Next.js Route Handler、Server Action 或 API 路由) ，确保 `PERPLEXITY_API_KEY` 永远不会暴露给浏览器。
+</Info>
+
+<div id="installation">
+  ## 安装
+</div>
+
+<CodeGroup>
+  ```bash pnpm theme={null}
+  pnpm add ai @ai-sdk/open-responses
+  ```
+
+  ```bash npm theme={null}
+  npm install ai @ai-sdk/open-responses
+  ```
+</CodeGroup>
+
+<div id="api-key-setup">
+  ## API key 设置
+</div>
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="获取 API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 API 门户中生成你的 Perplexity API key。
+</Card>
+
+<div id="quickstart">
+  ## 快速开始
+</div>
+
+使用 `createOpenResponses` 创建 provider，将其指向 `/v1/responses`，然后调用 `generateText`。
+
+```typescript theme={null}
+import { createOpenResponses } from "@ai-sdk/open-responses";
+import { generateText } from "ai";
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const { text } = await generateText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "Explain the difference between supervised and unsupervised learning.",
+});
+
+console.log(text);
+```
+
+<div id="web-grounded-answers">
+  ## 基于网络搜索的回答
+</div>
+
+添加 [`web_search`](/zh/docs/agent-api/tools/web-search) 工具，让回答基于 Perplexity 网络搜索的实时结果——与支撑 Perplexity 自家答案引擎的搜索完全一致。
+该 provider 发送的请求体是固定的，不会将 Agent API 的内置工具作为一等选项暴露出来，因此需要在 provider 的 `fetch` 钩子中将 `web_search` 添加到请求体中来启用它。
+
+```typescript theme={null}
+import { createOpenResponses } from "@ai-sdk/open-responses";
+import { generateText } from "ai";
+
+// 该 provider 不会在结果中暴露来源，因此在 hook 中捕获它们。
+let sources = [];
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  fetch: async (url, options) => {
+    const body = JSON.parse(options.body as string);
+    // 将内置的 web_search 工具加入请求体，以启用该工具。
+    body.tools = [{ type: "web_search" }];
+    const response = await fetch(url, { ...options, body: JSON.stringify(body) });
+
+    // 来源会作为响应 `output` 数组中一个独立的 `search_results` 项返回。
+    //（流式场景下跳过，此时响应体是事件流而非 JSON。）
+    if (!body.stream) {
+      const raw = await response.clone().json();
+      sources = raw.output
+        .filter((item) => item.type === "search_results")
+        .flatMap((item) => item.results); // 每项形如：{ title, url, snippet, date, ... }
+    }
+
+    return response;
+  },
+});
+
+const { text } = await generateText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "What are the latest breakthroughs in fusion energy this year?",
+});
+
+console.log(text);
+
+for (const source of sources) {
+  console.log(source.title, source.url);
+}
+```
+
+答案由服务端完成联网溯源，但 `@ai-sdk/open-responses` 不会在结果中暴露来源——`result.sources` 为空。
+因此，`fetch` 钩子会从响应 `output` 数组中的原始 `search_results` 项里读取这些来源。
+完整的响应结构请参见[从响应中读取来源](/zh/docs/agent-api/prompt-guide)。
+
+<div id="presets">
+  ## Presets
+</div>
+
+[Presets](/zh/docs/agent-api/presets) 会针对特定使用场景，把模型、工具和调优过的系统提示词打包在一起，省去你逐项手动配置的麻烦。
+在同一个 `fetch` 钩子中，于请求体上设置 `preset` 即可——preset 本身已包含 `web_search`，无需再单独添加工具。
+
+```typescript theme={null}
+// 在 fetch 钩子中设置 preset，而不是添加工具：
+body.preset = "fast"; // fast | low | medium | high | xhigh
+```
+
+<Tip>
+  preset 覆盖从 `fast` (单一事实查询) 到 `xhigh` (开放式智能体任务，可在 sandbox 中执行代码) 的不同能力档位。
+  请参阅 [preset 指南](/zh/docs/agent-api/presets) 选择合适的配置。
+</Tip>
+
+<div id="streaming">
+  ## 流式输出
+</div>
+
+使用 `streamText` 实现逐 token 输出。
+在 Next.js 的 Route Handler 中返回 `result.toUIMessageStreamResponse()`，并在客户端使用 `useChat` 进行渲染。
+
+```typescript theme={null}
+import { streamText } from "ai";
+
+// 复用上面创建的 `perplexity` provider。
+const result = streamText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "What are the latest breakthroughs in fusion energy this year?",
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+<div id="supported-models">
+  ## 支持的模型
+</div>
+
+将任意 [Agent API 模型](/zh/docs/agent-api/models) 传递给对应的 provider——OpenAI、Anthropic、Google、xAI 等——它们全部通过你的同一个 Perplexity 密钥进行路由。
+
+```typescript theme={null}
+perplexity("openai/gpt-5.6-sol");
+perplexity("google/gemini-3-flash-preview");
+perplexity("xai/grok-4.5");
+```
+
+<Card title="Agent API 模型" icon="sparkles" href="/zh/docs/agent-api/models">
+  浏览所有可用模型及其定价。
+</Card>
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Open Responses provider" icon="plug" href="https://ai-sdk.dev/providers/ai-sdk-providers/open-responses">
+    配置本页所用的 AI SDK provider。
+  </Card>
+
+  <Card title="Agent API 快速开始" icon="bolt" href="/zh/docs/agent-api/quickstart">
+    使用 Agent API 的 模型、工具和 preset 进行构建。
+  </Card>
+
+  <Card title="网络搜索工具" icon="magnifying-glass" href="/zh/docs/agent-api/tools/web-search">
+    借助 Perplexity 的实时网络搜索为回答提供依据。
+  </Card>
+
+  <Card title="Vercel AI SDK 文档" icon="globe" href="https://ai-sdk.dev/docs">
+    核心生成 API 与 UI 钩子。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中需要帮助？
+
+* 查阅 [Vercel AI SDK 文档](https://ai-sdk.dev/docs)
+* 查看我们的[常见问题](/zh/docs/resources/faq)

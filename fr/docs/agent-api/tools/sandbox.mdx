@@ -1,0 +1,363 @@
+---
+title: "Sandbox"
+description: "Exécutez du code dans des conteneurs isolés directement depuis une requête Agent API."
+---
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+L&#39;outil `sandbox` permet au modèle d&#39;exécuter du code pendant une requête Agent API. L&#39;agent peut exécuter du code dans un conteneur isolé, en inspecter la sortie et utiliser le résultat dans sa réponse finale.
+
+Vous ne fournissez pas le code : vous activez l&#39;outil, et le modèle écrit et exécute lui-même le code à partir de votre prompt et de vos instructions, puis relit ses propres `stdout`/`stderr` et s&#39;en sert dans sa réponse. Le code exact exécuté par le modèle vous est renvoyé dans la réponse (voir [Forme de la réponse](#response-shape)), ce qui vous permet de vérifier ce qui a réellement été exécuté.
+
+Activez l&#39;outil en l&#39;ajoutant au tableau `tools`. Le modèle décide quand l&#39;appeler en fonction de votre prompt et de vos instructions.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory's stated fix version.",
+      tools=[{"type": "sandbox"}, {"type": "web_search"}],
+      instructions="Use the sandbox and web search to gather and verify the advisories before answering.",
+  )
+
+  print(get_output_text(response))
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: "For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory's stated fix version.",
+    tools: [{ type: 'sandbox' as const }, { type: 'web_search' as const }],
+    instructions: 'Use the sandbox and web search to gather and verify the advisories before answering.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory'\''s stated fix version.",
+      "tools": [
+        {
+          "type": "sandbox"
+        },
+        {
+          "type": "web_search"
+        }
+      ],
+      "instructions": "Use the sandbox and web search to gather and verify the advisories before answering."
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="use-cases">
+  ## Cas d&#39;usage
+</div>
+
+* Recherche web
+* Calculs numériques et analyses statistiques
+* Nettoyage, parsing et transformation de données
+* Exécution de code pour valider une logique ou reproduire une erreur
+* Génération d&#39;artefacts structurés : CSV, JSON ou rapports
+* Flux de travail multi-étapes nécessitant des fichiers intermédiaires ou un état calculé
+
+<div id="how-the-container-works">
+  ## Fonctionnement du conteneur
+</div>
+
+Le sandbox est un conteneur Linux isolé. Savoir ce qu&#39;il peut et ne peut pas faire vous aide à anticiper les cas où le modèle y aura recours et ce qu&#39;il renverra.
+
+| Propriété                           | Comportement                                                                                                                                                                                                                                                                                                                              |
+| ----------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Langages**                        | Le modèle exécute **Python** pour les calculs et **bash** pour les commandes shell. Chaque exécution indique son `language` dans la réponse.                                                                                                                                                                                               |
+| **Accès à Internet**                | Le conteneur dispose d&#39;un accès réseau : le code du modèle peut donc installer les paquets dont il a besoin à l&#39;exécution et joindre des points de terminaison externes.                                                                                                                                                           |
+| **État au sein d&#39;une réponse**  | Plusieurs exécutions au sein d&#39;une même réponse partagent le même conteneur : les fichiers écrits et les paquets installés à une étape antérieure restent disponibles pour les suivantes. C&#39;est ce qui rend possibles les flux de travail multi-étapes et les fichiers intermédiaires.                                            |
+| **Capture de la sortie**            | `stdout` et `stderr` sont capturés à chaque exécution. Les sorties très volumineuses sont tronquées (de l&#39;ordre de ~1 Mio par flux) : demandez donc au modèle d&#39;écrire les résultats volumineux dans un fichier et de le renvoyer (voir [Récupérer les fichiers générés](#retrieving-generated-files)) plutôt que de les afficher. |
+| **Limite de durée d&#39;exécution** | Chaque exécution est soumise à une limite de durée. Si elle est dépassée, le `status` de cette exécution passe à `timed_out` (voir [Gestion des erreurs](#error-handling)). Pour les tâches longues, utilisez le [mode arrière-plan](#running-in-the-background).                                                                         |
+
+<div id="calling-other-tools-from-inside-the-sandbox">
+  ### Appeler d&#39;autres outils depuis le sandbox
+</div>
+
+Le conteneur est livré avec le SDK Perplexity préinstallé : le code que le modèle exécute dans le sandbox peut donc appeler directement [Web Search](/fr/docs/agent-api/tools/web-search), [Fetch URL Content](/fr/docs/agent-api/tools/fetch-url-content) et [People Search](/fr/docs/agent-api/tools/people-search) — sans que vous ayez à ajouter ces outils à la requête — puis exploiter les résultats renvoyés. Chacun de ces appels est facturé au tarif standard par invocation (voir [Tarification](#pricing)).
+
+<div id="use-connectors-in-the-sandbox">
+  ## Utiliser les connecteurs dans le sandbox
+</div>
+
+Certains connecteurs mettent leurs identifiants à disposition des commandes exécutées dans le sandbox.
+
+<Note>
+  **Préversion :** les connecteurs sont en préversion. Les services pris en charge et leur comportement peuvent évoluer.
+</Note>
+
+<div id="github-connector">
+  ### Connecteur GitHub
+</div>
+
+Le [connecteur GitHub](/fr/docs/agent-api/tools/connectors#use-connectors-in-the-sandbox) permet au modèle d&#39;utiliser vos identifiants GitHub connectés dans les commandes du sandbox.
+Activez à la fois `sandbox` et le connecteur GitHub dans la requête.
+Le modèle peut alors utiliser `git` et `gh` pour cloner des dépôts privés, modifier du code, committer des changements et créer ou mettre à jour des pull requests.
+Il ne peut accéder qu&#39;aux dépôts et n&#39;effectuer que les actions autorisés par votre compte GitHub connecté.
+
+Pour la structure de la requête et un exemple GitHub, consultez [Connecteurs](/fr/docs/agent-api/tools/connectors).
+
+<div id="running-in-the-background">
+  ## Exécution en arrière-plan
+</div>
+
+Pour les appels sandbox de longue durée, envoyez la requête avec `background: true`, puis interrogez la réponse par son ID jusqu&#39;à ce qu&#39;elle soit terminée.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Create a CSV with the first 10 Fibonacci numbers and their squares.",
+      tools=[{"type": "sandbox"}],
+      background=True,
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(get_output_text(response))
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Create a CSV with the first 10 Fibonacci numbers and their squares.',
+    tools: [{ type: 'sandbox' as const }],
+    background: true,
+  });
+
+  while (response.status === 'queued' || response.status === 'in_progress') {
+    await new Promise((r) => setTimeout(r, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  # 1. Envoyer avec background: true
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Create a CSV with the first 10 Fibonacci numbers and their squares.",
+      "tools": [{ "type": "sandbox" }],
+      "background": true
+    }'
+
+  # 2. Interroger la réponse par son ID jusqu'à ce que le statut soit completed, failed, cancelled ou incomplete
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="error-handling">
+  ## Gestion des erreurs
+</div>
+
+Les erreurs du sandbox sont renvoyées dans la réponse standard de l&#39;Agent API.
+
+| Cas                        | Ce que vous observez                                                                                                                                                                                                                                     |
+| -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Délai dépassé**          | Le `status` de l&#39;entrée concernée dans `results[]` (et de l&#39;élément `sandbox_results` englobant) vaut `timed_out`. Si la requête ne peut pas aboutir, le statut de la réponse de premier niveau est `failed`, accompagné d&#39;un objet `error`. |
+| **Erreur d&#39;exécution** | L&#39;entrée correspondante dans `results[]` contient un `exit_code` non nul et une sortie d&#39;erreur dans `stderr`. La réponse de l&#39;Agent API peut malgré tout aboutir si le conteneur s&#39;est exécuté correctement.                            |
+| **Quota ou limite**        | La réponse échoue avec un objet `error` décrivant la limite atteinte. Les limites de débit de l&#39;Agent API restent applicables.                                                                                                                       |
+
+<div id="limits-and-quotas">
+  ## Limites et quotas
+</div>
+
+Le sandbox s&#39;exécute dans le cadre des requêtes de l&#39;Agent API et est soumis aux limites de débit de l&#39;Agent API. Consultez [Rate Limits &amp; Usage Tiers](/fr/docs/admin/rate-limits-usage-tiers#agent-api-rate-limits) pour connaître les limites de requêtes par palier.
+
+<div id="response-shape">
+  ## Forme de la réponse
+</div>
+
+Lorsque le modèle appelle l&#39;outil sandbox, la réponse de l&#39;Agent API inclut un élément `sandbox_results` dans son tableau `output`, aux côtés des éventuels éléments `message`. Une même réponse peut contenir plusieurs éléments `sandbox_results` si le modèle effectue plusieurs appels au sandbox.
+
+Chaque élément `sandbox_results` décrit une invocation du sandbox et imbrique la sortie de chaque exécution dans un tableau `results`.
+
+| Champ          | Type     | Description                                                                                   |
+| -------------- | -------- | --------------------------------------------------------------------------------------------- |
+| `type`         | `string` | Toujours `sandbox_results`.                                                                   |
+| `call_id`      | `string` | Identifiant de cet appel à l&#39;outil sandbox.                                               |
+| `container_id` | `string` | Identifiant du conteneur isolé ayant exécuté le code.                                         |
+| `language`     | `string` | Langage dans lequel le sandbox a exécuté le code (par exemple, `python`).                     |
+| `code`         | `string` | Le code exécuté dans le sandbox.                                                              |
+| `status`       | `string` | Statut global de l&#39;appel au sandbox. Une valeur parmi `completed`, `timed_out`, `failed`. |
+| `results`      | `array`  | Une entrée par exécution dans le conteneur. Voir les champs ci-dessous.                       |
+
+Chaque entrée de `results` comporte les champs suivants :
+
+| Champ         | Type      | Description                                                                           |
+| ------------- | --------- | ------------------------------------------------------------------------------------- |
+| `stdout`      | `string`  | Sortie standard capturée lors de l&#39;exécution.                                     |
+| `stderr`      | `string`  | Sortie d&#39;erreur standard capturée lors de l&#39;exécution.                        |
+| `exit_code`   | `integer` | Code de sortie du processus. Une valeur non nulle indique une erreur d&#39;exécution. |
+| `duration_ms` | `integer` | Durée réelle de l&#39;exécution, en millisecondes.                                    |
+| `status`      | `string`  | Statut de l&#39;exécution. Une valeur parmi `completed`, `timed_out`, `failed`.       |
+
+Exemple :
+
+```json theme={null}
+{
+  "type": "sandbox_results",
+  "call_id": "call_Y1Lo4H6cGFgNVsn4mwC0oSgc",
+  "code": "vals = [(i, i*i) for i in range(1, 11)]\nprint('\\n'.join(f'{a},{b}' for a, b in vals))",
+  "container_id": "i6dr97ven2qfm0sdtvfzc",
+  "language": "python",
+  "results": [
+    {
+      "duration_ms": 9011,
+      "exit_code": 0,
+      "status": "completed",
+      "stderr": "",
+      "stdout": "1,1\n2,4\n3,9\n4,16\n5,25\n6,36\n7,49\n8,64\n9,81\n10,100\n"
+    }
+  ],
+  "status": "completed"
+}
+```
+
+Pour le schéma complet des requêtes et des réponses, consultez la [référence de l&#39;Agent API](/fr/api-reference/agent-post).
+
+<div id="retrieving-generated-files">
+  ## Récupérer les fichiers générés
+</div>
+
+Lorsque du code exécuté dans le sandbox écrit un fichier et le transmet via l&#39;outil `share_file`, le tableau `output` de la réponse contient un élément `share_file`. Le contenu du fichier n&#39;est pas renvoyé directement dans la réponse — récupérez-le via les endpoints de fichiers de réponse, en utilisant l&#39;`id` de la réponse.
+
+Pour lister les fichiers produits par une réponse :
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  files = client.responses.files.list("resp_abc123")
+
+  for file in files.data:
+      print(file.id, file.filename, file.bytes)
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" | jq
+  ```
+</CodeGroup>
+
+```json theme={null}
+{
+  "data": [
+    {
+      "bytes": 8002,
+      "created_at": 1780923289,
+      "filename": "anthropic_news.csv",
+      "id": "9198548a-490b-4119-858f-fd3676b60319",
+      "object": "file"
+    }
+  ],
+  "object": "list"
+}
+```
+
+Chaque entrée comporte les champs suivants :
+
+| Champ        | Type      | Description                                                                                           |
+| ------------ | --------- | ----------------------------------------------------------------------------------------------------- |
+| `id`         | `string`  | Identifiant du fichier, utilisé pour en télécharger le contenu. Distinct de l&#39;`id` de la réponse. |
+| `filename`   | `string`  | Nom attribué au fichier par le sandbox.                                                               |
+| `bytes`      | `integer` | Taille du fichier en octets.                                                                          |
+| `created_at` | `integer` | Horodatage Unix de la création du fichier.                                                            |
+| `object`     | `string`  | Toujours `file`.                                                                                      |
+
+Téléchargez le contenu d&#39;un fichier à partir de son `id`. Le point de terminaison renvoie les octets bruts du fichier (et non du JSON), avec un `Content-Type` correspondant au fichier et un en-tête `Content-Disposition: attachment` indiquant le nom de fichier d&#39;origine.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  content = client.responses.files.content(
+      file_id="9198548a-490b-4119-858f-fd3676b60319",
+      response_id="resp_abc123",
+  )
+  content.write_to_file("anthropic_news.csv")
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files/$FILE_ID/content \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -o anthropic_news.csv
+  ```
+</CodeGroup>
+
+<div id="pricing">
+  ## Tarification
+</div>
+
+`sandbox` est facturé selon trois axes :
+
+| Axe                 | Prix               | Remarques                                                                                                                                                                                                                                                                                        |
+| ------------------- | ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Tokens**          | Selon le modèle     | L&#39;utilisation de tokens du modèle est facturée séparément selon la tarification des tokens de l&#39;Agent API. Voir [Models](/fr/docs/agent-api/models) pour les tarifs par modèle.                                                                                                               |
+| **Session sandbox** | 0,03 $ par session | Facturée une seule fois par conteneur sandbox. Une session correspond au cycle de vie d&#39;un conteneur isolé unique et couvre jusqu&#39;à 20 minutes d&#39;utilisation active à des fins de facturation — il s&#39;agit de la fenêtre de facturation, et non d&#39;une limite d&#39;exécution. |
+| **Outils utilisés** | Selon l&#39;outil  | Le code exécuté dans le sandbox peut appeler les outils [Web Search](/fr/docs/agent-api/tools/web-search), [Fetch URL Content](/fr/docs/agent-api/tools/fetch-url-content) et [People Search](/fr/docs/agent-api/tools/people-search). Chacun est facturé à son tarif standard par invocation.            |
+
+Les invocations du sandbox sont comptabilisées sous `usage.tool_calls_details.sandbox.invocation`.
+
+Voir [Tarification](/fr/docs/getting-started/pricing#tool-pricing) pour le tableau complet de tarification des outils de l&#39;Agent API.

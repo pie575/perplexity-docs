@@ -1,0 +1,330 @@
+---
+title: "Límite de tasa y niveles de uso"
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<div id="what-are-usage-tiers">
+  ## ¿Qué son los niveles de uso?
+</div>
+
+Los niveles de uso determinan tus **límites de tasa** y el acceso a **funciones beta** en función de tu gasto acumulado en la API. A medida que gastas más en créditos de API con el tiempo, avanzas automáticamente a niveles superiores con límites de tasa más altos. Los niveles superiores habilitan muchas más solicitudes por minuto y, una vez que alcanzas un nivel, lo conservas de forma permanente, sin descensos.
+
+<Info>
+  Puedes consultar tu nivel de uso actual en la [página de Precios](https://console.perplexity.ai/project/pricing?tab=usage-tiers) de la Consola de API.
+</Info>
+
+***
+
+<div id="tier-progression">
+  ## Progresión de niveles
+</div>
+
+| Nivel       | Créditos totales comprados | Estado                          |
+| ----------- | -------------------------- | ------------------------------- |
+| **Nivel 0** | $0                         | Cuentas nuevas, acceso limitado |
+| **Nivel 1** | $50+                       | Uso ligero, límites básicos     |
+| **Nivel 2** | $250+                      | Uso habitual                    |
+| **Nivel 3** | $500+                      | Uso intensivo                   |
+| **Nivel 4** | $1.000+                    | Uso en producción               |
+| **Nivel 5** | $5.000+                    | Uso empresarial                 |
+
+<Note>
+  Los niveles se determinan según las **compras acumuladas** durante toda la vida de tu cuenta, no según el saldo actual.
+</Note>
+
+***
+
+<div id="router-api-rate-limits">
+  ## Límites de tasa de la Router API
+</div>
+
+Las solicitudes a la Router API están sujetas a límites de tasa. Cuando una solicitud supera el límite de tasa, o cuando un model upstream está sobrecargado, la API devuelve un `429` con un encabezado `Retry-After`: reintenta después del intervalo indicado.
+
+<Note>
+  Las solicitudes rechazadas con un `429` no se facturan.
+</Note>
+
+***
+
+<div id="agent-api-rate-limits">
+  ## Límites de tasa de la Agent API
+</div>
+
+La Agent API aplica dos límites independientes a cada solicitud: el límite de QPS de toda la API y el límite de solicitudes por minuto (RPM) del modelo Agent. Cada solicitud debe respetar ambos límites. El valor de RPM no se deriva del valor de QPS.
+
+|    Nivel    | QPS (consultas por segundo) | Solicitudes por minuto |
+| :---------: | :-------------------------: | :--------------------: |
+| **Nivel 0** |            1 QPS            |         50/min         |
+| **Nivel 1** |            3 QPS            |         150/min        |
+| **Nivel 2** |            8 QPS            |         500/min        |
+| **Nivel 3** |            17 QPS           |        1.000/min       |
+| **Nivel 4** |            33 QPS           |        4.000/min       |
+| **Nivel 5** |            33 QPS           |        8.000/min       |
+
+***
+
+<div id="search-api-rate-limits">
+  ## Límites de tasa de la Search API
+</div>
+
+La Search API tiene límites de tasa independientes que se aplican a todos los niveles de uso:
+
+| Endpoint       | Límite de tasa                      | Capacidad de ráfaga     |
+| -------------- | ----------------------------------- | ----------------------- |
+| POST `/search` | 50 unidades de consulta por segundo | 50 unidades de consulta |
+
+**Comportamiento del limitador de tasa de búsqueda:**
+
+* **Solicitud de una sola consulta**: consume 1 unidad de consulta
+* **Solicitud de varias consultas**: consume 1 unidad de consulta por cada consulta del array
+* **Ráfaga**: puede consumir 50 unidades de consulta de forma instantánea
+* **Sostenido**: 50 unidades de consulta por segundo en promedio
+
+<Info>
+  La facturación y la limitación de tasa usan unidades distintas. Una solicitud exitosa que contenga cinco consultas cuenta como una sola solicitud facturable de la Search API, pero consume cinco unidades del límite de tasa. Los límites de tasa de búsqueda no dependen de tu nivel de uso y se aplican por igual a todas las cuentas mediante el mismo algoritmo de cubeta con fugas. Consulta los [precios de la Search API](/es/docs/getting-started/pricing#search-api-pricing) para conocer los detalles de facturación.
+</Info>
+
+***
+
+<div id="sonar-api-rate-limits">
+  ## Límites de tasa de la Sonar API
+</div>
+
+<SonarDeprecationNotice />
+
+La Sonar API aplica límites de tasa por niveles que aumentan según tu nivel de uso:
+
+<Tabs>
+  <Tab title="Nivel 0">
+    | Modelo                             | Solicitudes por minuto (RPM) |
+    | ---------------------------------- | ---------------------------- |
+    | `sonar-deep-research`              | 5                            |
+    | `sonar-reasoning-pro`              | 50                           |
+    | `sonar-pro`                        | 50                           |
+    | `sonar`                            | 50                           |
+    | POST `/v1/async/sonar`             | 5                            |
+    | GET `/v1/async/sonar`              | 3000                         |
+    | GET `/v1/async/sonar/{request_id}` | 6000                         |
+  </Tab>
+
+  <Tab title="Nivel 1">
+    | Modelo                             | Solicitudes por minuto (RPM) |
+    | ---------------------------------- | ---------------------------- |
+    | `sonar-deep-research`              | 10                           |
+    | `sonar-reasoning-pro`              | 150                          |
+    | `sonar-pro`                        | 150                          |
+    | `sonar`                            | 150                          |
+    | POST `/v1/async/sonar`             | 10                           |
+    | GET `/v1/async/sonar`              | 3000                         |
+    | GET `/v1/async/sonar/{request_id}` | 6000                         |
+  </Tab>
+
+  <Tab title="Nivel 2">
+    | Modelo                             | Solicitudes por minuto (RPM) |
+    | ---------------------------------- | ---------------------------- |
+    | `sonar-deep-research`              | 20                           |
+    | `sonar-reasoning-pro`              | 500                          |
+    | `sonar-pro`                        | 500                          |
+    | `sonar`                            | 500                          |
+    | POST `/v1/async/sonar`             | 20                           |
+    | GET `/v1/async/sonar`              | 3000                         |
+    | GET `/v1/async/sonar/{request_id}` | 6000                         |
+  </Tab>
+
+  <Tab title="Nivel 3">
+    | Modelo                             | Solicitudes por minuto (RPM) |
+    | ---------------------------------- | ---------------------------- |
+    | `sonar-deep-research`              | 40                           |
+    | `sonar-reasoning-pro`              | 1.000                        |
+    | `sonar-pro`                        | 1.000                        |
+    | `sonar`                            | 1.000                        |
+    | POST `/v1/async/sonar`             | 40                           |
+    | GET `/v1/async/sonar`              | 3000                         |
+    | GET `/v1/async/sonar/{request_id}` | 6000                         |
+  </Tab>
+
+  <Tab title="Nivel 4">
+    | Modelo                             | Solicitudes por minuto (RPM) |
+    | ---------------------------------- | ---------------------------- |
+    | `sonar-deep-research`              | 60                           |
+    | `sonar-reasoning-pro`              | 4.000                        |
+    | `sonar-pro`                        | 4.000                        |
+    | `sonar`                            | 4.000                        |
+    | POST `/v1/async/sonar`             | 60                           |
+    | GET `/v1/async/sonar`              | 3000                         |
+    | GET `/v1/async/sonar/{request_id}` | 6000                         |
+  </Tab>
+
+  <Tab title="Nivel 5">
+    | Modelo                             | Solicitudes por minuto (RPM) |
+    | ---------------------------------- | ---------------------------- |
+    | `sonar-deep-research`              | 100                          |
+    | `sonar-reasoning-pro`              | 4.000                        |
+    | `sonar-pro`                        | 4.000                        |
+    | `sonar`                            | 4.000                        |
+    | POST `/v1/async/sonar`             | 100                          |
+    | GET `/v1/async/sonar`              | 3000                         |
+    | GET `/v1/async/sonar/{request_id}` | 6000                         |
+  </Tab>
+</Tabs>
+
+***
+
+<div id="embeddings-api-rate-limits">
+  ## Límites de tasa de la Embeddings API
+</div>
+
+La Embeddings API aplica límites de tasa por nivel que escalan con tu nivel de uso. Los límites son más altos que en otras APIs porque cada solicitud consiste en un único forward pass sobre un backend elástico.
+
+|      Nivel      | QPS (consultas por segundo) |
+| :-------------: | :-------------------------: |
+|   **Nivel 0**   |            85 QPS           |
+| **Niveles 1–3** |           170 QPS           |
+| **Niveles 4–5** |           335 QPS           |
+
+<div id="contextualized-embeddings">
+  ### Embeddings contextualizados
+</div>
+
+Los embeddings contextualizados tienen límites propios y más altos (5× los de los niveles estándar de embeddings):
+
+|      Nivel      | QPS (consultas por segundo) |
+| :-------------: | :-------------------------: |
+|   **Nivel 0**   |           415 QPS           |
+| **Niveles 1–3** |           835 QPS           |
+| **Niveles 4–5** |          1.670 QPS          |
+
+<Note>
+  Los embeddings contextualizados se limitan por **el total de fragmentos**, no por la cantidad de solicitudes.
+</Note>
+
+***
+
+<div id="how-rate-limiting-works">
+  ## Cómo funciona la limitación de tasa
+</div>
+
+Nuestro sistema de limitación de tasa utiliza un **algoritmo de cubeta con fugas** (leaky bucket) que permite ráfagas de tráfico y, al mismo tiempo, mantiene un control estricto de la tasa a largo plazo.
+
+<div id="technical-implementation">
+  ### Implementación técnica
+</div>
+
+<AccordionGroup>
+  <Accordion title="Explicación del algoritmo de cubeta con fugas">
+    El algoritmo de cubeta con fugas funciona como una cubeta con un pequeño agujero en el fondo:
+
+    * **Capacidad de la cubeta**: número máximo de solicitudes que puedes enviar de forma instantánea (capacidad de ráfaga)
+    * **Tasa de fuga**: con qué rapidez se fugan los tokens de la cubeta (tu límite de tasa)
+    * **Recarga de tokens**: los tokens se recargan de forma continua a intervalos regulares según tu límite de tasa
+
+    Este diseño admite tráfico legítimo en ráfagas cuando lo necesitas, evita el abuso sostenido y garantiza una aplicación de los límites predecible y equitativa para todos los usuarios.
+  </Accordion>
+
+  <Accordion title="Ejemplo de comportamiento del limitador de tasa">
+    Veamos cómo funcionan en la práctica **50 solicitudes por segundo**. Con una capacidad de 50 tokens y una tasa de fuga de 50 tokens por segundo, se recarga un token cada 20 ms.
+
+    **Escenario 1: tráfico en ráfaga**
+
+    ```
+    Tiempo 0.0s: cubeta llena (50 tokens)
+    → Enviar 50 solicitudes al instante → TODAS PERMITIDAS
+    → Enviar la solicitud 51 → RECHAZADA (cubeta vacía)
+
+    Tiempo 0.020s: 1 token recargado
+    → Enviar 1 solicitud → PERMITIDA
+    → Enviar la 2.ª solicitud → RECHAZADA
+
+    Tiempo 0.040s: 1 token más recargado
+    → Enviar 1 solicitud → PERMITIDA
+    ```
+
+    **Escenario 2: 50 QPS constantes**
+
+    ```
+    Una solicitud cada 20ms:
+    Tiempo 0.0s: solicitud → PERMITIDA (50→49 tokens)
+    Tiempo 0.020s: solicitud → PERMITIDA (49+1-1=49 tokens)
+    Tiempo 0.040s: solicitud → PERMITIDA (49+1-1=49 tokens)
+    ... se mantiene entre 49 y 50 tokens, todas las solicitudes pasan
+    ```
+
+    **Escenario 3: ligeramente por encima de 50 QPS**
+
+    ```
+    Una solicitud cada 19ms (≈52.6 QPS):
+    → Con el tiempo, los tokens se agotan más rápido de lo que se recargan
+    → Algunas solicitudes empiezan a ser rechazadas
+    → Se alcanzan exactamente 50 QPS de promedio
+    ```
+  </Accordion>
+
+  <Accordion title="Implicaciones en la práctica">
+    Gracias al diseño de cubeta con fugas, puedes aprovechar todo tu límite de tasa al instante, lo que resulta ideal para operaciones por lotes o picos repentinos de tráfico. No hace falta espaciar artificialmente las solicitudes si tienes capacidad de ráfaga disponible.
+
+    El sistema aplica límites de tasa promedio estrictos a lo largo del tiempo y, al mismo tiempo, permite una recuperación rápida tras un uso en ráfaga. Así se obtiene un rendimiento consistente en distintos patrones de uso y se evita el uso sostenido por encima del límite, manteniendo una asignación equitativa de los recursos.
+
+    Al desarrollar tu aplicación, aprovecha la capacidad de ráfaga para las operaciones por lotes, monitorea tus patrones de uso para optimizar el momento de las solicitudes e implementa un manejo de errores adecuado para las respuestas 429.
+  </Accordion>
+</AccordionGroup>
+
+***
+
+<div id="what-happens-when-you-hit-rate-limits">
+  ## ¿Qué ocurre cuando alcanzas los límites de tasa?
+</div>
+
+Cuando superas tus límites de tasa:
+
+1. **Error 429** - Tu solicitud se rechaza con &quot;Too Many Requests&quot;
+2. **Recarga continua** - Los tokens se recargan de forma continua según tu límite de tasa
+3. **Recuperación inmediata** - Las nuevas solicitudes quedan disponibles en cuanto se recargan los tokens
+
+**Ejemplos de tiempos de recuperación:**
+
+* **Límite de 50 QPS**: se recarga 1 token cada 20 ms
+* **Límite de 500 QPS**: se recarga 1 token cada 2 ms
+* **Límite de 1.000 QPS**: se recarga 1 token cada 1 ms
+
+<Tip>
+  **Buenas prácticas:**
+
+  * Monitorea tu uso para prever cuándo necesitarás un nivel superior
+  * Considera subir de nivel de forma proactiva en aplicaciones de producción
+  * Implementa retroceso exponencial (exponential backoff) con jitter en tu código
+  * Aprovecha la capacidad de ráfaga para operaciones por lotes
+  * No espacies las solicitudes artificialmente si dispones de capacidad de ráfaga
+</Tip>
+
+***
+
+<div id="upgrading-your-tier">
+  ## Cómo subir de nivel
+</div>
+
+<Steps>
+  <Step title="Consulta tu nivel actual">
+    Abre [Niveles de uso](https://console.perplexity.ai/project/pricing?tab=usage-tiers) en la Consola de la API para ver tu nivel actual y el umbral de compra de cada nivel.
+  </Step>
+
+  <Step title="Compra más créditos">
+    Añade créditos a tu cuenta desde la sección de facturación. Tu nivel subirá automáticamente en cuanto alcances el umbral de gasto.
+  </Step>
+
+  <Step title="Verifica la mejora de nivel">
+    Tus nuevos límites de tasa se aplican de inmediato tras subir de nivel. Consulta tu página de configuración para confirmarlo.
+  </Step>
+
+  <Step title="¿Necesitas límites aún más altos?">
+    Si necesitas límites de tasa personalizados por encima del Nivel 5, [completa nuestro formulario de solicitud de aumento de límites](https://perplexity.typeform.com/to/yctmfyVT) y revisaremos tu caso de uso para adaptarnos a tus necesidades.
+  </Step>
+</Steps>
+
+<Check>
+  Los niveles superiores mejoran notablemente tu experiencia con la API gracias a unos límites de tasa más altos, algo especialmente importante en aplicaciones en producción.
+</Check>
+
+<Card title="¿Necesitas límites de tasa más altos?" icon="file-pencil" iconType="solid" href="https://perplexity.typeform.com/to/yctmfyVT">
+  ¿Necesitas límites de tasa personalizados por encima de tu nivel actual? Completa nuestro formulario de solicitud de aumento de límites y revisaremos tu caso de uso para adaptarnos a tus necesidades.
+</Card>

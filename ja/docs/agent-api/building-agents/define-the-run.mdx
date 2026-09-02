@@ -1,0 +1,119 @@
+---
+title: "実行を定義する"
+description: "エージェントの実行を設定します。preset から始め、システムプロンプト、ループの上限、モデル をカスタマイズしていきます。"
+---
+
+エージェントの実行はすべて、1 回の Agent API リクエストから始まります。プロンプトやツール、出力形式を考える前に、何を実行し、どこまで進めてよいのかを決めます。最も手早いのは `preset` から始める方法です。preset は モデル、システムプロンプト、検索設定、ツールを調整済みでひとまとめにしたもので、必要に応じて個別の設定でカスタマイズできます。このページでは、このセクションの以降の内容が土台とする呼び出しを組み立てます。
+
+<div id="start-from-a-preset">
+  ## presetから始める
+</div>
+
+`preset` を指定するだけで、フィールド1つで動作するエージェントが手に入ります。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="low",
+      input="Give me a thorough overview of the current state of solid-state battery commercialization.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    preset: 'low',
+    input: 'Give me a thorough overview of the current state of solid-state battery commercialization.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "low",
+      "input": "Give me a thorough overview of the current state of solid-state battery commercialization."
+    }' | jq
+  ```
+</CodeGroup>
+
+他のpresetでは、回答の深さとレイテンシー・コストがトレードオフの関係になります。各presetに含まれる設定内容やpresetの更新管理については、[Presets](/ja/docs/agent-api/presets)を参照してください。
+
+<div id="customize-the-system-prompt-instructions">
+  ## システムプロンプトをカスタマイズする: `instructions`
+</div>
+
+`preset` には、あらかじめ調整されたシステムプロンプトが付属しています。`instructions` フィールドは、エージェントのシステムプロンプトそのものです。つまり、ループのどのターンでも常に有効なルール、すなわち役割、トーン、引用、グラウンディングのルールを定めます。これらは、そのターンでユーザーが何を尋ねるかに関係なく適用されます。
+
+```python theme={null}
+instructions="You are a research assistant. Cite every claim by source domain, and never speculate beyond the retrieved evidence."
+```
+
+`instructions` を設定すると、preset の システムプロンプト に追記されるのではなく、**置き換えられます**。preset のプロンプトをそのまま使う場合は `instructions` を省略してください。
+
+<Note>
+  システムプロンプト は簡潔に保ってください。ここに含まれる token はループのステップごとに再処理されるため、ツール呼び出しを重ねるほど積み上がります。機械可読な出力や検索の制約については、文章による指示ではなくリクエストパラメーター ([出力を構造化する](/ja/docs/agent-api/building-agents/shape-output) と [ツールを与える](/ja/docs/agent-api/building-agents/give-it-tools) を参照) を使うことを推奨します。
+</Note>
+
+<div id="customize-the-loop-max_steps">
+  ## ループのカスタマイズ: `max_steps`
+</div>
+
+エージェントの実行はループです。モデルが推論し、必要に応じてツールを呼び出し、その結果を読み取り、回答に至るまでこれを繰り返します。1ステップとは、このサイクルを1周することであり、ツール呼び出しを伴う場合もあるモデルの1ターンに相当します。`max_steps` は、1回の実行で実行できるステップ数の上限を設定するものです。ループの暴走を抑えたり、レイテンシと深さのバランスを取るために使用します。上限に達しても、エージェントはエラーになるわけではなく、それまでに収集した情報から回答するための最終パスを1回だけ実行します。
+
+`max_steps` が小さいと、エージェントがツールの結果を踏まえて行動できる回数が制限されます。`max_steps: 1` の場合、直接的なツールは実行されることもありますが、エージェントはその結果を推論するためにループへ戻ることができません。`finance_search` などセットアップ用のターンを必要とするツールは、まったく実行されない場合があります。
+
+presetを指定せずに `model` または `models` を指定した場合、`max_steps` を省略すると実行は既定で1ステップになります。ツールが複数のターンを必要とする場合は、必ず明示的に設定してください。`finance_search` を有効にする直接モデル指定のリクエストでは、エージェントがツールを初期化して実行するための余地を十分に確保できるよう、`max_steps: 3` 以上を指定してください。presetには独自のステップ予算があり、明示的に上書きしない限りそれが適用されます。
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input="Give me a thorough overview of the current state of solid-state battery commercialization.",
+    max_steps=20,
+)
+```
+
+`preset` と一緒に `max_steps` を指定した場合、preset の値が上書きされます。ただしチャット形式の preset では、その preset 自体の上限が適用されます。
+
+<div id="customize-the-model-model-or-models">
+  ## モデルのカスタマイズ: `model` または `models`
+</div>
+
+preset を使うと、モデルは自動的に選択されます。どのモデルが応答するかを完全に制御したい場合は、preset の代わりに (または preset と併用して) モデルを明示的に指定してください。
+
+| フィールド    | 内容                                                         |
+| -------- | ---------------------------------------------------------- |
+| `model`  | `provider/model` 形式で指定する単一のモデル (例: `openai/gpt-5.6-sol`) 。 |
+| `models` | 最大 5 つのモデルからなるフォールバックチェーン。成功するまで順に試行されます。                  |
+
+`models` を設定した場合は、`model` よりも優先されます。カタログと料金については [Models](/ja/docs/agent-api/models) を、チェーンの解決方法については [Model fallback](/ja/docs/agent-api/model-fallback) を参照してください。
+
+<Tip>
+  まずは `preset` から始め、使用するエンジンを厳密に固定する必要が出てきた時点で、明示的な `model` (または `models` チェーン) へ移行しましょう。
+</Tip>
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="エージェントにプロンプトを与える" icon="message" href="/ja/docs/agent-api/building-agents/prompt-the-agent">
+    システムプロンプトと質問を切り分け、実行に根拠情報を与えます。
+  </Card>
+
+  <Card title="preset" icon="stack-2" href="/ja/docs/agent-api/presets">
+    出発点として利用できる調整済みpresetを確認します。
+  </Card>
+</CardGroup>

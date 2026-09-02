@@ -1,0 +1,262 @@
+---
+title: "文档问答"
+description: "通过 Agent API 加载文档并针对文档内容提问——涵盖文本提取、网页搜索增强、多轮问答和结构化输出提取"
+---
+
+<div id="document-qa">
+  # 文档问答
+</div>
+
+使用 Agent API 加载文档并就其内容提问。本示例展示如何读取文档内容、结合网页搜索获得更丰富的答案，以及基于文档内容构建多轮问答会话。
+
+<div id="features">
+  ## 功能
+</div>
+
+* 加载文档 (文本、CSV、JSON、Markdown) 并将内容传递给 Agent API
+* 基于文档内容提问
+* 可选择结合 `web_search` 丰富上下文
+* 通过多轮对话深入了解特定章节
+* 从文档内容中提取结构化输出
+
+<Info>
+  直接在 Agent API 的 `input` 参数中传入文档内容。对于文本类格式，读取文件后将其内容写入提示词。结合 `web_search` 可补充文档之外的上下文。
+</Info>
+
+<div id="installation">
+  ## 安装
+</div>
+
+```bash theme={null}
+pip install perplexityai
+```
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## 使用方式
+</div>
+
+将下面的完整代码保存为 `doc_qa.py` 并运行：
+
+```bash theme={null}
+python doc_qa.py report.txt "What are the key findings in this report?"
+```
+
+交互模式：
+
+```bash theme={null}
+python doc_qa.py report.txt --interactive
+```
+
+<div id="full-code">
+  ## 完整代码
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import sys
+  import json
+  import argparse
+  from pathlib import Path
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  MAX_CONTENT_CHARS = 50000  # 截断超大文件，以免超出 token 限制
+
+
+  def read_document(file_path: str) -> str:
+      """Read a document file and return its text content."""
+      path = Path(file_path)
+      content = path.read_text(errors="replace")
+      if len(content) > MAX_CONTENT_CHARS:
+          content = content[:MAX_CONTENT_CHARS] + "\n\n[... truncated ...]"
+      return content
+
+
+  def ask_about_document(
+      file_path: str,
+      question: str,
+      use_web_search: bool = False,
+      conversation_history: list = None,
+  ) -> dict:
+      """Ask a question about a document's content."""
+      doc_content = read_document(file_path)
+      filename = Path(file_path).name
+
+      # 用文档内容和问题构建输入
+      full_input = (
+          f"Document: {filename}\n"
+          f"{'='*60}\n"
+          f"{doc_content}\n"
+          f"{'='*60}\n\n"
+          f"Question: {question}"
+      )
+
+      # 带上对话历史以支持多轮对话
+      if conversation_history:
+          messages = conversation_history + [{"role": "user", "content": full_input}]
+          response = client.responses.create(
+              model="openai/gpt-5.4",
+              input=messages,
+              tools=[{"type": "web_search"}] if use_web_search else [],
+              instructions="Answer questions based on the provided document content. Be specific and cite sections when possible.",
+          )
+      else:
+          response = client.responses.create(
+              model="openai/gpt-5.4",
+              input=full_input,
+              tools=[{"type": "web_search"}] if use_web_search else [],
+              instructions="Answer questions based on the provided document content. Be specific and cite sections when possible.",
+          )
+
+      usage = response.usage
+      return {
+          "answer": response.output_text,
+          "model": response.model,
+          "tokens": {
+              "input": usage.input_tokens if usage else 0,
+              "output": usage.output_tokens if usage else 0,
+          },
+      }
+
+
+  def extract_structured_data(file_path: str, schema_name: str, schema: dict) -> dict:
+      """Extract structured data from a document using a JSON schema."""
+      doc_content = read_document(file_path)
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=f"Extract the requested structured data from this document:\n\n{doc_content}",
+          response_format={
+              "type": "json_schema",
+              "json_schema": {"name": schema_name, "schema": schema},
+          },
+      )
+
+      return json.loads(response.output_text)
+
+
+  def interactive_session(file_path: str, use_web_search: bool = False):
+      """Run an interactive Q&A session over a document."""
+      print(f"Document loaded: {file_path}")
+      print(f"Web search: {'enabled' if use_web_search else 'disabled'}")
+      print("Type 'quit' to exit.\n")
+
+      history = []
+
+      while True:
+          question = input("Question: ").strip()
+          if question.lower() in ("quit", "exit", "q"):
+              break
+          if not question:
+              continue
+
+          result = ask_about_document(file_path, question, use_web_search, history)
+          print(f"\nAnswer:\n{result['answer']}\n")
+          print(f"({result['tokens']['input']}+{result['tokens']['output']} tokens)\n")
+
+          # 追加到对话历史以支持多轮对话
+          history.append({"role": "user", "content": question})
+          history.append({"role": "assistant", "content": result["answer"]})
+
+
+  def main():
+      parser = argparse.ArgumentParser(description="Document Q&A")
+      parser.add_argument("file", help="Path to the document file")
+      parser.add_argument("question", nargs="?", help="Question to ask")
+      parser.add_argument("--interactive", action="store_true", help="Interactive mode")
+      parser.add_argument("--web-search", action="store_true", help="Enable web search")
+      args = parser.parse_args()
+
+      if not Path(args.file).exists():
+          print(f"Error: File not found: {args.file}", file=sys.stderr)
+          sys.exit(1)
+
+      if args.interactive:
+          interactive_session(args.file, args.web_search)
+      elif args.question:
+          result = ask_about_document(args.file, args.question, args.web_search)
+          print(result["answer"])
+      else:
+          print("Error: Provide a question or use --interactive.", file=sys.stderr)
+          sys.exit(1)
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## 示例输出
+</div>
+
+```bash theme={null}
+python doc_qa.py quarterly_report.txt "What was the total revenue for Q3?"
+```
+
+```
+根据季度报告，第三季度总营收为 42 亿美元，
+同比增长 15%。报告指出，这一增长主要来自
+云服务部门，该部门较去年同期增长了 28%
+（详见第 3 节“财务亮点”）。
+```
+
+结合网页搜索增强后：
+
+```bash theme={null}
+python doc_qa.py quarterly_report.txt "How does this compare to industry benchmarks?" --web-search
+```
+
+```
+根据该报告，第三季度营收为 42 亿美元（来自文档）。
+相比之下，2025 年第三季度以云业务为主的公司行业平均营收同比增速
+约为 12%（来自网络搜索：Bloomberg 行业分析）。这意味着该公司
+比行业基准高出约 3 个百分点。
+```
+
+<div id="structured-data-extraction-from-documents">
+  ## 从文档中提取结构化数据
+</div>
+
+将文档中的特定字段提取为带类型的 JSON 结构：
+
+```python theme={null}
+# 从财报中提取关键指标
+schema = {
+    "type": "object",
+    "properties": {
+        "company_name": {"type": "string"},
+        "quarter": {"type": "string"},
+        "total_revenue": {"type": "string"},
+        "net_income": {"type": "string"},
+        "revenue_growth_yoy": {"type": "string"},
+        "key_highlights": {"type": "array", "items": {"type": "string"}},
+    },
+    "required": ["company_name", "quarter", "total_revenue", "net_income", "revenue_growth_yoy", "key_highlights"],
+    "additionalProperties": false,
+}
+
+data = extract_structured_data("quarterly_report.txt", "financial_summary", schema)
+print(json.dumps(data, indent=2))
+```
+
+<Tip>
+  将文档内容与结构化输出结合，可构建可靠的文档处理流水线。无论文档格式如何变化，JSON schema 都能确保输出保持一致。
+</Tip>
+
+<Warning>
+  超大文档会被截断，以控制在 token 限制之内。对于大文件，建议拆分为多个部分分别处理。
+</Warning>
+
+<div id="limitations">
+  ## 限制
+</div>
+
+* 超大文档会被截断，默认上限为 50,000 个字符 (约 12,500 个 token) 。
+* 文本类格式 (.txt、.csv、.md、.json) 效果最佳。对于 PDF，请先使用 `pdfplumber` 或 `PyPDF2` 等库提取文本。
+* 多轮会话的对话历史不会重新读取文件——文档内容仅包含在第一条消息中。

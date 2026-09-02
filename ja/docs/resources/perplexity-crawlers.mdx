@@ -1,0 +1,103 @@
+---
+title: "Perplexity のクローラー"
+description: "私たちは、可能な限り最高の検索体験を提供することで、日々サービスの改善に努めています。そのために、インターネット上の情報を収集・インデックス化するウェブクローラー（「ロボット」）とユーザーエージェントを用いてデータを収集しており、これらは自動的に、またはユーザーのリクエストに応じて動作します。ウェブマスターの皆様は…"
+---
+
+| ユーザーエージェント      | 説明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| :-------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PerplexityBot   | `PerplexityBot` は、Perplexity の検索結果にウェブサイトを表示し、リンクするために設計されています。AI 基盤モデル向けにコンテンツをクロールする目的では使用されません。サイトを検索結果に表示させるには、サイトの `robots.txt` ファイルで `PerplexityBot` を許可し、以下に記載の公開 IP レンジからのリクエストを許可することを推奨します。<br /><br />完全なユーザーエージェント文字列: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)`<br /><br />公開 IP アドレス: [https://www.perplexity.com/perplexitybot.json](https://www.perplexity.com/perplexitybot.json)                                                                                          |
+| Perplexity‑User | `Perplexity-User` は、Perplexity 内でのユーザー操作をサポートします。ユーザーが Perplexity に質問すると、正確な回答を返すためにウェブページにアクセスし、回答内にそのページへのリンクを含めることがあります。`Perplexity-User` は、こうしたユーザーリクエストがアクセスできるサイトを制御します。ウェブクロールや、AI 基盤モデルの学習用コンテンツの収集には使用されません。<br /><br />完全なユーザーエージェント文字列: `Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)`<br /><br />公開 IP アドレス: [https://www.perplexity.com/perplexity-user.json](https://www.perplexity.com/perplexity-user.json)<br /><br />ユーザーの求めに応じた取得であるため、このフェッチャーは通常 robots.txt のルールに従いません。 |
+
+<div id="waf-configuration">
+  ## WAF の設定
+</div>
+
+サイトの保護に Web アプリケーションファイアウォール (WAF) を使用している場合、Perplexity のボットがコンテンツにアクセスできるよう、明示的に許可リストに登録する必要がある場合があります。主要な WAF プロバイダー向けの設定ガイドラインは以下のとおりです。
+
+<div id="cloudflare-waf">
+  ### Cloudflare WAF
+</div>
+
+Perplexity のボットを許可するように Cloudflare WAF を設定する手順は次のとおりです。
+
+<Steps>
+  <Step title="WAF 設定に移動する">
+    Cloudflare ダッシュボードで **Security** → **WAF** に移動します。
+  </Step>
+
+  <Step title="新しいルールを作成する">
+    **Custom rules** をクリックし、Perplexity のボットを許可する新しいルールを作成します。
+  </Step>
+
+  <Step title="ルールの条件を設定する">
+    User-Agent と IP アドレスの両方の条件を組み合わせたルールを設定します。
+
+    * **Field**: User Agent
+    * **Operator**: Contains
+    * **Value**: `PerplexityBot` または `Perplexity-User`
+
+    **AND**
+
+    * **Field**: IP Source Address
+    * **Operator**: Is in
+    * **Value**: 以下に記載されている公式エンドポイントの IPレンジを使用します
+  </Step>
+
+  <Step title="ルールのアクションを設定する">
+    アクションを **Allow** に設定し、これらのリクエストが他のセキュリティルールの対象外となるようにします。
+  </Step>
+</Steps>
+
+<div id="aws-waf">
+  ### AWS WAF
+</div>
+
+AWS WAF では、IP セットと文字列一致条件を作成して設定します。
+
+<Steps>
+  <Step title="IP セットを作成する">
+    AWS WAF コンソールで、以下に記載する公式エンドポイントの IP アドレスを使用して、PerplexityBot と Perplexity-User の両方の IP セットを作成します。
+  </Step>
+
+  <Step title="文字列一致条件を作成する">
+    User-Agent ヘッダー用の文字列一致条件を作成します。
+
+    * `PerplexityBot`
+    * `Perplexity-User`
+  </Step>
+
+  <Step title="許可ルールを作成する">
+    IP セットと対応する User-Agent 文字列を組み合わせたルールを作成し、アクションを **Allow** に設定します。
+  </Step>
+
+  <Step title="Web ACL に関連付ける">
+    これらのルールを Web ACL に関連付け、ブロックルールよりも優先度が高くなるようにします。
+  </Step>
+</Steps>
+
+<div id="ip-address-sources">
+  ### IPアドレスの取得元
+</div>
+
+<Warning>
+  必ず公式JSONエンドポイントから取得した最新のIPレンジを使用してください。これらのアドレスは定期的に更新されるため、WAF設定における信頼できる情報源として扱ってください。
+</Warning>
+
+* **PerplexityBotのIPアドレス**: [https://www.perplexity.com/perplexitybot.json](https://www.perplexity.com/perplexitybot.json)
+* **Perplexity-UserのIPアドレス**: [https://www.perplexity.com/perplexity-user.json](https://www.perplexity.com/perplexity-user.json)
+
+<Tip>
+  これらのエンドポイントから最新のIPレンジを定期的に取得してWAFルールを更新する自動処理を構築し、Perplexityのボットが継続的にアクセスできるようにしてください。
+</Tip>
+
+<div id="best-practices">
+  ### ベストプラクティス
+</div>
+
+<Tip>
+  Perplexity のボット向けに WAF ルールを設定する際は、User-Agent 文字列の照合と IP アドレスの検証を組み合わせて、セキュリティを強化しつつ、正当なボットトラフィックがコンテンツにアクセスできる状態を維持してください。
+</Tip>
+
+<Note>
+  WAF 設定の変更が反映されるまでには時間がかかる場合があります。ログを監視し、ルールが意図したとおりに機能しているか、正当な Perplexity ボットのトラフィックが許可されているかを確認してください。
+</Note>

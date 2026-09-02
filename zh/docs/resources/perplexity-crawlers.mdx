@@ -1,0 +1,103 @@
+---
+title: "Perplexity 爬虫"
+description: "我们每天都在努力改进服务，力求提供最佳的搜索体验。为此，我们使用网络爬虫（\"robots\"）和用户代理来收集数据，从互联网上抓取并索引信息，它们既可自动运行，也可响应用户请求运行。网站管理员……"
+---
+
+| User Agent      | 说明                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| :-------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| PerplexityBot   | `PerplexityBot` 用于在 Perplexity 的搜索结果中展示网站并提供链接，不会为 AI 基础模型抓取内容。为确保您的站点出现在搜索结果中，建议在站点的 `robots.txt` 文件中允许 `PerplexityBot`，并放行来自下方所列公开 IP 段的请求。<br /><br />完整 user-agent 字符串：`Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)`<br /><br />公开 IP 地址：[https://www.perplexity.com/perplexitybot.json](https://www.perplexity.com/perplexitybot.json)                                                                       |
+| Perplexity‑User | `Perplexity-User` 用于支持 Perplexity 内的用户操作。当用户向 Perplexity 提问时，它可能会访问某个网页以便给出准确答案，并在回答中附上该页面的链接。`Perplexity-User` 决定这些用户请求可以访问哪些站点，不用于网络爬取，也不用于收集内容以训练 AI 基础模型。<br /><br />完整 user-agent 字符串：`Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; Perplexity-User/1.0; +https://perplexity.ai/perplexity-user)`<br /><br />公开 IP 地址：[https://www.perplexity.com/perplexity-user.json](https://www.perplexity.com/perplexity-user.json)<br /><br />由于抓取由用户发起，该抓取器通常会忽略 robots.txt 规则。 |
+
+<div id="waf-configuration">
+  ## WAF 配置
+</div>
+
+如果你使用 Web 应用防火墙 (WAF) 保护站点，可能需要显式将 Perplexity 的爬虫加入白名单，以确保它们能够访问你的内容。以下是常见 WAF 服务商的配置指南。
+
+<div id="cloudflare-waf">
+  ### Cloudflare WAF
+</div>
+
+要配置 Cloudflare WAF 以放行 Perplexity 爬虫：
+
+<Steps>
+  <Step title="进入 WAF 设置">
+    在 Cloudflare 控制台中，依次前往 **Security** → **WAF**。
+  </Step>
+
+  <Step title="创建新规则">
+    点击 **Custom rules**，新建一条允许 Perplexity 爬虫的规则。
+  </Step>
+
+  <Step title="配置规则条件">
+    创建一条同时匹配 User-Agent 和 IP 地址条件的规则：
+
+    * **字段**：User Agent
+    * **运算符**：Contains
+    * **值**：`PerplexityBot` 或 `Perplexity-User`
+
+    **AND**
+
+    * **字段**：IP Source Address
+    * **运算符**：Is in
+    * **值**：使用下方列出的官方端点提供的 IP 段
+  </Step>
+
+  <Step title="设置规则动作">
+    将动作设置为 **Allow**，确保这些请求可以跳过其他安全规则。
+  </Step>
+</Steps>
+
+<div id="aws-waf">
+  ### AWS WAF
+</div>
+
+配置 AWS WAF 时，请创建 IP 集和字符串匹配条件：
+
+<Steps>
+  <Step title="创建 IP 集">
+    在 AWS WAF 控制台中，使用下方列出的官方端点 IP 地址，分别为 PerplexityBot 和 Perplexity-User 创建 IP 集。
+  </Step>
+
+  <Step title="创建字符串匹配条件">
+    为 User-Agent 标头创建字符串匹配条件：
+
+    * `PerplexityBot`
+    * `Perplexity-User`
+  </Step>
+
+  <Step title="创建允许规则">
+    创建将 IP 集与对应 User-Agent 字符串组合起来的规则，并将动作设置为 **Allow**。
+  </Step>
+
+  <Step title="关联到 Web ACL">
+    将这些规则关联到你的 Web ACL，并确保其优先级高于阻止规则。
+  </Step>
+</Steps>
+
+<div id="ip-address-sources">
+  ### IP 地址来源
+</div>
+
+<Warning>
+  请始终使用官方 JSON 端点提供的最新 IP 段。这些地址会定期更新，应作为 WAF 配置的唯一可信来源。
+</Warning>
+
+* **PerplexityBot IP 地址**：[https://www.perplexity.com/perplexitybot.json](https://www.perplexity.com/perplexitybot.json)
+* **Perplexity-User IP 地址**：[https://www.perplexity.com/perplexity-user.json](https://www.perplexity.com/perplexity-user.json)
+
+<Tip>
+  建议设置自动化流程，定期从这些端点拉取最新 IP 段并更新 WAF 规则，确保 Perplexity 爬虫的访问不中断。
+</Tip>
+
+<div id="best-practices">
+  ### 最佳实践
+</div>
+
+<Tip>
+  为 Perplexity 爬虫配置 WAF 规则时，建议将 User-Agent 字符串匹配与 IP 地址验证结合使用，在增强安全性的同时，确保合法的机器人流量仍能访问你的内容。
+</Tip>
+
+<Note>
+  WAF 配置的变更可能需要一段时间才能全面生效。请监控日志，确认规则按预期运行，并且合法的 Perplexity 机器人流量已被放行。
+</Note>
