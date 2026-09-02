@@ -1,0 +1,38 @@
+---
+title: "Create Chat Completion"
+description: "Send a conversation to any Router model using the OpenAI Chat Completions schema. Set `stream: true` to receive server-sent events; add `stream_options: {\"include_usage\": true}` to get token usage in the final chunk."
+openapi: "openapi-gateway-chat.json POST /router/v1/chat/completions"
+---
+
+<Info>
+  The Router API accepts the OpenAI Chat Completions schema, with a defined subset of parameters. Requests using an unsupported parameter fail with a 400 naming the parameter.
+</Info>
+
+<Accordion title="Parameter support">
+  **Honored:** `model`, `messages`, `stream`, `stream_options.include_usage`, `max_completion_tokens`, `max_tokens`, `temperature`, `top_p`, `stop`, `reasoning_effort`, `service_tier` (`auto`, `default`, `flex`, `priority`), `response_format` (`text`, `json_schema`, `json_object`), `tools`, `tool_choice` (including `allowed_tools`), `parallel_tool_calls`, `prompt_cache_key`, `prompt_cache_options`, `prompt_cache_retention`, and message-part `prompt_cache_breakpoint` fields.
+
+  **Accepted but not forwarded to the model:** `user`, `safety_identifier`, `metadata`.
+
+  **Accepted only at their default values:** `n` (`1`), `logprobs` (`false`), `store` (`false`), `presence_penalty` (`0`), `frequency_penalty` (`0`).
+
+  **Rejected with a 400:** `seed`, `logit_bias`, `top_logprobs`, `functions` (use `tools`), `function_call` (use `tool_choice`), `modalities`, `audio`, `prediction`, `web_search_options`, `moderation`, `verbosity`, `stream_options.include_obfuscation` set to `true`, plus any unrecognized top-level field.
+
+  **Notes:** When `reasoning_effort` is omitted, the provider's default for that model applies; defaults vary by provider and model. `response_format.json_schema` always runs in strict mode. Assistant messages and streamed deltas can include `reasoning_content`; replay it in an assistant message to preserve reasoning context across requests. Function tools require a description.
+</Accordion>
+
+<Accordion title="Errors">
+  Errors use the OpenAI envelope:
+
+  ```json
+  {
+    "error": {
+      "code": null,
+      "message": "Invalid model 'example/does-not-exist'. Permitted models can be found in the documentation at https://docs.perplexity.ai/docs/getting-started/models.",
+      "param": null,
+      "type": "invalid_request_error"
+    }
+  }
+  ```
+
+  `type` is `invalid_request_error` for 4xx errors, `rate_limit_error` for 429 (rate limited or model overloaded — retry after the `Retry-After` interval), and `server_error` for 5xx. Requests that fail before producing output are not billed.
+</Accordion>

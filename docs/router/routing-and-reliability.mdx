@@ -1,0 +1,45 @@
+---
+title: "Routing & Reliability"
+description: "How the Perplexity Router API routes requests across model deployments, and what happens automatically when a provider degrades or fails."
+---
+
+<Note>
+  Router API is in private preview. Email [api@perplexity.ai](mailto:api@perplexity.ai) to request access.
+</Note>
+
+## Overview
+
+Depending on the model, a model id in the [catalog](/docs/router/models) can be served by any of several underlying deployments. The platform decides where each request runs — there are no routing parameters to set, and no per-provider configuration on your side. You send a model id; routing, health monitoring, and failover happen automatically.
+
+Responses always echo the model id you requested, and billing always uses that model's [published rates](/docs/router/models), regardless of which deployment served the request.
+
+## How Requests Are Routed
+
+When a model has more than one deployment, traffic is spread across them according to a weighted split that is continuously adjusted based on observed health — error rates, capacity, and latency. Deployments that degrade shed traffic to healthy ones automatically and regain it gradually as they recover.
+
+Multi-turn conversations are kept on the same deployment where possible, so prompt caching keeps working across requests — send the same conversation prefix and you benefit from [cache-read pricing](/docs/router/models) without doing anything special.
+
+## Automatic Failover
+
+When a deployment fails — a provider error, a rate limit, or a timeout — the request is retried on another deployment for that model when one is available. Each attempt is bounded by time-to-first-token and total-duration limits, and exceeding either counts as a failure.
+
+Two behaviors worth designing around:
+
+* **Errors you can fix are not retried.** Deterministic client errors — an invalid request or a prompt that exceeds the model's context window — surface immediately as a `400` rather than being retried across deployments.
+* **When every deployment fails**, the request returns a `429` indicating the model is overloaded, with a `Retry-After` header. Retrying after the indicated interval is safe: requests that fail before producing any output are not billed.
+
+## Streaming and Reliability
+
+Failures before the first token are handled invisibly — failover happens before the stream starts, and you receive a normal response. If a stream fails after output has begun, it ends with an in-band error event; your client should treat an unterminated stream as incomplete. Streamed requests are billed for the tokens actually delivered.
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Models & Pricing" icon="brain" href="/docs/router/models">
+    The model catalog with per-token rates.
+  </Card>
+
+  <Card title="API Reference" icon="code" href="/api-reference/gateway-chat-completions-post">
+    Request and response schemas, including error shapes.
+  </Card>
+</CardGroup>

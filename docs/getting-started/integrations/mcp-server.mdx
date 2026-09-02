@@ -1,0 +1,371 @@
+---
+title: "Perplexity API MCP Server"
+sidebarTitle: "Perplexity API MCP"
+description: "Connect AI assistants to Perplexity's search and reasoning capabilities using the Model Context Protocol (MCP)."
+---
+
+import SonarDeprecationNotice from "/snippets/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+## Overview
+
+The Perplexity MCP Server enables AI assistants to access Perplexity's powerful search and reasoning capabilities directly within their workflows. Using the Model Context Protocol (MCP), you can integrate real-time web search, conversational AI, and advanced reasoning into any MCP-compatible client.
+
+There are two ways to connect:
+
+* **Remote MCP server (recommended):** hosted by Perplexity at `https://api.perplexity.ai/mcp`. No installation, nothing to update, works with any client that supports remote MCP servers.
+* **Local MCP server:** run the open-source server on your machine over stdio. Use this if your client only supports stdio servers or you need to pin a version.
+
+Both expose the same tools and behave identically.
+
+<Info>
+  The **Model Context Protocol (MCP)** is an open standard that connects AI assistants with external data sources and tools. Learn more at [modelcontextprotocol.io](https://modelcontextprotocol.io/introduction).
+</Info>
+
+<Note>
+  This page is for adding Perplexity as an MCP tool inside clients such as Claude Code, Cursor, VS Code, and Claude Desktop. To call the Perplexity API from application code, start with the [Quickstart](/docs/getting-started/quickstart). To select Claude models through the Agent API, use Anthropic model IDs from [Agent API models](/docs/agent-api/models).
+</Note>
+
+## Remote MCP Server
+
+Connect to `https://api.perplexity.ai/mcp` (Streamable HTTP) and authenticate with your API key as a bearer token:
+
+```
+Authorization: Bearer YOUR_API_KEY
+```
+
+<Card title="Generate API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Get Key" href="https://console.perplexity.ai/project/keys">
+  Navigate to the API Portal and generate a new key.
+</Card>
+
+<Tabs>
+  <Tab title="Claude Code">
+    ```bash theme={null}
+    claude mcp add --transport http perplexity https://api.perplexity.ai/mcp --header "Authorization: Bearer YOUR_API_KEY"
+    ```
+  </Tab>
+
+  <Tab title="Cursor">
+    [Install in Cursor with one click](https://cursor.com/install-mcp?name=perplexity\&config=eyJ1cmwiOiJodHRwczovL2FwaS5wZXJwbGV4aXR5LmFpL21jcCIsImhlYWRlcnMiOnsiQXV0aG9yaXphdGlvbiI6IkJlYXJlciBZT1VSX0FQSV9LRVkifX0%3D), then replace `YOUR_API_KEY` with your key.
+
+    Or add to your `~/.cursor/mcp.json` manually:
+
+    ```json theme={null}
+    {
+      "mcpServers": {
+        "perplexity": {
+          "url": "https://api.perplexity.ai/mcp",
+          "headers": {
+            "Authorization": "Bearer YOUR_API_KEY"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="VS Code">
+    [Install in VS Code with one click](https://vscode.dev/redirect/mcp/install?name=perplexity\&config=%7B%22type%22%3A%22http%22%2C%22url%22%3A%22https%3A%2F%2Fapi.perplexity.ai%2Fmcp%22%2C%22headers%22%3A%7B%22Authorization%22%3A%22Bearer%20%24%7Binput%3Aperplexity-api-key%7D%22%7D%7D\&inputs=%5B%7B%22type%22%3A%22promptString%22%2C%22id%22%3A%22perplexity-api-key%22%2C%22description%22%3A%22Perplexity%20API%20Key%22%2C%22password%22%3Atrue%7D%5D) and VS Code prompts for your key.
+
+    Or add to your `.vscode/mcp.json` manually. The `inputs` block makes VS Code prompt for the key (masked) instead of storing it in a file that gets committed:
+
+    ```json theme={null}
+    {
+      "inputs": [
+        {
+          "type": "promptString",
+          "id": "perplexity-api-key",
+          "description": "Perplexity API Key",
+          "password": true
+        }
+      ],
+      "servers": {
+        "perplexity": {
+          "type": "http",
+          "url": "https://api.perplexity.ai/mcp",
+          "headers": {
+            "Authorization": "Bearer ${input:perplexity-api-key}"
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="Anthropic API">
+    Use Perplexity's tools in a Messages API request with the MCP connector:
+
+    ```bash theme={null}
+    curl https://api.anthropic.com/v1/messages \
+      -H "content-type: application/json" \
+      -H "x-api-key: $ANTHROPIC_API_KEY" \
+      -H "anthropic-version: 2023-06-01" \
+      -H "anthropic-beta: mcp-client-2025-11-20" \
+      -d '{
+        "model": "claude-opus-5",
+        "max_tokens": 1024,
+        "messages": [{"role": "user", "content": "What happened in AI this week?"}],
+        "mcp_servers": [{
+          "type": "url",
+          "url": "https://api.perplexity.ai/mcp",
+          "name": "perplexity",
+          "authorization_token": "YOUR_PERPLEXITY_API_KEY"
+        }],
+        "tools": [{
+          "type": "mcp_toolset",
+          "mcp_server_name": "perplexity"
+        }]
+      }'
+    ```
+
+    `authorization_token` accepts your Perplexity API key directly (no OAuth needed); it is sent to our server as a bearer token. Anthropic bills the Messages request as usual; Perplexity tool calls are billed to your Perplexity API key.
+
+    To restrict which tools the model can call, disable tools by default and enable the ones you want:
+
+    ```json theme={null}
+    "tools": [{
+      "type": "mcp_toolset",
+      "mcp_server_name": "perplexity",
+      "default_config": {"enabled": false},
+      "configs": {
+        "perplexity_search": {"enabled": true}
+      }
+    }]
+    ```
+  </Tab>
+
+  <Tab title="Other Clients">
+    Any client that supports remote MCP servers over Streamable HTTP can connect with:
+
+    | Setting   | Value                                |
+    | --------- | ------------------------------------ |
+    | URL       | `https://api.perplexity.ai/mcp`      |
+    | Transport | Streamable HTTP                      |
+    | Header    | `Authorization: Bearer YOUR_API_KEY` |
+
+    If your client only supports stdio servers, use the [local MCP server](#local-mcp-server) below.
+
+    <Note>
+      Custom connectors on claude.ai (web) currently require OAuth and cannot send a static API key header. Use Claude Code, Claude Desktop, or the Anthropic API instead.
+    </Note>
+  </Tab>
+</Tabs>
+
+<Note>
+  Tool calls are billed to the API key you connect with at standard API pricing. Your key's existing rate limits apply.
+</Note>
+
+## Local MCP Server
+
+Run the same server locally over stdio.
+
+### One-Click Install
+
+<CardGroup cols={2}>
+  <Card
+    title="Install in Cursor"
+    icon={
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 466.73 532.09"
+>
+  <path
+    d="M457.43 125.94 244.42 2.96a22.127 22.127 0 0 0-22.12 0L9.3 125.94C3.55 129.26 0 135.4 0 142.05v247.99c0 6.65 3.55 12.79 9.3 16.11l213.01 122.98a22.127 22.127 0 0 0 22.12 0l213.01-122.98c5.75-3.32 9.3-9.46 9.3-16.11V142.05c0-6.65-3.55-12.79-9.3-16.11h-.01Zm-13.38 26.05L238.42 508.15c-1.39 2.4-5.06 1.42-5.06-1.36V273.58c0-4.66-2.49-8.97-6.53-11.31L24.87 145.67c-2.4-1.39-1.42-5.06 1.36-5.06h411.26c5.84 0 9.49 6.33 6.57 11.39h-.01Z"
+    style={{ fill: "var(--color-foreground)" }}
+  />
+</svg>
+}
+    href="https://cursor.com/en/install-mcp?name=perplexity&config=eyJ0eXBlIjoic3RkaW8iLCJjb21tYW5kIjoibnB4IiwiYXJncyI6WyIteSIsIkBwZXJwbGV4aXR5LWFpL21jcC1zZXJ2ZXIiXSwiZW52Ijp7IlBFUlBMRVhJVFlfQVBJX0tFWSI6IiJ9fQ=="
+  >
+    Automatically configure the Perplexity MCP server in Cursor with one click.
+  </Card>
+
+  <Card
+    title="Install in VS Code"
+    icon={
+<svg
+  xmlns="http://www.w3.org/2000/svg"
+  viewBox="0 0 100 100"
+>
+  <path
+    d="M70.912 99.572a6.193 6.193 0 0 0 4.96-.191l20.588-9.958a6.285 6.285 0 0 0 3.54-5.661V16.239a6.286 6.286 0 0 0-3.54-5.662L75.873.62a6.2 6.2 0 0 0-7.104 1.216L29.355 37.98l-17.168-13.1a4.146 4.146 0 0 0-5.318.238l-5.506 5.035a4.205 4.205 0 0 0-.004 6.194L16.247 50 1.36 63.654a4.205 4.205 0 0 0 .004 6.194l5.506 5.034a4.145 4.145 0 0 0 5.318.238l17.168-13.1L68.77 98.166a6.205 6.205 0 0 0 2.143 1.407Zm4.103-72.39L45.11 50 75.015 72.82V27.18Z"
+    fillRule="evenodd"
+    style={{ fill: "var(--color-foreground)" }}
+  />
+</svg>
+}
+    href="https://vscode.dev/redirect/mcp/install?name=perplexity&config=%7B%22type%22%3A%22stdio%22%2C%22command%22%3A%22npx%22%2C%22args%22%3A%5B%22-y%22%2C%22%40perplexity-ai%2Fmcp-server%22%5D%2C%22env%22%3A%7B%22PERPLEXITY_API_KEY%22%3A%22%22%7D%7D"
+  >
+    Automatically configure the Perplexity MCP server in VS Code with one click.
+  </Card>
+</CardGroup>
+
+### Agent Plugin Install
+
+The local server is also packaged as an [Agent Plugin](https://agent-plugins.org), so clients that support the standard can install it directly from the [`perplexityai/modelcontextprotocol`](https://github.com/perplexityai/modelcontextprotocol) repository. The plugin format does not carry secrets, so after installing, set the `PERPLEXITY_API_KEY` environment variable in your client's plugin or MCP settings.
+
+### Manual Setup
+
+<Steps>
+  <Step title="Get Your API Key">
+    <Card title="Generate API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Get Key" href="https://console.perplexity.ai/project/keys">
+      Navigate to the API Portal and generate a new key.
+    </Card>
+  </Step>
+
+  <Step title="Configure Your Client">
+    Add the MCP server to your client configuration:
+
+    <Tabs>
+      <Tab title="Claude Code">
+        **Option 1: CLI Command (Recommended)**
+
+        The easiest way to get started:
+
+        ```bash theme={null}
+        claude mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
+        ```
+
+        **Option 2: Plugin Install**
+
+        Install via plugin:
+
+        ```bash theme={null}
+        export PERPLEXITY_API_KEY="your_key_here"
+        claude
+        # Then run: /plugin marketplace add perplexityai/modelcontextprotocol
+        # Then run: /plugin install perplexity
+        ```
+
+        **Option 3: Manual Configuration**
+
+        Add to your `claude.json`:
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "type": "stdio",
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Cursor">
+        We recommend using the one-click install above for setting up the MCP server in Cursor.
+
+        If you prefer to configure it manually, add the following to your `mcp.json`:
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Codex">
+        ```bash theme={null}
+        codex mcp add perplexity --env PERPLEXITY_API_KEY="your_key_here" -- npx -y @perplexity-ai/mcp-server
+        ```
+      </Tab>
+
+      <Tab title="Other Clients">
+        Most MCP-compatible clients (including Claude Desktop, VS Code, and Windsurf) use the `mcpServers` format. Configuration file locations:
+
+        | Client             | Config File                             |
+        | ------------------ | --------------------------------------- |
+        | Cursor             | `~/.cursor/mcp.json`                    |
+        | VS Code            | `.vscode/mcp.json`                      |
+        | Claude Desktop     | `claude_desktop_config.json`            |
+        | Windsurf           | `~/.codeium/windsurf/mcp_config.json`   |
+        | Google Antigravity | `~/.gemini/antigravity/mcp_config.json` |
+
+        **Standard `mcpServers` format:**
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity": {
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+
+        **VS Code uses a slightly different format:**
+
+        ```json theme={null}
+        {
+          "servers": {
+            "perplexity": {
+              "type": "stdio",
+              "command": "npx",
+              "args": ["-y", "@perplexity-ai/mcp-server"],
+              "env": {
+                "PERPLEXITY_API_KEY": "your_key_here"
+              }
+            }
+          }
+        }
+        ```
+
+        If your client doesn't work with these formats, check its documentation for the correct wrapper format.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Start Using">
+    Restart your MCP client and start using Perplexity's tools in your AI workflows.
+  </Step>
+</Steps>
+
+## Available Tools
+
+<CardGroup cols={2}>
+  <Card title="perplexity_search" icon="search">
+    Direct web search using the Perplexity Search API. Returns ranked search results with titles, URLs, snippets, and metadata.
+
+    **Best for:** Finding current information, news, facts, or specific web content.
+  </Card>
+
+  <Card title="perplexity_ask" icon="message">
+    General-purpose conversational AI with real-time web search, backed by the [Agent API](/docs/agent-api/quickstart) `fast` preset.
+
+    **Best for:** Quick questions, everyday searches, and conversational queries that benefit from web context.
+  </Card>
+
+  <Card title="perplexity_research" icon="book">
+    Deep, comprehensive research backed by the Agent API `high` preset. Provides thorough analysis with citations.
+
+    **Best for:** Complex topics requiring detailed investigation, comprehensive reports, and in-depth analysis.
+  </Card>
+
+  <Card title="perplexity_reason" icon="brain">
+    Advanced reasoning and problem-solving backed by the Agent API `medium` preset.
+
+    **Best for:** Logical problems, complex analysis, decision-making, and tasks requiring step-by-step reasoning.
+  </Card>
+</CardGroup>
+
+<Info>
+  For detailed setup instructions, troubleshooting, and proxy configuration, visit our [GitHub repository](https://github.com/perplexityai/modelcontextprotocol).
+</Info>

@@ -1,0 +1,187 @@
+---
+title: "Profiles"
+description: "Run an Agent API request with a reusable, versioned configuration that you save and manage."
+---
+
+## Overview
+
+A profile is a reusable, versioned configuration that you save and manage.
+It bundles the settings that shape a run — model or model fallback chain, system instructions, reasoning effort, tools, and the agent loop step budget — under a single ID.
+Select a profile by ID instead of repeating the full configuration in every request.
+
+A profile is the counterpart to a [preset](/docs/agent-api/presets) that you control.
+A preset is a configuration that Perplexity maintains and tunes.
+A profile is a configuration that you define and version.
+
+|               | Preset                                                                                      | Profile                                       |
+| ------------- | ------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| Owner         | Perplexity                                                                                  | You                                           |
+| Referenced by | Name, for example `preset="low"`                                                            | ID, for example `profile_8Qw3x7tJm2N6pR4`     |
+| Versioning    | Not versioned; the name always resolves to the latest Perplexity-recommended configuration. | Versioned; pin a version or track the latest. |
+| Best for      | Perplexity-optimized defaults for a use case.                                               | A configuration you standardize and control.  |
+
+<Note>
+  If you already use a [preset](/docs/agent-api/presets), a profile is how you save and version that setup.
+  Start from a preset's [current values](/docs/agent-api/presets#current-preset-values), then manage them as a profile so every request references one ID.
+  A request uses either a preset or a profile, not both.
+</Note>
+
+## Add a profile
+
+1. Open [Profiles in the API Portal](https://console.perplexity.ai/project/profiles).
+2. Select **Create profile**.
+3. Set the model, instructions, and tools the profile should use, then save it.
+4. Copy the profile ID.
+5. Add a `profile` entry to the Agent API request. Set `type` to `"custom"` and `id` to the profile ID, and do not set `preset` in the same request.
+
+The run uses the profile's model, instructions, tools, and other settings, so you do not repeat them.
+The following request runs a profile.
+Replace `profile_YOUR_PROFILE_ID` with the ID that you copied.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      profile={
+          "type": "custom",
+          "id": "profile_YOUR_PROFILE_ID",
+      },
+      input="Summarize this week's most important AI research.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    profile: {
+      type: 'custom',
+      id: 'profile_YOUR_PROFILE_ID',
+    },
+    input: "Summarize this week's most important AI research.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "profile": {
+        "type": "custom",
+        "id": "profile_YOUR_PROFILE_ID"
+      },
+      "input": "Summarize this weeks most important AI research."
+    }' | jq
+  ```
+</CodeGroup>
+
+## Override profile settings
+
+A profile supplies the defaults for a run.
+Any parameter you set on the request overrides the profile's value for that field, so you can reuse one profile and adjust a single setting per request.
+For example, pass `model` to run the profile's configuration with a different model, while keeping its instructions, tools, and other settings.
+
+`tools` are the exception: they merge per tool instead of replacing the whole set.
+Listing one tool overrides only that tool's options and leaves the profile's other tools enabled.
+
+## Profile parameters
+
+| Field     | Type   | Required | Description                                                                |
+| --------- | ------ | -------- | -------------------------------------------------------------------------- |
+| `type`    | string | Yes      | Must be `"custom"`.                                                        |
+| `id`      | string | Yes      | The profile ID. 1 to 128 characters.                                       |
+| `version` | string | No       | The version to bind to, or `"latest"`. Omit to bind to the latest version. |
+
+## Versioning
+
+Each version of a profile is immutable: editing a profile creates a new version instead of changing an existing one.
+A request pinned to a specific version always runs the exact same configuration, so only `"latest"` picks up new versions.
+The version is resolved when the request is admitted, so a change made while a request is in flight does not affect that run.
+
+Pin production traffic to a specific version:
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      profile={
+          "type": "custom",
+          "id": "profile_YOUR_PROFILE_ID",
+          "version": "3",
+      },
+      input="Summarize this week's most important AI research.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    profile: {
+      type: 'custom',
+      id: 'profile_YOUR_PROFILE_ID',
+      version: '3',
+    },
+    input: "Summarize this week's most important AI research.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "profile": {
+        "type": "custom",
+        "id": "profile_YOUR_PROFILE_ID",
+        "version": "3"
+      },
+      "input": "Summarize this weeks most important AI research."
+    }' | jq
+  ```
+</CodeGroup>
+
+With `"latest"`, a version uploaded by any Admin immediately changes what your production requests run.
+View version history and download any version in the [API Portal](https://console.perplexity.ai/project/profiles).
+
+## Error handling
+
+A profile problem fails the request with a `4xx` status before the run starts, so handle it like any other request error.
+The cases you may see:
+
+* **The profile names a model you cannot use.** The request fails with `model "<model>" is not supported`. Edit the profile to use a supported model.
+* **The profile ID is wrong, or you cannot access it.** The request fails with `The requested profile does not exist or is not accessible.` Check the ID.
+* **The `version` is not valid.** Use a version that exists, or `"latest"`.
+
+Manage your profiles in [Profiles in the API Portal](https://console.perplexity.ai/project/profiles). If a problem persists, contact [api@perplexity.ai](mailto:api@perplexity.ai).
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Presets" icon="sliders" href="/docs/agent-api/presets">
+    Use a Perplexity-managed configuration by name.
+  </Card>
+
+  <Card title="Model fallback" icon="arrow-right-arrow-left" href="/docs/agent-api/model-fallback">
+    Set a fallback chain so a run continues when a model is unavailable.
+  </Card>
+</CardGroup>

@@ -1,0 +1,130 @@
+---
+title: "Perplexity with n8n"
+description: "Add real-time web search, AI agents, and embeddings to your n8n workflows using the native Perplexity node."
+---
+
+import SonarDeprecationNotice from "/snippets/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+## Overview
+
+n8n ships a native **Perplexity node** with Agent, Search, and Embeddings resources — all configurable from the visual canvas. Models load dynamically from the API, so the dropdown always reflects the latest options.
+
+<Info>
+  **n8n** is a node-based workflow automation platform. It supports both self-hosted and cloud deployments — all examples below work in either. If you're self-hosting, make sure your instance can reach `api.perplexity.ai` outbound. Learn more at [n8n.io](https://n8n.io).
+</Info>
+
+The node supports three resources:
+
+* **Agent** — Third-party models (OpenAI, Anthropic, Google, xAI) with tool-calling and structured output
+* **Search** — Raw ranked web results for your own processing
+* **Embeddings** — Vector generation for RAG and retrieval pipelines
+
+## Prerequisites
+
+* n8n 2.14.0+ (cloud at [app.n8n.cloud](https://app.n8n.cloud) or self-hosted)
+* A Perplexity API key
+
+<Card title="Get API Key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Generate your Perplexity API key from the console.
+</Card>
+
+## Credential Setup
+
+<Steps>
+  <Step title="Open Credentials">
+    In n8n, go to **Settings → Credentials → Add credential**.
+  </Step>
+
+  <Step title="Select Perplexity">
+    Search for **Perplexity API** and select it.
+  </Step>
+
+  <Step title="Add Your Key">
+    Paste your API key and save. The node will reference this credential automatically.
+  </Step>
+</Steps>
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_credentials.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=43dac8012eb71603e45c77afad6959e8" alt="Perplexity credential setup" />
+
+***
+
+## Agent
+
+Use the Agent resource to route through third-party models (OpenAI, Anthropic, Google, xAI) with Perplexity's `web_search` and `fetch_url` tools.
+
+Set **Resource** to `Agent` and configure:
+
+| Parameter               | Description                                                                                 |
+| ----------------------- | ------------------------------------------------------------------------------------------- |
+| **Model**               | Any model from the dynamic dropdown (e.g., `openai/gpt-5.5`, `anthropic/claude-sonnet-4-6`) |
+| **Input**               | Your prompt — supports n8n expressions                                                      |
+| **Tools**               | Select `web_search`, `fetch_url`, or both                                                   |
+| **System Instructions** | Optional system prompt for the agent                                                        |
+| **Response Format**     | Optional JSON schema for structured output                                                  |
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_agent_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=5ead62566997fab45106e72a292e8d92" alt="Agent resource configuration" />
+
+***
+
+## Search
+
+Get raw ranked web results without LLM processing. Set **Resource** to `Search`:
+
+| Parameter         | Description                                 |
+| ----------------- | ------------------------------------------- |
+| **Query**         | The search query — supports n8n expressions |
+| **Recency**       | `day`, `week`, `month`, or `year`           |
+| **Domain Filter** | Limit to specific domains                   |
+| **Language**      | ISO 639-1 language code                     |
+| **Country**       | Two-letter country code                     |
+
+Each result includes `title`, `url`, `snippet`, and `date`.
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_search_results.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=ce3da801cd5fe19dddd11d293084714f" alt="Search resource results" />
+
+***
+
+## Embeddings
+
+Generate vectors for RAG and retrieval pipelines. Set **Resource** to `Embeddings`:
+
+| Parameter | Description                                                        |
+| --------- | ------------------------------------------------------------------ |
+| **Model** | `pplx-embed-v1-4b` (2560 dims) or `pplx-embed-v1-0.6b` (1024 dims) |
+| **Input** | Text to embed — supports n8n expressions                           |
+
+The node also supports contextual embeddings via `POST /v1/contextualizedembeddings` for document-chunk-aware vectors.
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_embeddings_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=3e84f575f042b158214dab7ce8ea6db0" alt="Embeddings resource configuration" />
+
+***
+
+## Error Handling
+
+Use n8n's **Error Trigger** workflow or the built-in **Retry on Fail** setting (node settings → Retry on Fail) to handle transient errors:
+
+* **429 Too Many Requests** — add a **Wait** node with exponential backoff before retrying
+* **401 Unauthorized** — verify your Perplexity API credential is saved correctly
+* **500 errors** — enable Retry on Fail in the node settings
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card title="n8n Docs" icon="book" href="https://docs.n8n.io">
+    Official n8n documentation
+  </Card>
+
+  <Card title="n8n Community" icon="users" href="https://community.n8n.io">
+    Templates, workflows, and community support
+  </Card>
+
+  <Card title="Perplexity API Reference" icon="code" href="/api-reference">
+    Full API reference
+  </Card>
+
+  <Card title="Agent API" icon="sparkles" href="/docs/agent-api/models">
+    Available models and capabilities
+  </Card>
+</CardGroup>

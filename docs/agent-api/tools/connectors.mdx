@@ -1,0 +1,430 @@
+---
+title: "Connectors"
+description: "Use a managed connector from your API Group in an Agent API request."
+---
+
+<Note>
+  **Preview:** Connectors are in preview. Supported services and behavior may change.
+</Note>
+
+## Overview
+
+Connectors are managed integrations for services that your API Group has connected in the [API Portal](https://console.perplexity.ai/group/connectors).
+They use the same tool-calling model as [MCP](/docs/agent-api/tools/mcp), but you do not provide a server URL or an access token in every request.
+Instead, select a connected integration by its connector ID.
+Some connectors also make their credentials available to [Sandbox](/docs/agent-api/tools/sandbox) commands.
+This lets an agent combine service access with code changes and other local work in one run.
+
+## Available connectors
+
+The current set of connectors includes:
+
+| Service      | Connector ID            |
+| ------------ | ----------------------- |
+| GitHub       | `connector_github`      |
+| Slack        | `connector_slack`       |
+| Google Drive | `connector_googledrive` |
+| Datadog      | `connector_datadog`     |
+
+<Note>
+  Don't see the connector you need? Email [api@perplexity.ai](mailto:api@perplexity.ai) to request it. In the meantime, you can connect any remote [MCP server](/docs/agent-api/tools/mcp) to an Agent API request.
+</Note>
+
+## Add a connector
+
+1. Open [Connectors in the API Portal](https://console.perplexity.ai/group/connectors).
+2. Only an API Group administrator can connect a supported service to the API Group.
+3. Copy the connector ID from the service card.
+4. Add a `connector` entry to the Agent API request.
+
+<Note>
+  Connector tools use deferred discovery by default.
+  Set [`max_steps`](/docs/agent-api/building-agents/define-the-run#customize-the-loop-max-steps) high enough to discover and use them.
+</Note>
+
+The following request uses a connected Slack workspace to summarize recent messages about AI.
+Replace `connector_slack` with the connector ID that you copied from the API Portal.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Find and summarize recent messages about AI in my Slack workspace.",
+      max_steps=6,
+      tools=[
+          {
+              "type": "connector",
+              "id": "connector_slack",
+              "server_label": "slack",
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Find and summarize recent messages about AI in my Slack workspace.',
+    max_steps: 6,
+    tools: [
+      {
+        type: 'connector',
+        id: 'connector_slack',
+        server_label: 'slack',
+      },
+    ],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Find and summarize recent messages about AI in my Slack workspace.",
+      "max_steps": 6,
+      "tools": [
+        {
+          "type": "connector",
+          "id": "connector_slack",
+          "server_label": "slack"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+The response `output` array lists the connector's tools, the model's search of that catalog, each tool call, and the final message.
+Connectors are deferred by default, so the model searches the catalog (`tool_search_output`) before it calls a tool.
+
+<Accordion title="Response output (truncated)">
+  ```json theme={null}
+  [
+    {
+      "type": "mcp_list_tools",
+      "id": "mcpl_4826e99b-cae4-4c44-a613-d205823c2bc0",
+      "connector_id": "connector_slack",
+      "server_label": "slack",
+      "tools": [
+        {
+          "name": "slack_search_public",
+          "description": "Searches for messages, files in public Slack channels ...",
+          "input_schema": {
+            "type": "object",
+            "properties": { "query": { "type": "string" } },
+            "required": ["query"]
+          }
+        },
+        {
+          "name": "slack_send_message",
+          "description": "Sends a message to a Slack channel or user ...",
+          "input_schema": {
+            "type": "object",
+            "properties": { "channel_id": { "type": "string" }, "message": { "type": "string" } },
+            "required": ["channel_id", "message"]
+          }
+        }
+      ]
+    },
+    {
+      "type": "tool_search_output",
+      "id": "tso_call_opbSkWX14DwhfWlPdAE9wfH0",
+      "call_id": null,
+      "status": "completed",
+      "execution": "server",
+      "arguments": "{\"paths\":[\"slack\"],\"queries\":[\"search\",\"messages\"]}",
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "slack",
+          "tools": [
+            { "type": "function", "name": "slack_search_public", "description": "..." }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "mcp_call",
+      "id": "call_DUjlg6jMJoU92GMfrmD8SVcS",
+      "connector_id": "connector_slack",
+      "server_label": "slack",
+      "name": "slack_search_public",
+      "arguments": "{\"query\":\"AI\",\"content_types\":\"messages\",\"sort\":\"timestamp\", ...}",
+      "output": "{\"results\": ...}",
+      "error": null
+    },
+    {
+      "type": "message",
+      "id": "msg_...",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        { "type": "output_text", "text": "Here is a summary of recent messages about AI ...", "annotations": [] }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+## Deferred tool discovery
+
+A connector can expose many tools, and loading every schema up front would waste tokens.
+Connector tools are discovered lazily instead: the model receives the connector namespace, searches it, loads only the schemas it needs, and calls them — all automatically.
+You only add the connector to `tools`.
+
+The `mcp_list_tools` item still records the full catalog; deferred discovery controls what enters the model's context, not what the response reports.
+
+## Connector parameters
+
+| Field                | Type   | Required | Description                                                                  |
+| -------------------- | ------ | -------- | ---------------------------------------------------------------------------- |
+| `type`               | string | Yes      | Must be `"connector"`.                                                       |
+| `id`                 | string | Yes      | The connector ID copied from the API Portal.                                 |
+| `server_label`       | string | Yes      | A request-local label for the connector.                                     |
+| `server_description` | string | No       | A model-facing description of the connector namespace.                       |
+| `allowed_tools`      | array  | No       | An exact-name allowlist. Omit or leave empty to expose every available tool. |
+
+## Use connectors in the sandbox
+
+Some connectors make their credentials available to sandbox commands.
+GitHub is a key example.
+
+### GitHub connector
+
+The GitHub connector lets the model use the GitHub tools that belong to your connected GitHub account.
+Pair it with [Sandbox](/docs/agent-api/tools/sandbox) when the task needs the `git` or `gh` CLI.
+
+With both tools enabled, the agent can clone private repositories, inspect and change code, commit changes, push a branch, and create or update a pull request.
+It uses the `git` and `gh` CLIs in the sandbox with the GitHub credentials from the connector.
+The agent can access only repositories and perform only actions that your connected GitHub account permits.
+
+<Info>
+  With the sandbox enabled and no `allowed_tools`, GitHub runs through the CLIs: the response has no `mcp_list_tools` or `mcp_call` items, and failures appear as `git` or `gh` output. Set `allowed_tools` or omit the sandbox to use it as a regular connector with `mcp_call` items.
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  stream = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.",
+      max_steps=12,
+      stream=True,
+      tools=[
+          {"type": "sandbox"},
+          {
+              "type": "connector",
+              "id": "connector_github",
+              "server_label": "github",
+          },
+      ],
+  )
+
+  for event in stream:
+      print(event)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const stream = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.',
+    max_steps: 12,
+    stream: true,
+    tools: [
+      { type: 'sandbox' },
+      {
+        type: 'connector',
+        id: 'connector_github',
+        server_label: 'github',
+      },
+    ],
+  });
+
+  for await (const event of stream) {
+    console.log(event);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -N --no-buffer --fail-with-body https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -H "Accept: text/event-stream" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Clone the GitHub repository perplexityai/perplexity-py. Review README.md and make one small, factual documentation improvement. Do not modify any other files. Report the changed file. Create a pull request with a clear title and return its URL.",
+      "max_steps": 12,
+      "stream": true,
+      "tools": [
+        { "type": "sandbox" },
+        {
+          "type": "connector",
+          "id": "connector_github",
+          "server_label": "github"
+        }
+      ]
+    }' \
+    | awk '/^data: / { sub(/^data: /, ""); sub(/\r$/, ""); if ($0 != "[DONE]") print }' \
+    | jq --unbuffered .
+  ```
+</CodeGroup>
+
+## Connectors and MCP
+
+Both connectors and MCP servers let the Agent API call external tools.
+Use a connector when the integration is already managed for your API Group.
+Use [MCP](/docs/agent-api/tools/mcp) when you need to connect your own remote server and provide its URL and authentication in the request.
+
+|                     | Connector                                                                                                                                | MCP server                                                    |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| Setup               | Connect it once in the API Portal.                                                                                                       | Provide a remote `server_url` in each request.                |
+| Authentication      | Uses the connection configured for the API Group.                                                                                        | Pass request-specific authentication to the remote server.    |
+| Sandbox integration | Some managed connectors make their credentials available to Sandbox commands. For example, use the GitHub connector with `git` and `gh`. | MCP server credentials are not available to Sandbox commands. |
+| Best for            | Supported managed integrations, such as GitHub.                                                                                          | Your own or third-party remote MCP servers.                   |
+
+## Error handling
+
+A connector tool call can fail as an `mcp_call` item with an `error` field.
+This does not fail the request: the run continues and the error is passed to the model in-band, so the model still answers — it just cannot use that connector.
+
+The main case to handle is `AUTH_REQUIRED`: the connector's authorization went stale or an administrator revoked it.
+Your requests keep working — the connector is just unavailable to the model until it is reconnected, which you can do later.
+
+For example:
+
+```json theme={null}
+{
+  "type": "mcp_call",
+  "id": "call_h2rK8I109IvZC038Wcuudzhc",
+  "connector_id": "connector_slack",
+  "server_label": "slack",
+  "name": "slack_search_public",
+  "arguments": "{\"query\":\"AI\",\"content_types\":\"messages\", ...}",
+  "error": "AUTH_REQUIRED"
+}
+```
+
+Because the request still succeeds, this is easy to miss.
+Detect it in your harness and send it to your logging or alerting so an operator can reconnect the connector in the [API Portal](https://console.perplexity.ai/group/connectors).
+
+Your harness can branch on the `error` value:
+
+| Value                      | Meaning                                                   | Suggested handling                                                                         |
+| -------------------------- | --------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `AUTH_REQUIRED`            | The connector's authorization has lapsed or been revoked. | Ask an administrator to reconnect it in the API Portal.                                    |
+| `INVALID_ARGUMENTS`        | The model called the tool with arguments it rejected.     | Recoverable. The error is returned to the model, which can retry with corrected arguments. |
+| `POLICY_DENIED`            | A policy blocked the tool call.                           | Do not retry. The call is not allowed.                                                     |
+| `CONNECTOR_UNAVAILABLE`    | The connector service could not be reached.               | Transient. Retry later.                                                                    |
+| `CONNECTOR_INTERNAL_ERROR` | The connector returned a response that could not be used. | Transient. Retry later.                                                                    |
+| `TOOL_ERROR`               | The tool failed for another reason.                       | Treat as a tool failure.                                                                   |
+
+The `error` field is a free-form string, so treat any other value as a tool failure.
+A connector that is not connected lists no tools (`"tools": []`) and produces no error, so also watch for an empty tool list.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  CONNECTORS_URL = "https://console.perplexity.ai/group/connectors"
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      input="Find and summarize recent messages about AI in my Slack workspace.",
+      max_steps=6,
+      tools=[
+          {
+              "type": "connector",
+              "id": "connector_slack",
+              "server_label": "slack",
+          }
+      ],
+  )
+
+  for item in response.output:
+      if getattr(item, "type", None) != "mcp_call" or not getattr(item, "error", None):
+          continue
+      if item.error == "AUTH_REQUIRED":
+          print(f"Ask an administrator to reconnect the {item.server_label} connector at {CONNECTORS_URL}")
+      else:
+          raise RuntimeError(f"Connector tool {item.name} failed: {item.error}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const CONNECTORS_URL = 'https://console.perplexity.ai/group/connectors';
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    input: 'Find and summarize recent messages about AI in my Slack workspace.',
+    max_steps: 6,
+    tools: [
+      {
+        type: 'connector',
+        id: 'connector_slack',
+        server_label: 'slack',
+      },
+    ],
+  });
+
+  for (const item of response.output) {
+    if (item.type !== 'mcp_call' || !item.error) continue;
+    if (item.error === 'AUTH_REQUIRED') {
+      console.log(`Ask an administrator to reconnect the ${item.server_label} connector at ${CONNECTORS_URL}`);
+    } else {
+      throw new Error(`Connector tool ${item.name} failed: ${item.error}`);
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "input": "Find and summarize recent messages about AI in my Slack workspace.",
+      "max_steps": 6,
+      "tools": [
+        { "type": "connector", "id": "connector_slack", "server_label": "slack" }
+      ]
+    }' \
+    | jq '.output[] | select(.type == "mcp_call" and .error != null) | {connector_id, server_label, name, error}'
+  ```
+</CodeGroup>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="MCP" icon="plug" href="/docs/agent-api/tools/mcp">
+    Connect a remote MCP server that you manage.
+  </Card>
+
+  <Card title="Sandbox" icon="box" href="/docs/agent-api/tools/sandbox">
+    Run code and use the GitHub connector with `git` and `gh`.
+  </Card>
+</CardGroup>

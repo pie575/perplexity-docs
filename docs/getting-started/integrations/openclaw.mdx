@@ -1,0 +1,429 @@
+---
+title: "Perplexity with OpenClaw"
+description: "Use Perplexity as an LLM provider and web search provider in OpenClaw."
+---
+
+import SonarDeprecationNotice from "/snippets/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+## Overview
+
+<u>[OpenClaw](https://openclaw.ai)</u> is an open-source AI agent that runs in your terminal and connects to multiple LLM providers, featuring support for Perplexity as a web search provider for real-time information retrieval.
+
+You can configure OpenClaw to use Perplexity's Agent API models as your agent, and the Perplexity Search API for web search tool calls. This allows you to leverage Perplexity's powerful models and up-to-date search results directly within OpenClaw's agent framework.
+
+<Card title="Get a Perplexity API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Get Key" href="https://console.perplexity.ai/project/keys">
+  Navigate to the API Console and generate a new key to use with OpenClaw.
+</Card>
+
+***
+
+## Search API Setup (Use Perplexity as your Web Search Provider)
+
+Use Perplexity Search API as OpenClaw's web search backend for real-time information retrieval.
+
+<Steps>
+  <Step title="Install the Perplexity plugin">
+    The Perplexity search provider ships as a separate OpenClaw plugin. Install it before you configure a key:
+
+    ```bash theme={null}
+    openclaw plugins install @openclaw/perplexity-plugin
+    openclaw gateway restart
+    ```
+  </Step>
+
+  <Step title="Configure the Search Provider">
+    <Tabs>
+      <Tab title="Interactive CLI (Recommended)">
+        The quickest way, no file editing required:
+
+        ```bash theme={null}
+        openclaw configure --section web
+        ```
+
+        Select **Perplexity** when prompted for a search provider, then paste your API key.
+      </Tab>
+
+      <Tab title="Config File (JSON)">
+        Edit your `openclaw.json` (run `openclaw config file` to locate it):
+
+        ```json theme={null}
+        {
+          "plugins": {
+            "entries": {
+              "perplexity": {
+                "config": {
+                  "webSearch": {
+                    "apiKey": "pplx-..."
+                  }
+                }
+              }
+            }
+          },
+          "tools": {
+            "web": {
+              "search": {
+                "provider": "perplexity"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Environment Variable">
+        Set the environment variable and OpenClaw will auto-detect it:
+
+        <Tabs>
+          <Tab title="macOS / Linux">
+            ```bash theme={null}
+            export PERPLEXITY_API_KEY="pplx-..."
+            ```
+          </Tab>
+
+          <Tab title="Windows (PowerShell)">
+            ```powershell theme={null}
+            setx PERPLEXITY_API_KEY="pplx-..."
+            ```
+          </Tab>
+        </Tabs>
+
+        Or set `PERPLEXITY_API_KEY` in `~/.openclaw/.env` for daemon installs.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Start using OpenClaw with Perplexity Search">
+    Start OpenClaw and ask anything that requires web search:
+
+    ```
+    openclaw
+    > What are the latest developments in quantum computing?
+    ```
+
+    OpenClaw will use Perplexity Search API to retrieve structured results and incorporate them into its response.
+  </Step>
+</Steps>
+
+### Search Tool Parameters
+
+When OpenClaw invokes `web_search` with Perplexity as the provider, these parameters are available:
+
+| Parameter             | Description                                            |
+| --------------------- | ------------------------------------------------------ |
+| `query`               | Search query (required)                                |
+| `count`               | Number of results (1–10, default: 5)                   |
+| `country`             | ISO 3166-1 alpha-2 country code (e.g., `US`, `DE`)     |
+| `language`            | ISO 639-1 language code (e.g., `en`, `fr`)             |
+| `freshness`           | Time filter: `day`, `week`, `month`, or `year`         |
+| `date_after`          | Results published after this date (`YYYY-MM-DD`)       |
+| `date_before`         | Results published before this date (`YYYY-MM-DD`)      |
+| `domain_filter`       | Domain allowlist or denylist (max 20 entries)          |
+| `max_tokens`          | Total content budget (default: 25,000, max: 1,000,000) |
+| `max_tokens_per_page` | Per-page token limit (default: 2,048)                  |
+
+<Tip>
+  Domain filters support allowlists (`["nature.com", "science.org"]`) and denylists (`["-reddit.com", "-pinterest.com"]`), but you cannot mix both in the same request. See the [domain filter guide](/docs/search/filters/domain-filter) for details.
+</Tip>
+
+***
+
+## Agent API Setup (Use Perplexity as your LLM Provider)
+
+Use Perplexity's Agent API to run frontier models from Anthropic, OpenAI, Google, and others through a single API key.
+
+<Steps>
+  <Step title="Get Your API Key">
+    <Card title="Generate API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Get Key" href="https://console.perplexity.ai/project/keys">
+      Navigate to the API Console and generate a new key.
+    </Card>
+  </Step>
+
+  <Step title="Install OpenClaw">
+    If you haven't installed OpenClaw yet:
+
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash theme={null}
+        curl -fsSL https://openclaw.ai/install.sh | bash
+        ```
+      </Tab>
+
+      <Tab title="Windows (PowerShell)">
+        ```powershell theme={null}
+        iwr -useb https://openclaw.ai/install.ps1 | iex
+        ```
+      </Tab>
+    </Tabs>
+
+    For Docker, Podman, Nix, or other installation methods, see the [OpenClaw install documentation](https://docs.openclaw.ai/install).
+  </Step>
+
+  <Step title="Apply the required configuration">
+    Perplexity's Agent API runs its own server-side built-in tools. To use it as an OpenClaw model provider, disable OpenClaw's managed `web_search` in `openclaw.json` so the model uses Perplexity's built-in search instead:
+
+    ```json theme={null}
+    {
+      "tools": {
+        "web": {
+          "search": { "enabled": false }
+        }
+      }
+    }
+    ```
+
+    See [Reserved tool names](#reserved-tool-names) below for the full list of names Perplexity's Agent API reserves for its server-side tools.
+  </Step>
+
+  <Step title="Configure Perplexity as an LLM Provider">
+    <Tabs>
+      <Tab title="Onboarding CLI (Recommended)">
+        The quickest way, no file editing required:
+
+        ```bash theme={null}
+        openclaw onboard \
+          --auth-choice custom-api-key \
+          --custom-base-url "https://api.perplexity.ai/v1" \
+          --custom-api-key "pplx-YOUR_KEY_HERE" \
+          --custom-model-id "anthropic/claude-sonnet-4-6" \
+          --custom-compatibility openai-responses \
+          --custom-provider-id perplexity \
+          --install-daemon
+        ```
+
+        This registers Perplexity as a provider with one model. To add more models, re-run with a different `--custom-model-id` or switch to the config file method.
+
+        You can replace `anthropic/claude-sonnet-4-6` with any model ID from the [Agent API models list](/docs/agent-api/models) to change your default model.
+      </Tab>
+
+      <Tab title="Config File">
+        Edit your `openclaw.json` (run `openclaw config file` to locate it). This declares Perplexity with one starter model and opts into live model discovery, so OpenClaw learns the rest of the Agent API catalog from `GET /v1/models`:
+
+        ```json theme={null}
+        {
+        "agents": {
+          "defaults": {
+            "model": { "primary": "perplexity/anthropic/claude-sonnet-4-6" },
+            "models": { "perplexity/*": {} }
+          }
+        },
+        "tools": {
+          "web": { "search": { "enabled": false } }
+        },
+        "models": {
+          "mode": "merge",
+          "providers": {
+            "perplexity": {
+              "baseUrl": "https://api.perplexity.ai/v1",
+              "apiKey": "${PERPLEXITY_API_KEY}",
+              "api": "openai-responses",
+              "models": [
+                {
+                  "id": "anthropic/claude-sonnet-4-6",
+                  "name": "Claude Sonnet 4.6 (Perplexity)",
+                  "api": "openai-responses",
+                  "reasoning": false,
+                  "input": ["text"],
+                  "cost": { "input": 3.00, "output": 15.00, "cacheRead": 0.30, "cacheWrite": 0 },
+                  "contextWindow": 200000,
+                  "maxTokens": 16384
+                }
+              ]
+            }
+          }
+        }
+        }
+        ```
+
+        Set `PERPLEXITY_API_KEY` in your shell or use OpenClaw's secret storage instead of putting the key in config.
+
+        The `"perplexity/*": {}` entry under `agents.defaults.models` opts into live discovery. After a restart, run `openclaw models list --provider perplexity` to see every model returned by `GET /v1/models`, then reference any of them as `perplexity/<model-id>` (for example `perplexity/openai/gpt-5.4` or `perplexity/anthropic/claude-opus-4-7`). To pin a per-model context window, cost, or capability, add just that model to the `models` array; anything you do not pin is inherited from live discovery.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Start using OpenClaw">
+    Launch OpenClaw and your agent will use Perplexity:
+
+    ```bash theme={null}
+    openclaw
+    ```
+  </Step>
+</Steps>
+
+### Reserved tool names
+
+Perplexity's Agent API reserves these function names for its own server-side built-in tools; do not define custom functions with these names:
+
+* `web_search`
+* `fetch_url`
+* `people_search`
+* `finance_search`
+
+The required configuration in the setup steps above disables OpenClaw's managed `web_search` so the model uses Perplexity's server-side search instead. Perplexity's `web_search` runs inside the model's response, invoked automatically by the model at \$0.0025 per call, and returns grounded results with citations. To force it on for a request, add `{"type": "web_search"}` to the request's `tools` array as a built-in tool rather than a function.
+
+To remove any other reserved-name tool from the outbound tool catalog, disable it through its own config toggle, or use OpenClaw's general tool policy:
+
+```json theme={null}
+{
+  "tools": {
+    "deny": ["web_search"]
+  }
+}
+```
+
+***
+
+## MCP Server Setup (Use Perplexity as a Tool Provider)
+
+OpenClaw can also reach Perplexity through the [Model Context Protocol](https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server), which exposes `perplexity_search`, `perplexity_ask`, `perplexity_research`, and `perplexity_reason` as MCP tools your agent can call. This complements the Agent API setup above: the Agent API drives the model, MCP gives the model access to Perplexity's search and research surfaces.
+
+<Tabs>
+  <Tab title="Remote MCP (Recommended)">
+    Add the hosted MCP server to `openclaw.json`:
+
+    ```json theme={null}
+    {
+      "mcp": {
+        "servers": {
+          "perplexity": {
+            "url": "https://api.perplexity.ai/mcp",
+            "transport": "streamable-http",
+            "headers": {
+              "Authorization": "Bearer ${PERPLEXITY_API_KEY}"
+            }
+          }
+        }
+      }
+    }
+    ```
+
+    Or use the CLI:
+
+    ```bash theme={null}
+    openclaw mcp add perplexity \
+      --url https://api.perplexity.ai/mcp \
+      --transport streamable-http \
+      --header "Authorization=Bearer $PERPLEXITY_API_KEY"
+    openclaw mcp doctor perplexity --probe
+    ```
+
+    OpenClaw resolves `${PERPLEXITY_API_KEY}` from your environment at request time. Do not paste the raw key into config.
+  </Tab>
+
+  <Tab title="Local MCP (stdio)">
+    Run the MCP server locally through `npx` and let OpenClaw manage the child process:
+
+    ```json theme={null}
+    {
+      "mcp": {
+        "servers": {
+          "perplexity": {
+            "command": "npx",
+            "args": ["-y", "@perplexity-ai/mcp-server"],
+            "transport": "stdio",
+            "env": {
+              "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}"
+            }
+          }
+        }
+      }
+    }
+    ```
+
+    Or use the CLI:
+
+    ```bash theme={null}
+    openclaw mcp add perplexity \
+      --command npx \
+      --arg "-y" \
+      --arg "@perplexity-ai/mcp-server" \
+      --env "PERPLEXITY_API_KEY=$PERPLEXITY_API_KEY"
+    openclaw mcp doctor perplexity --probe
+    ```
+
+    Local stdio requires Node.js on the machine running OpenClaw. Prefer the remote MCP server unless you need to run everything offline of Perplexity's edge.
+  </Tab>
+</Tabs>
+
+<Note>
+  The MCP tools have names like `perplexity_search`, so they do not collide with Perplexity's Agent API reserved names. If you use both the Agent API setup and the MCP setup together, keep the `tools.web.search.enabled: false` entry from the Agent API section in place.
+</Note>
+
+<Tip>
+  MCP tools respect OpenClaw's tool profiles and allow/deny policy. Filter which Perplexity tools your agent can call with `mcp.servers.perplexity.toolFilter.include`. See the [OpenClaw MCP guide](https://docs.openclaw.ai/tools/mcp) for the full field list.
+</Tip>
+
+### Agent API Configuration Tips
+
+<AccordionGroup>
+  <Accordion title="API transport must be openai-responses">
+    Perplexity's Agent API primary endpoint is `POST https://api.perplexity.ai/v1/agent`. It also accepts requests at `POST https://api.perplexity.ai/v1/responses` as an [OpenAI-Responses-compatible alias](/docs/agent-api/openai-compatibility), which is what OpenClaw uses when `api` is `"openai-responses"`.
+
+    Set `api: "openai-responses"` at both the provider level and each model entry in `openclaw.json`. Using `"openai-completions"` will not work because the Agent API does not implement `/v1/chat/completions`.
+  </Accordion>
+
+  <Accordion title="Base URL must be exactly https://api.perplexity.ai/v1">
+    Perplexity's Agent API primary endpoint is `POST /v1/agent`, and `POST /v1/responses` is its OpenAI-Responses-compatible alias. OpenClaw's `openai-responses` client sends to whatever base URL you give it with `/responses` appended, so the base URL must be `https://api.perplexity.ai/v1` for OpenClaw to hit the alias at `/v1/responses`.
+
+    | Correct base URL               | Do not use as a base URL                                                                                          |
+    | ------------------------------ | ----------------------------------------------------------------------------------------------------------------- |
+    | `https://api.perplexity.ai/v1` | `https://api.perplexity.ai/v1/agent` (OpenClaw would call `/v1/agent/responses` and get `405 Method Not Allowed`) |
+    |                                | `https://api.perplexity.ai/v1/responses` (OpenClaw would call `/v1/responses/responses` and get `404`)            |
+    |                                | `https://api.perplexity.ai` (missing `/v1`; requests hit `/responses` and get `404`)                              |
+  </Accordion>
+
+  <Accordion title="Model ID format">
+    In the config, model IDs under a provider block omit the provider prefix. The full model reference adds it:
+
+    * Config model ID: `anthropic/claude-sonnet-4-6`
+    * Full model reference: `perplexity/anthropic/claude-sonnet-4-6`
+  </Accordion>
+
+  <Accordion title="Discover models with the `perplexity/*` wildcard">
+    Add `"perplexity/*": {}` to `agents.defaults.models` to have OpenClaw call `GET https://api.perplexity.ai/v1/models` and register every returned model automatically. You keep detailed entries under `models.providers.perplexity.models` only for the ones you want to pin, and the rest fall through to live discovery. Verify with `openclaw models list --provider perplexity`.
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  For the latest model list and pricing, see the [Agent API models page](/docs/agent-api/models) and [pricing page](/docs/getting-started/pricing).
+</Tip>
+
+***
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card title="Agent API Quickstart" icon="robot" href="/docs/agent-api/quickstart">
+    Use third-party models with built-in tools and function calling
+  </Card>
+
+  <Card title="Agent API Models" icon="list" href="/docs/agent-api/models">
+    Full list of available models and pricing
+  </Card>
+
+  <Card title="MCP Server" icon="plug" href="/docs/getting-started/integrations/mcp-server">
+    Perplexity's remote and local MCP servers, tools, and auth
+  </Card>
+
+  <Card title="Perplexity CLI" icon="terminal" href="/docs/cli/overview">
+    Terminal companion for search and page snippets from shell or agent scripts
+  </Card>
+
+  <Card title="Search API Quickstart" icon="search" href="/docs/search/quickstart">
+    Full Perplexity Search API documentation
+  </Card>
+
+  <Card title="OpenAI Compatibility" icon="plug" href="/docs/agent-api/openai-compatibility">
+    How the Agent API works with OpenAI-compatible clients
+  </Card>
+
+  <Card title="OpenClaw Documentation" icon="book" href="https://docs.openclaw.ai">
+    OpenClaw's official documentation
+  </Card>
+
+  <Card title="API Console" icon="key" href="https://console.perplexity.ai">
+    Generate and manage your API keys
+  </Card>
+</CardGroup>

@@ -1,0 +1,326 @@
+---
+title: "Perplexity CLI"
+description: "Install and use Perplexity's pplx command-line interface for web search and query-relevant page snippets from your terminal or coding agent."
+---
+
+The `pplx` CLI returns structured JSON from the Perplexity Search API, making it useful for shell pipelines, interactive terminal work, and coding agents that need current web results or query-relevant page snippets.
+
+## Install
+
+Open the agent in your project and send it this:
+
+```text wrap theme={null}
+Read https://github.com/perplexityai/api-platform-developers/blob/main/skills/pplx-cli/SKILL.md and install this skill, then use it to search the web from my terminal.
+```
+
+Without an agent, run the installer yourself:
+
+```bash theme={null}
+curl -fsSL https://github.com/perplexityai/perplexity-cli/releases/latest/download/install.sh | sh
+```
+
+## Authenticate
+
+Every command needs a [Perplexity API key](https://console.perplexity.ai/project/keys).
+Choose one authentication method:
+
+<Tabs>
+  <Tab title="Environment variable">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Interactive login">
+    ```bash theme={null}
+    pplx auth login
+    ```
+  </Tab>
+</Tabs>
+
+## Search the web
+
+```bash theme={null}
+pplx search web "what is a bloom filter" -n 2
+```
+
+<Accordion title="Response">
+  ```json wrap theme={null}
+  {
+    "total": 2,
+    "hits": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bloom_filter",
+        "title": "Bloom filter",
+        "domain": "en.wikipedia.org",
+        "snippet": "In computing, a **Bloom filter** is a space-efficient probabilistic data structure, conceived by Burton Howard ...",
+        "summary": "In computing, a **Bloom filter** is a space-efficient probabilistic data structure, conceived by Burton Howard ...",
+        "date": "2004-04-17",
+        "last_updated": "2026-07-08",
+        "trust": {
+          "level": 2,
+          "name": "trusted",
+          "description": "is trusted for community-edited general knowledge and reference articles across education, science, history, and many non-controversial topics worldwide."
+        }
+      },
+      {
+        "url": "https://systemdesign.one/bloom-filters-explained/",
+        "title": "Bloom Filters Explained - System Design",
+        "domain": "systemdesign.one",
+        "snippet": "## What is a bloom filter?\nA Bloom filter is a space-efficient probabilistic data structure that is used to te ...",
+        "summary": "## What is a bloom filter?\nA Bloom filter is a space-efficient probabilistic data structure that is used to te ...",
+        "date": "2023-03-06",
+        "last_updated": "2026-07-13",
+        "trust": {
+          "level": 1,
+          "name": "credible",
+          "description": "is credible for personally authored software system design case studies and interview preparation content without formal institutional peer review."
+        }
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+<Info>
+  `-n` defaults to `10`.
+  Run `pplx search web --help` for the full flag list and a summary of the input and output shapes.
+</Info>
+
+### Filter results
+
+These flags scope a search.
+They are the Search API filters, so their behavior and limits are identical — see [domain filter](/docs/search/filters/domain-filter) and [date and time filters](/docs/search/filters/date-time-filters) for the details.
+
+```bash theme={null}
+pplx search web "AI inference hardware" \
+  --domains arxiv.org,nvidia.com \
+  --published-after-date 07/01/2026 \
+  -n 5
+```
+
+| Flag                      | Format                                 | Description                                 | Example                                   |
+| ------------------------- | -------------------------------------- | ------------------------------------------- | ----------------------------------------- |
+| `--domains`               | Comma-separated hostnames              | Return results only from these domains      | `--domains arxiv.org,nvidia.com`          |
+| `--excluded-domains`      | Comma-separated hostnames              | Drop results from these domains             | `--excluded-domains reddit.com,quora.com` |
+| `--published-after-date`  | `MM/DD/YYYY`                           | Published on or after this date             | `--published-after-date 07/01/2026`       |
+| `--published-before-date` | `MM/DD/YYYY`                           | Published on or before this date            | `--published-before-date 07/31/2026`      |
+| `--updated-after-date`    | `MM/DD/YYYY`                           | Last modified on or after this date         | `--updated-after-date 07/01/2026`         |
+| `--updated-before-date`   | `MM/DD/YYYY`                           | Last modified on or before this date        | `--updated-before-date 07/31/2026`        |
+| `--recency-filter`        | `hour`, `day`, `week`, `month`, `year` | Relative window instead of explicit dates   | `--recency-filter week`                   |
+| `--country`               | ISO 3166-1 alpha-2 code                | Region the search runs for, `US` by default | `--country DE`                            |
+
+<Note>
+  `--recency-filter` cannot be combined with `--published-after-date` or `--published-before-date`.
+  That request fails with `BAD_REQUEST`.
+</Note>
+
+### Ask the same question several ways
+
+Extra positional queries are rephrasings of one question, not separate searches.
+The CLI still returns a single ranked result set, but wording the question more than one way surfaces pages that only match the phrasing you did not think of first:
+
+```bash theme={null}
+pplx search web \
+  "kubernetes pod OOMKilled causes" \
+  "why does k8s keep killing my pod with OOMKilled"
+```
+
+### Save full results
+
+Save the complete result while keeping stdout small:
+
+```bash theme={null}
+pplx search web "kubernetes pod OOMKilled causes" \
+  --output-dir out \
+  --stdout-preview=200
+```
+
+The full response is written under `out/web/`, and stdout includes its path in `saved_to`.
+`--stdout-preview` only truncates stdout when you also set `--output-dir` or `PPLX_OUTPUT_DIR`.
+Cut strings end in `...<truncated>` and the response gains a top-level `"truncated": true`.
+
+### Search errors
+
+A search either succeeds or fails outright: on failure nothing reaches stdout and the JSON error object goes to stderr.
+The search-specific code is `BAD_REQUEST`, which the service returns when the filters contradict each other, as with `--recency-filter` alongside a publication-date bound.
+Everything else you can hit here is a [common error](#handle-errors).
+
+## Generate query-relevant snippets
+
+Extract the passages of a page that are relevant to a query, instead of retrieving the whole page:
+
+```bash theme={null}
+pplx content snippets "how does a bloom filter decide set membership" \
+  https://en.wikipedia.org/wiki/Bloom_filter
+```
+
+<Accordion title="Response">
+  ```json wrap theme={null}
+  {
+    "results": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bloom_filter",
+        "text": "In computing, a **Bloom filter** is a space-efficient probabilistic data structure, conceived by Burton Howard Bloom in 1970, that is used to test whether an element is a member of a set. False positive matches are possible, but false negatives are not ...",
+        "tokens_count": 1047
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+`text` keeps only the query-relevant passages of the page; elided regions in between are marked with the `…` character.
+
+<Info>
+  `content snippets` requires CLI v0.2.3 or later.
+  On an older binary, run `pplx update` first.
+</Info>
+
+<Note>
+  `pplx content fetch` is deprecated and will stop working; use `content snippets`.
+</Note>
+
+### Cover several pages in one call
+
+Extra positional URLs are additional pages, not rephrasings: unlike `pplx search web`, where extra positional arguments reword one question, each URL here is snipped independently against the same query.
+One call takes up to 50 URLs:
+
+```bash theme={null}
+pplx content snippets "bloom filter false positive rate" \
+  https://en.wikipedia.org/wiki/Bloom_filter \
+  https://systemdesign.one/bloom-filters-explained/ \
+  --max-tokens-per-page 256
+```
+
+<Accordion title="Response">
+  ```json wrap theme={null}
+  {
+    "results": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bloom_filter",
+        "text": "More generally, fewer than 10 bits per element are required for a 1% false positive probability, independent of the size or number of elements in the set.\n\n…\n\nIf all are 1, then either the element is in the set, *or* the bits have by chance been set to 1 during the insertion of other elements, resulting in a false positive. ...",
+        "tokens_count": 261
+      },
+      {
+        "url": "https://systemdesign.one/bloom-filters-explained/",
+        "text": "### Bloom filter false positive\n\nIn Figure 5, the bloom filter is queried to check the membership of item *green*, which is not a member of the bloom filter. ...",
+        "tokens_count": 262
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+### Budget the tokens
+
+Two flags cap how much text comes back.
+
+| Flag                    | Range       | Default                 | Description                                                                  |
+| ----------------------- | ----------- | ----------------------- | ---------------------------------------------------------------------------- |
+| `--max-tokens`          | `1`–`16384` | `4096`                  | Maximum total tokens across all snippets                                     |
+| `--max-tokens-per-page` | `1`–`4096`  | `min(1024, max_tokens)` | Maximum tokens for any single page's snippet; must not exceed `--max-tokens` |
+
+Budgets are approximate: a snippet can run a few tokens over its cap, as the `tokens_count` values above show.
+
+### Snippet errors
+
+`pplx content snippets` reports failure per URL, not per command.
+A page that cannot be snipped does not fail the run: the command still exits `0`, and that URL's result carries an `error` message with no `text`.
+
+```bash theme={null}
+pplx content snippets "example domain reserved documentation" \
+  https://www.iana.org/help/example-domains \
+  https://www.example.com/nonexistent/
+```
+
+<Accordion title="Response">
+  ```json wrap theme={null}
+  {
+    "results": [
+      {
+        "url": "https://www.iana.org/help/example-domains",
+        "text": "1. Instructions and Guides\n\n# Example Domains\n\nAs described in RFC 2606 and RFC 6761, a number of domains such as example.com and example.org are maintained for documentation purposes. ...",
+        "tokens_count": 152
+      },
+      {
+        "url": "https://www.example.com/nonexistent/",
+        "error": "no snippet could be generated under the requested token budget"
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+Check every result for `error` before trusting its `text`, because a successful invocation does not mean every page produced a snippet.
+
+### Keep large responses out of stdout
+
+Snippets across many URLs still add up.
+`--output-dir` writes the full response under `<dir>/snippets/`, and `--stdout-preview` truncates the long strings on stdout:
+
+```bash theme={null}
+pplx content snippets "how does a bloom filter decide set membership" \
+  https://en.wikipedia.org/wiki/Bloom_filter \
+  --output-dir out \
+  --stdout-preview=200
+```
+
+<Accordion title="Response">
+  ```json wrap theme={null}
+  {
+    "results": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bloom_filter",
+        "text": "In computing, a **Bloom filter** is a space-efficient probabilistic data structure, conceived by Burton Howard Bloom in 1970, that is used to test whether an element is a member of a set. False positi...<truncated>",
+        "tokens_count": 1047
+      }
+    ],
+    "saved_to": "out/snippets/c6989ad7.json",
+    "truncated": true
+  }
+  ```
+</Accordion>
+
+Stdout carries the saved path in `saved_to` plus `"truncated": true`, so the terminal stays readable while the complete text sits on disk.
+
+## Handle errors
+
+These are the failures common to every `pplx` command.
+A failed command writes one JSON error object to stderr:
+
+```json theme={null}
+{
+  "error": {
+    "code": "AUTHENTICATION",
+    "message": "...",
+    "command": "search.web",
+    "hint": "Set the PERPLEXITY_API_KEY environment variable"
+  }
+}
+```
+
+Branch on `error.code`.
+
+<Accordion title="Error codes">
+  | Code                                         | Raised when                                                                                 |
+  | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+  | `AUTHENTICATION`                             | No key is configured, or the key is invalid                                                 |
+  | `FORBIDDEN`                                  | The key does not have access to what you requested                                          |
+  | `RATE_LIMIT`                                 | You are over your rate limit                                                                |
+  | `BAD_REQUEST`                                | The service rejected the request, for example `--recency-filter` combined with a date bound |
+  | `VALIDATION`                                 | The service rejected a field value                                                          |
+  | `NOT_FOUND`                                  | The requested resource does not exist                                                       |
+  | `TIMEOUT`                                    | The request took too long                                                                   |
+  | `CONNECT`                                    | The CLI could not reach the API                                                             |
+  | `INTERNAL_SERVER`                            | The service failed                                                                          |
+  | `UNKNOWN_ARGUMENT`                           | The flag does not exist on this command                                                     |
+  | `INVALID_VALUE`, `VALUE_VALIDATION`          | A flag value is malformed or out of range                                                   |
+  | `MISSING_REQUIRED_ARGUMENT`, `MISSING_QUERY` | A required argument or the query is missing                                                 |
+  | `ARGUMENT_ERROR`                             | Any other argument-parsing failure                                                          |
+</Accordion>
+
+Run `pplx <command> --help` before assuming that a flag exists; CLI output is already JSON, so no `--json` flag is needed.
+
+## Next steps
+
+See the [`perplexity-cli` repository](https://github.com/perplexityai/perplexity-cli) for release notes, manual installation, and uninstall instructions.

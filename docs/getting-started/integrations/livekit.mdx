@@ -1,0 +1,114 @@
+---
+title: "Perplexity with LiveKit Agents"
+description: "Use Perplexity's Agent API as the LLM brain of a LiveKit voice agent."
+---
+
+import SonarDeprecationNotice from "/snippets/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+## Overview
+
+Perplexity's [Agent API](/docs/agent-api/quickstart) is compatible with the OpenAI Responses API, so it works as a drop-in LLM for [LiveKit Agents](https://docs.livekit.io/agents/) through `livekit-plugins-openai`'s `openai.responses.LLM` class, pointed at Perplexity's base URL.
+
+<Info>
+  **LiveKit Agents** is an open-source framework for building realtime voice and multimodal AI agents. For new integrations, use the Perplexity **Agent API** via `openai.responses.LLM` — not the `livekit-plugins-perplexity` plugin or `openai.LLM.with_perplexity()`, which both call the legacy Sonar Chat Completions endpoint. Learn more at [livekit.io](https://livekit.io).
+</Info>
+
+## Installation
+
+```bash theme={null}
+pip install "livekit-agents" "livekit-plugins-openai"
+```
+
+## API Key Setup
+
+Set your Perplexity API key as an environment variable and pass it to the constructor:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="Get API Key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Generate your API key from the Perplexity dashboard.
+</Card>
+
+## Quick Start
+
+Use `openai.responses.LLM` anywhere a LiveKit `AgentSession` expects an LLM:
+
+```python theme={null}
+import os
+
+from livekit.agents import Agent, AgentSession
+from livekit.plugins import openai, silero
+
+session = AgentSession(
+    llm=openai.responses.LLM(
+        model="openai/gpt-5.6-sol",
+        base_url="https://api.perplexity.ai/v1",   # SDK appends /responses -> POST /v1/responses
+        api_key=os.environ["PERPLEXITY_API_KEY"],  # required: constructor does not read PERPLEXITY_API_KEY
+    ),
+    stt=openai.STT(),
+    tts=openai.TTS(),
+    vad=silero.VAD.load(),
+)
+
+agent = Agent(
+    instructions="You are a helpful voice assistant. Use web search to answer with up-to-date information.",
+    tools=[openai.tools.WebSearch()],  # Perplexity's built-in web_search tool
+)
+
+# Run the session inside your LiveKit room entrypoint
+```
+
+Because the Agent API is OpenAI-Responses-compatible, the OpenAI plugin talks to `https://api.perplexity.ai/v1` with no other changes.
+
+## Configuration
+
+`openai.responses.LLM` needs two settings to target Perplexity - `base_url` and an explicit `api_key` (the constructor does not read `PERPLEXITY_API_KEY` on its own):
+
+```python theme={null}
+import os
+
+from livekit.plugins import openai
+
+llm = openai.responses.LLM(
+    model="openai/gpt-5.6-sol",
+    base_url="https://api.perplexity.ai/v1",
+    api_key=os.environ["PERPLEXITY_API_KEY"],
+)
+```
+
+Perplexity's built-in tools (like `web_search`, shown in the Quick Start) attach to the `Agent`, not to the LLM.
+
+## Available Models
+
+The integration works with any model exposed through the Perplexity Agent API, addressed as `provider/model` (for example `openai/gpt-5.6-sol`). See the full list on our [models page](/docs/agent-api/models).
+
+## Links & Resources
+
+<CardGroup cols={2}>
+  <Card title="LiveKit Agents Docs" icon="book" href="https://docs.livekit.io/agents/">
+    Build realtime voice and multimodal agents with LiveKit.
+  </Card>
+
+  <Card title="OpenAI Plugin Source" icon="brand-github" href="https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-openai">
+    The `livekit-plugins-openai` source, including the Responses `LLM`.
+  </Card>
+
+  <Card title="Agent API Quickstart" icon="bolt" href="/docs/agent-api/quickstart">
+    Request, response, and tool contract used above.
+  </Card>
+
+  <Card title="Agent API Models" icon="sparkles" href="/docs/agent-api/models">
+    Available models and pricing.
+  </Card>
+</CardGroup>
+
+## Support
+
+Need help with the integration?
+
+* Browse the [LiveKit Agents documentation](https://docs.livekit.io/agents/)
+* Review our [FAQ](/docs/resources/faq)
