@@ -1,0 +1,331 @@
+---
+title: "Analytics API"
+description: "無料の組織スコープ API key を使って、組織の Perplexity 利用状況分析をプログラムから照会します"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+Analytics API を使うと、Perplexity Enterprise の組織は Perplexity 全体の組織利用状況データにプログラムからアクセスできます。クレジット、クエリ数、アクティブメンバー、コネクター、アーティファクト、スキル、スペース、ワークフロー、タスク実行時間といった指標を、BI ツールや社内レポートに取り込める時系列データ (バケット単位) として取得できます。クレジット使用量とクエリ数は[メンバー単位](#per-member-usage)に分解することも可能です。
+
+Analytics のリクエストは無料で、API クレジットを消費しません。
+
+<Info>
+  この API は Perplexity Enterprise の組織でご利用いただけます。以下で説明する Analytics API のトグルが表示されない場合、お使いの組織ではまだこの機能が有効になっていない可能性があります。Perplexity の担当者にお問い合わせください。
+</Info>
+
+<div id="getting-access">
+  ## アクセス権の取得
+</div>
+
+アクセス権は、組織の管理者が Perplexity ウェブアプリから管理します。
+
+<Steps>
+  <Step title="Analytics API を有効化する">
+    Perplexity ウェブアプリで組織の **Computer** 設定を開き、**Analytics** セクションに移動します。**Analytics API** をオンにすると、組織に API アクセスが割り当てられます。
+  </Step>
+
+  <Step title="API key を生成する">
+    トグルの下に表示される行で **Generate key** を選択します。
+  </Step>
+</Steps>
+
+分析用 API key には次のような特性があります。
+
+* **組織単位・管理者管理** — key は作成した管理者個人ではなく、組織に帰属します。組織の管理者であれば誰でも現在の key を確認し、再生成できます。
+* **有効な key は 1 つのみ** — 組織で有効な分析用 key は最大 1 つです。再生成すると、以前の key は失効します。
+* **分析専用** — この key で認証できるのは分析エンドポイントのみです。他の Perplexity API は呼び出せず、課金も紐づいていません。
+* **無効化すると失効** — Analytics API のトグルをオフにすると、key は完全に失効します。
+
+<div id="authentication">
+  ## 認証
+</div>
+
+キーをベアラートークンとして渡します。
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v1/analytics/computer/usage?dataset=credit_usage&start_time=1746057600" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+<div id="querying-usage">
+  ## 使用量のクエリ
+</div>
+
+`GET /v1/analytics/computer/usage` は、1回のリクエストにつき、単一のデータセットに対する時系列を1つ返します。
+
+<div id="parameters">
+  ### パラメータ
+</div>
+
+| パラメータ          | 必須  | 説明                                                                                                                                                             |
+| -------------- | --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`      | はい  | `credit_usage`、`query_volume`、`daily_active_users`、`connectors`、`artifacts`、`skills`、`spaces`、`workflows`、`task_durations` のいずれか。[データセット](#datasets)を参照してください。 |
+| `start_time`   | はい  | 期間の開始。Unix 秒 (UTC) 。この値を含みます。バケットのグリッドに切り下げられます。                                                                                                               |
+| `end_time`     | いいえ | 期間の終了。Unix 秒 (UTC) 。この値を含みません。既定は現在時刻です。未来の値は現在時刻に丸められます。                                                                                                      |
+| `bucket_width` | いいえ | `1d` (既定) または `1h`。バケットは UTC のグリッドに揃えられます。`query_volume` と `daily_active_users` は `1d` のみ指定できます。                                                               |
+| `limit`        | いいえ | 1 ページあたりのバケット数。`1d`: 既定 7、最大 31。`1h`: 既定 24、最大 168。                                                                                                            |
+| `page`         | いいえ | 前回のレスポンスの `next_page` から得られる不透明なページネーションカーソル。発行時と同じクエリパラメータと組み合わせた場合にのみ有効です。                                                                                   |
+| `user_email`   | いいえ | 結果を組織内の特定のメンバー 1 名に限定します。`query_volume` および `daily_active_users` では利用できません。[メンバーによるフィルタリング](#filtering-by-member)を参照してください。                                    |
+
+<div id="datasets">
+  ### データセット
+</div>
+
+データセットごとに測定対象が異なります。ほとんどはバケット幅とメンバーフィルターの両方を指定できますが、`query_volume` と `daily_active_users` は組織全体で日次に集計されるため、どちらも指定できません。
+
+| データセット               | カウント対象              | 内訳軸                                                | 粒度と範囲         |
+| -------------------- | ------------------- | -------------------------------------------------- | ------------- |
+| `credit_usage`       | クレジット               | `Model`、`Credit Source`                            | `1d` または `1h` |
+| `query_volume`       | クエリ                 | `Feature`、`Model`、`Model Family`、`Project`、`Comet` | `1d`、組織単位のみ   |
+| `daily_active_users` | その日にアクティブだったメンバーの実数 | なし                                                 | `1d`、組織単位のみ   |
+| `connectors`         | スレッド                | `Connector`                                        | `1d` または `1h` |
+| `artifacts`          | スレッド                | `Artifact Type`                                    | `1d` または `1h` |
+| `skills`             | スレッド                | `Skill`                                            | `1d` または `1h` |
+| `spaces`             | スレッド                | `Space`                                            | `1d` または `1h` |
+| `workflows`          | スレッド                | `Workflow`                                         | `1d` または `1h` |
+| `task_durations`     | 完了したスレッド            | `Task Duration`                                    | `1d` または `1h` |
+
+日次データセットに対して `bucket_width=1h` を指定した場合や、組織単位のみのデータセットに対して `user_email` を指定した場合は、空のシリーズではなく `400` が返されます。メンバーごとのクエリ数を取得するには、[v2 エンドポイント](#per-member-usage)を使用してください。
+
+<div id="response">
+  ### レスポンス
+</div>
+
+```json theme={null}
+{
+  "categories": ["Model", "Credit Source"],
+  "data": [
+    {
+      "start_time": 1746057600,
+      "end_time": 1746144000,
+      "count": 350,
+      "by_categories": {
+        "Model": [
+          { "category": "claude-opus-4-8", "count": 210 },
+          { "category": "claude-sonnet-4-6", "count": 120 }
+        ],
+        "Credit Source": [
+          { "category": "paid", "count": 250 },
+          { "category": "promo", "count": 80 }
+        ]
+      }
+    }
+  ],
+  "has_more": false,
+  "next_page": null
+}
+```
+
+* `categories` は、そのデータセットが公開する内訳軸を正規の表示順で列挙します ([Datasets](#datasets) を参照) 。ほとんどのデータセットは軸を1つ持ち、`credit_usage` は2つ、`query_volume` は5つ、`daily_active_users` は軸を持ちません (`categories` は `[]` となり、各バケットの `by_categories` は `{}` になります) 。
+* `data` には、そのページの対象期間に含まれるすべてのバケットが時系列順で格納されます。データのないバケットは `count: 0` となり、`by_categories` 内の各軸には空のリストが入ります。
+* `by_categories` は、各軸のラベルをそのバケットにおける内訳に対応付けます。軸内のカテゴリは、そのデータセットのディメンション値です。`connectors` ではコネクター名、`artifacts` ではアーティファクトの種類、`task_durations` では所要時間の帯、`credit_usage` の `Credit Source` では `paid`/`promo`、`credit_usage` の `Model` では model 名、`spaces`/`skills`/`workflows` ではメンバーが各項目に付けたタイトルとなります。
+* `query_volume` では、`Feature` がすべてのクエリを `Search` または `Computer` に振り分け、`Model`/`Model Family` はそのクエリに応答した model を示します (`Model` は選択された model そのもの、`Model Family` はより粗い分類です) 。`Project` と `Comet` は互いに重複するサブセットであり、分割ではありません。プロジェクト内で実行されたクエリは同時に `Search` または `Computer` のクエリでもあるため、これらの軸の合計は `count` と一致しません。
+* `credit_usage` では、`count` がいずれか1つの内訳の合計を上回ることがあります。カテゴリが割り当てられていない使用量は、合計には計上されますが内訳には含まれないためです。
+
+<div id="time-windows-and-buckets">
+  ### 期間とバケット
+</div>
+
+この API が返すのは**完全な UTC グリッドバケットのみ**です。
+
+* `start_time` は該当バケットの開始時刻まで切り下げられるため、最初のバケットにはリクエストした開始時刻より前の使用量が含まれることがあります。
+* `end_time` は排他的で、現在時刻を上限としたうえで切り下げられます。進行中のバケットが返されることはありません。`bucket_width=1d` の場合、当日のバケットは含まれません。日中のデータが必要な場合は `1h` を使用してください。
+* 有効な期間であっても完全なバケットが 1 つも含まれない場合は、`data` が空の状態で `200` が返されます。
+
+<Note>
+  **データの鮮度について。** 分析ストアの同期は定期的に行われ、リアルタイムではありません。直近のバケットで `count` が `0` になっている場合、使用量がゼロなのではなく、データがまだ同期されていないだけの可能性があります。`has_more` が `false` であれば、現時点で取得可能なデータの終端に達しています。新しいバケットは、時間をおいて再度ポーリングしてください。
+</Note>
+
+<div id="pagination">
+  ### ページネーション
+</div>
+
+対象期間が `limit` を超える数のバケットにまたがる場合、レスポンスに `has_more: true` と `next_page` カーソルが設定されます。このカーソルを `page` として渡し、他のパラメータはすべて同一のままにしてください。カーソルは厳密に検証されるため、異なるパラメータとともに使用したカーソルは `400` を返します。
+
+```python theme={null}
+import requests
+
+BASE_URL = "https://api.perplexity.ai/v1/analytics/computer/usage"
+HEADERS = {"Authorization": "Bearer YOUR_API_KEY"}
+
+params = {
+    "dataset": "credit_usage",
+    "start_time": 1746057600,
+    "bucket_width": "1d",
+}
+
+buckets = []
+while True:
+    response = requests.get(BASE_URL, headers=HEADERS, params=params)
+    response.raise_for_status()
+    payload = response.json()
+    buckets.extend(payload["data"])
+    if not payload["has_more"]:
+        break
+    params["page"] = payload["next_page"]
+
+print(f"Fetched {len(buckets)} buckets")
+```
+
+<div id="filtering-by-member">
+  ### メンバー別のフィルタリング
+</div>
+
+`user_email` を指定すると、時系列データを組織内の特定のメンバー 1 人に絞り込めます。
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v1/analytics/computer/usage?dataset=credit_usage&start_time=1746057600&user_email=member@example.com" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+`query_volume` と `daily_active_users` を除くすべてのデータセットは `user_email` を受け付けます。この 2 つは組織単位で集計されるため、指定すると `400` を返して拒否します。メンバー単位のクエリ数を取得する場合は、[v2 エンドポイント](#per-member-usage)を使用してください。
+
+メールアドレスは、組織の現メンバーのものである必要があります。それ以外の値は、Perplexity アカウントが存在しないメールアドレスも含め、すべて同じ汎用的な `400` を返します。
+
+```json theme={null}
+{
+  "error": {
+    "message": "user_email does not match a member of this organization.",
+    "type": "invalid_request",
+    "code": 400
+  }
+}
+```
+
+<div id="per-member-usage">
+  ## メンバー単位の使用状況
+</div>
+
+`GET /v2/analytics/computer/usage` は、データセットを組織全体の合計ではなく**メンバー単位**に分解して返します。レスポンスは日次のバケットで構成され、各バケットにはその日に使用のあったメンバーごとに1行が、メールアドレスをキーとして並びます。API key、エラーエンベロープ、制限は v1 と同じです。
+
+現時点でメンバー単位のグルーピングに対応しているデータセットは、日次粒度で次の2つです。
+
+* `credit_usage` — メンバーのクレジット。v1 と同じ `Model` および `Credit Source` の内訳を含みます。
+* `query_volume` — メンバーのクエリ。`Feature`、`Project`、`Comet` の内訳を含みます。
+
+`group_by` はパラメータとして定義されているため、破壊的変更を伴わずに後からグルーピングを追加できます。
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v2/analytics/computer/usage?dataset=credit_usage&group_by=user_email&start_time=1746057600" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+<div id="parameters-2">
+  ### パラメータ
+</div>
+
+| パラメータ        | 必須  | 説明                                                                     |
+| ------------ | --- | ---------------------------------------------------------------------- |
+| `dataset`    | はい  | `credit_usage` または `query_volume` — 現時点でメンバー単位のグルーピングに対応しているデータセットです。  |
+| `group_by`   | はい  | `user_email` を指定してください — 現時点で唯一のグルーピングです。                              |
+| `start_time` | はい  | 期間の開始。unix 秒 (UTC) 。この値を含みます。日単位のグリッドに切り下げられます。                        |
+| `end_time`   | いいえ | 期間の終了。unix 秒 (UTC) 。この値は含みません。既定は現在時刻で、未来の値は現在時刻に丸められます。               |
+| `limit`      | いいえ | 1 ページあたりのメンバー行数。既定は 50、最大は 100。1 ページが複数日にまたがる場合があります。                  |
+| `page`       | いいえ | 前回のレスポンスの `next_page` から取得した不透明なページネーションカーソル。発行時と同じクエリパラメータの場合にのみ有効です。 |
+
+<div id="response-2">
+  ### レスポンス
+</div>
+
+```json theme={null}
+{
+  "categories": ["Model", "Credit Source"],
+  "data": [
+    {
+      "start_time": 1746057600,
+      "end_time": 1746144000,
+      "results": [
+        {
+          "user_email": "alice@example.com",
+          "count": 900,
+          "by_categories": {
+            "Model": [{ "category": "claude-opus-4-8", "count": 900 }],
+            "Credit Source": [{ "category": "paid", "count": 900 }]
+          }
+        },
+        {
+          "user_email": "bob@example.com",
+          "count": 500,
+          "by_categories": {
+            "Model": [{ "category": "claude-sonnet-4-6", "count": 500 }],
+            "Credit Source": [{ "category": "promo", "count": 500 }]
+          }
+        }
+      ]
+    }
+  ],
+  "has_more": true,
+  "next_page": "eyJwayI6ICJPUkcjLi4uIn0="
+}
+```
+
+* 各 `data` エントリは UTC の 1 日を表し、`results` にはその日に利用のあったメンバーごとに 1 行が `(day, member)` の順で格納されます。利用のない日は空の状態で返されるのではなく、省略されます。
+* `user_email` はメンバーを識別します。`count` は `dataset` に応じて、その日のメンバーのクレジット数またはクエリ数を表します。`by_categories` はそのデータセットの軸 (レスポンスのトップレベルの `categories` に列挙されます) を保持します。
+* 期間とバケットのセマンティクスは v1 の `1d` モードと同じで、完全な UTC 日のみが対象となり、同じ[鮮度](#time-windows-and-buckets)に関する注意点が適用されます。
+
+<div id="paginating-members">
+  ### メンバーのページネーション
+</div>
+
+v2 は日単位ではなく **メンバー行** 単位でページネーションします。1 ページが複数日にまたがることもあり、各メンバーの 1 日分が `limit` に対して 1 行としてカウントされます。`has_more` が `false` になるまでページを取得し、その際は `next_page` を `page` として渡し、他のパラメータはすべて変更しないでください:
+
+```python theme={null}
+import requests
+
+BASE_URL = "https://api.perplexity.ai/v2/analytics/computer/usage"
+HEADERS = {"Authorization": "Bearer YOUR_API_KEY"}
+
+params = {
+    "dataset": "credit_usage",
+    "group_by": "user_email",
+    "start_time": 1746057600,
+}
+
+days = []
+while True:
+    response = requests.get(BASE_URL, headers=HEADERS, params=params)
+    response.raise_for_status()
+    payload = response.json()
+    days.extend(payload["data"])
+    if not payload["has_more"]:
+        break
+    params["page"] = payload["next_page"]
+
+print(f"Fetched {len(days)} daily buckets")
+```
+
+<div id="errors">
+  ## エラー
+</div>
+
+エラーは共通のエンベロープ形式で返されます。
+
+```json theme={null}
+{
+  "error": {
+    "message": "Human-readable description.",
+    "type": "machine_readable_type",
+    "code": 400
+  }
+}
+```
+
+| ステータス | `type`                        | 意味                                                                                                                                                                             |
+| ----- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `400` | `bad_request`                 | パラメーターの検証に失敗しました (型が不正、値の形式が不正) 。                                                                                                                                              |
+| `400` | `invalid_request`             | パラメーターの形式は正しいものの、意味的に無効です。例: `end_time` より後の `start_time`、90 日を超える期間、誤った使い方のページネーションカーソル、メンバーと一致しない `user_email`、サポートされていない `bucket_width` や `user_email` と併用された `dataset` など。 |
+| `401` | `unauthorized`                | API key が指定されていない、または無効です。                                                                                                                                                     |
+| `404` | `feature_disabled`            | お使いの組織では Analytics API が有効になっていません。                                                                                                                                            |
+| `429` | `request_rate_limit_exceeded` | レート制限を超過しました。リクエストは組織単位で、その組織のすべてのキーを合算して制限されます。バックオフを挟んで再試行してください。                                                                                                            |
+
+<div id="limits">
+  ## 制限
+</div>
+
+* 期間は1リクエストあたり**90日間**までです (長期間のデータを取得する場合は、期間内でページネーションしてください) 。
+* リクエストは**組織単位**でレート制限されます。組織が発行したすべてのキーで1つの上限を共有します。

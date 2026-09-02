@@ -1,0 +1,119 @@
+---
+title: "定义运行"
+description: "配置 智能体 运行：从 preset 出发，再自定义 系统提示词、循环上限和 model。"
+---
+
+每次 智能体 运行都始于一次 Agent API 请求。在考虑提示词、工具或输出格式之前，你要先决定运行什么、以及它最多能走多远。最快的上手方式是使用 `preset`——一个调优好的组合包，内含 model、系统提示词、搜索配置和工具——然后再按需逐项自定义设置。本页构建的这次调用，正是本节后续内容的基础。
+
+<div id="start-from-a-preset">
+  ## 从 preset 开始
+</div>
+
+只需一个字段，`preset` 就能为你提供一个可直接运行的智能体。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="low",
+      input="Give me a thorough overview of the current state of solid-state battery commercialization.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    preset: 'low',
+    input: 'Give me a thorough overview of the current state of solid-state battery commercialization.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "low",
+      "input": "Give me a thorough overview of the current state of solid-state battery commercialization."
+    }' | jq
+  ```
+</CodeGroup>
+
+其他 preset 则在深度与延迟、成本之间做出不同取舍。请参阅 [Presets](/zh/docs/agent-api/presets)，了解每个 preset 具体包含哪些配置，以及 preset 更新的管理方式。
+
+<div id="customize-the-system-prompt-instructions">
+  ## 自定义系统提示词：`instructions`
+</div>
+
+每个 `preset` 都自带一套经过调优的系统提示词。而 `instructions` 字段**就是**智能体的系统提示词——它规定了循环每一轮都持续生效的固定规则：角色、语气、引用以及事实依据规则。无论用户在某一轮提出什么问题，这些规则都始终适用。
+
+```python theme={null}
+instructions="You are a research assistant. Cite every claim by source domain, and never speculate beyond the retrieved evidence."
+```
+
+设置 `instructions` 会**替换** preset 的系统提示词，而不是在其后追加。若要保留 preset 自带的提示词，请省略 `instructions`。
+
+<Note>
+  系统提示词应尽量精简。这里的每个 token 都会在循环的每一步中被重新处理，多次工具调用累积下来开销可观。若需要机器可读的输出或检索约束，请优先使用请求参数 (参见[构建输出结构](/zh/docs/agent-api/building-agents/shape-output)和[为其提供工具](/zh/docs/agent-api/building-agents/give-it-tools)) ，而不是用文字描述规则。
+</Note>
+
+<div id="customize-the-loop-max_steps">
+  ## 自定义循环：`max_steps`
+</div>
+
+一次 智能体 运行就是一个循环：模型进行推理，按需调用工具，读取结果，如此反复直至给出答案。一个步骤就是走完该循环一次——即模型的一轮，其中可能包含工具调用。`max_steps` 用于限定一次运行最多可执行多少步。你可以用它来防止循环失控，并在延迟与深度之间做出权衡。当运行达到上限时，智能体 不会报错，而是再做最后一轮，基于目前已收集到的信息给出答案。
+
+`max_steps` 设得较低会限制 智能体 依据工具结果采取行动的次数。当 `max_steps: 1` 时，直接工具仍可能运行，但 智能体 无法回到循环中对其结果进行推理；而需要一轮初始化的工具 (包括 `finance_search`) 则可能根本无法运行。
+
+当你指定 `model` 或 `models` 而未使用 preset 时，若省略 `max_steps`，运行将默认为 1 步。只要你的工具需要多轮交互，就应显式设置该参数。对于启用了 `finance_search` 的直接模型请求，请将 `max_steps` 设为 `3` 或更高，让 智能体 有足够余量来初始化并运行该工具。preset 自带各自的步骤预算，除非你显式覆盖。
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input="Give me a thorough overview of the current state of solid-state battery commercialization.",
+    max_steps=20,
+)
+```
+
+如果在传入 `preset` 的同时传入 `max_steps`，则会覆盖该 preset 中的取值；对于聊天类 preset，覆盖值不能超过该 preset 自身的上限。
+
+<div id="customize-the-model-model-or-models">
+  ## 自定义模型：`model` 或 `models`
+</div>
+
+preset 会替你选定模型。如果你需要完全掌控由哪个模型作答，可以显式指定模型，用它取代 preset (或与 preset 搭配使用) ：
+
+| 字段       | 说明                                                   |
+| -------- | ---------------------------------------------------- |
+| `model`  | 单个模型，采用 `provider/model` 格式，例如 `openai/gpt-5.6-sol`。 |
+| `models` | 最多 5 个模型组成的回退链，按顺序依次尝试，直到其中一个成功。                     |
+
+若设置了 `models`，其优先级高于 `model`。模型目录与定价请参阅 [Models](/zh/docs/agent-api/models)，回退链的解析方式请参阅 [Model fallback](/zh/docs/agent-api/model-fallback)。
+
+<Tip>
+  建议先从 `preset` 入手，待需要锁定具体引擎时，再改用显式的 `model` (或 `models` 回退链) 。
+</Tip>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="向智能体发送提示" icon="message" href="/zh/docs/agent-api/building-agents/prompt-the-agent">
+    将系统提示词与问题拆分开，并为本次运行提供事实依据。
+  </Card>
+
+  <Card title="Presets" icon="stack-2" href="/zh/docs/agent-api/presets">
+    查看可直接上手的已调优 preset。
+  </Card>
+</CardGroup>

@@ -1,0 +1,370 @@
+---
+title: "バックグラウンドモード"
+description: "長時間実行されるエージェントタスクを非同期で実行します。background を指定してリクエストを送信し、レスポンス ID によるポーリング、ストリーミング、再接続、キャンセルを行えます。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+ディープリサーチや負荷の高い sandbox 処理など、長時間にわたるエージェント実行は数分かかることがあります。バックグラウンドモードではこうしたタスクを非同期で実行するため、アプリケーション側でタイムアウトや接続切断を回避できます。実行をリクエストしたらレスポンスの id を保存し、結果をポーリングしてください。クライアントが切断された場合でも、実行はサーバー側で継続されます。
+
+<div id="submit-a-background-request">
+  ## バックグラウンドリクエストを送信する
+</div>
+
+レスポンスを作成する際に `background=true` を設定します。送信用のエンドポイントは `POST https://api.perplexity.ai/v1/agent` です。作成リクエストは即座に Response オブジェクトを返すため、その `id` を保存し、初期の `status` を確認してください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Research the current EV charging market and summarize the main segments.",
+      tools=[{"type": "web_search"}, {"type": "sandbox"}],
+      background=True,
+  )
+
+  print(f"Response ID: {response.id}")
+  print(f"Status: {response.status}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Research the current EV charging market and summarize the main segments.',
+    tools: [{ type: 'web_search' }, { type: 'sandbox' }],
+    background: true,
+  });
+
+  console.log(`Response ID: ${response.id}`);
+  console.log(`Status: ${response.status}`);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Research the current EV charging market and summarize the main segments.",
+      "tools": [{ "type": "web_search" }, { "type": "sandbox" }],
+      "background": true
+    }' | jq '{id, status}'
+  ```
+</CodeGroup>
+
+<div id="poll-for-the-result">
+  ## 結果をポーリングする
+</div>
+
+`GET https://api.perplexity.ai/v1/agent/{id}` でバックグラウンドレスポンスをポーリングします。バックグラウンドレスポンスは、ステータスが `queued` または `in_progress` の間は非終了状態です。ステータスが `completed`、`failed`、`cancelled`、`incomplete` のいずれかになった時点で終了状態となります (`incomplete` は、切り詰めなどによって完了前に停止した実行を示します) 。
+
+いずれかの終了ステータスに達するまでポーリングし、最終状態に応じて処理を分岐させます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Write a sourced brief on grid-scale battery storage trends.",
+      tools=[{"type": "web_search"}, {"type": "sandbox"}],
+      background=True,
+  )
+
+  while response.status not in ("completed", "failed", "cancelled", "incomplete"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(f"Final status: {response.status}")
+
+  if response.status == "completed":
+      print(get_output_text(response))
+  elif response.status == "failed":
+      print(response.error)
+  elif response.status == "cancelled":
+      print("The response was cancelled.")
+  elif response.status == "incomplete":
+      print("The response stopped before finishing.")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Write a sourced brief on grid-scale battery storage trends.',
+    tools: [{ type: 'web_search' }, { type: 'sandbox' }],
+    background: true,
+  });
+
+  while (!['completed', 'failed', 'cancelled', 'incomplete'].includes(response.status)) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(`Final status: ${response.status}`);
+
+  if (response.status === 'completed') {
+    console.log(response.output_text);
+  } else if (response.status === 'failed') {
+    console.log(response.error);
+  } else if (response.status === 'cancelled') {
+    console.log('The response was cancelled.');
+  } else if (response.status === 'incomplete') {
+    console.log('The response stopped before finishing.');
+  }
+  ```
+
+  ```bash cURL theme={null}
+  # 1. バックグラウンド実行を送信し、その id を保存する。
+  RESPONSE_ID=$(curl -s https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Write a sourced brief on grid-scale battery storage trends.",
+      "tools": [{ "type": "web_search" }, { "type": "sandbox" }],
+      "background": true
+    }' | jq -r '.id')
+
+  # 2. ステータスが completed、failed、cancelled、incomplete のいずれかになるまでポーリングする。
+  while true; do
+    RESPONSE=$(curl -s "https://api.perplexity.ai/v1/agent/$RESPONSE_ID" \
+      -H "Authorization: Bearer $PERPLEXITY_API_KEY")
+
+    STATUS=$(echo "$RESPONSE" | jq -r '.status')
+    echo "Status: $STATUS"
+
+    if [[ "$STATUS" == "completed" || "$STATUS" == "failed" || "$STATUS" == "cancelled" || "$STATUS" == "incomplete" ]]; then
+      echo "$RESPONSE"
+      break
+    fi
+
+    sleep 2
+  done
+  ```
+</CodeGroup>
+
+ループを抜けた後は、各終了ステータスを明示的に処理してください。`completed` なら出力を読み取り、`failed` なら `error` オブジェクトを確認し、`cancelled` なら意図的に停止された実行として扱い、`incomplete` なら (切り詰めなどによって) 完了前に停止した実行として扱います。
+
+<div id="stream-and-reconnect">
+  ## ストリーミングと再接続
+</div>
+
+`background=true` と `stream=true` の両方を指定してレスポンスを作成すると、長時間実行されるバックグラウンドレスポンスをストリーミングできます。レスポンスの id を保存し、ストリーミングされる各イベントの `sequence_number` をカーソルとして保持してください。接続が切断された場合は、`GET /v1/agent/{id}?stream=true&starting_after=N` で再接続すれば、シーケンス番号 `N` の直後から再開できます。
+
+<Info>
+  再接続が有効なのは、レスポンスの再接続ウィンドウ内に限られます。このウィンドウが失効した場合、再接続リクエストは `400` を返すため、通常の `GET /v1/agent/{id}` にフォールバックして最終スナップショットを取得してください。
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import os
+  import requests
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response_id = None
+  cursor = None
+
+  stream = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Create a detailed research memo on satellite internet providers.",
+      tools=[{"type": "web_search"}],
+      background=True,
+      stream=True,
+  )
+
+  for event in stream:
+      cursor = getattr(event, "sequence_number", cursor)
+
+      # response id を含む最初のイベントからその ID を取得する。
+      response = getattr(event, "response", None)
+      if response_id is None and response is not None:
+          response_id = getattr(response, "id", None)
+
+      print(event)
+
+  # カーソル N の時点でストリームが切断された場合は、次のイベントから再開する。
+  if response_id and cursor is not None:
+      reconnect = requests.get(
+          f"https://api.perplexity.ai/v1/agent/{response_id}",
+          headers={"Authorization": f"Bearer {os.environ['PERPLEXITY_API_KEY']}"},
+          params={"stream": "true", "starting_after": cursor},
+          stream=True,
+          timeout=60,
+      )
+
+      if reconnect.status_code == 400:
+          final = client.responses.retrieve(response_id)
+          print(final.status)
+      else:
+          reconnect.raise_for_status()
+          for line in reconnect.iter_lines(decode_unicode=True):
+              if not line or not line.startswith("data: "):
+                  continue
+              data = line.removeprefix("data: ")
+              if data == "[DONE]":
+                  break
+              event = json.loads(data)
+              cursor = event.get("sequence_number", cursor)
+              print(event)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let responseId: string | undefined;
+  let cursor: number | undefined;
+
+  const stream = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Create a detailed research memo on satellite internet providers.',
+    tools: [{ type: 'web_search' }],
+    background: true,
+    stream: true,
+  });
+
+  for await (const event of stream) {
+    cursor = event.sequence_number;
+
+    // response id を含む最初のイベントからその ID を取得する。
+    if (!responseId && 'response' in event && event.response) {
+      responseId = event.response.id;
+    }
+
+    console.log(event);
+  }
+
+  // カーソル N の時点でストリームが切断された場合は、次のイベントから再開する。
+  if (responseId && cursor !== undefined) {
+    const reconnect = await fetch(
+      `https://api.perplexity.ai/v1/agent/${responseId}?stream=true&starting_after=${cursor}`,
+      { headers: { Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}` } },
+    );
+
+    if (reconnect.status === 400) {
+      // 再接続ウィンドウが過ぎた場合: 最終スナップショットにフォールバックする。
+      const final = await client.responses.retrieve(responseId);
+      console.log(final.status);
+    } else {
+      // 再開した SSE ストリームを同じ方法で解析し、`cursor` から処理を続ける。
+      console.log(await reconnect.text());
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  # 1. バックグラウンドストリームを開始する。
+  curl -N https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Create a detailed research memo on satellite internet providers.",
+      "tools": [{ "type": "web_search" }],
+      "background": true,
+      "stream": true
+    }'
+
+  # 2. 接続が切れた場合は、受信済みの最後の sequence_number の後から再開する。
+  curl -N "https://api.perplexity.ai/v1/agent/$RESPONSE_ID?stream=true&starting_after=$SEQUENCE_NUMBER" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+
+  # 3. 再接続が 400 を返した場合は、代わりに最新の最終スナップショットを取得する。
+  curl "https://api.perplexity.ai/v1/agent/$RESPONSE_ID" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="cancel-a-run">
+  ## 実行のキャンセル
+</div>
+
+結果が不要になった場合は、`POST https://api.perplexity.ai/v1/agent/{id}/cancel` で実行中のバックグラウンドレスポンスをキャンセルできます。
+キャンセル処理は非同期です。`200` が返された時点のステータスは `status: "cancelling"` で、実行はその直後に停止します。そのため、`GET /v1/agent/{id}` をポーリングして終了ステータスの `cancelled` を確認してください。
+すでに終端状態にあるレスポンスをキャンセルすると `400` が返ります。存在しない id や、別のアカウントが所有するレスポンスを指定した場合は `404` が返ります。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Run an extended literature review on heat pump adoption.",
+      tools=[{"type": "web_search"}],
+      background=True,
+  )
+
+  # id を指定してキャンセルし、ステータスが終端の "cancelled" になるまで GET をポーリングする。
+  cancelled = client.responses.cancel(response.id)
+  print(cancelled.response_id, cancelled.status)  # resp_... cancelling
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Run an extended literature review on heat pump adoption.',
+    tools: [{ type: 'web_search' }],
+    background: true,
+  });
+
+  // id を指定してキャンセルし、ステータスが終端の 'cancelled' になるまで GET をポーリングする。
+  const cancelled = await client.responses.cancel(response.id);
+  console.log(cancelled.response_id, cancelled.status); // resp_... cancelling
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST "https://api.perplexity.ai/v1/agent/$RESPONSE_ID/cancel" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="ファイルの扱い方" icon="file" href="/ja/docs/agent-api/working-with-files" />
+
+  <Card title="Sandbox" icon="layer-group" href="/ja/docs/agent-api/tools/sandbox" />
+
+  <Card title="Wide Research" icon="bars" href="/ja/docs/agent-api/wide-research" />
+
+  <Card title="ストリーミング／出力制御" icon="clock" href="/ja/docs/agent-api/output-control" />
+</CardGroup>

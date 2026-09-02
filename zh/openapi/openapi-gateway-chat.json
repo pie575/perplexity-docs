@@ -1,0 +1,2382 @@
+{
+  "components": {
+    "schemas": {
+      "ChatCompletionAllowedTools": {
+        "properties": {
+          "mode": {
+            "enum": [
+              "auto",
+              "required"
+            ],
+            "type": "string"
+          },
+          "tools": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object",
+              "x-oaiExpandable": false
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "mode",
+          "tools"
+        ],
+        "title": "Allowed tools",
+        "type": "object"
+      },
+      "ChatCompletionAllowedToolsChoice": {
+        "properties": {
+          "allowed_tools": {
+            "$ref": "#/components/schemas/ChatCompletionAllowedTools"
+          },
+          "type": {
+            "enum": [
+              "allowed_tools"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "allowed_tools"
+        ],
+        "title": "Allowed tools",
+        "type": "object"
+      },
+      "ChatCompletionFunctionCallOption": {
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ChatCompletionFunctions": {
+        "deprecated": true,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/FunctionParameters"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ChatCompletionMessageCustomToolCall": {
+        "properties": {
+          "custom": {
+            "properties": {
+              "input": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "input"
+            ],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "custom"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "custom"
+        ],
+        "title": "Custom tool call",
+        "type": "object"
+      },
+      "ChatCompletionMessageToolCall": {
+        "properties": {
+          "function": {
+            "properties": {
+              "arguments": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "arguments"
+            ],
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "function"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "function"
+        ],
+        "title": "Function tool call",
+        "type": "object"
+      },
+      "ChatCompletionMessageToolCallChunk": {
+        "properties": {
+          "function": {
+            "properties": {
+              "arguments": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "id": {
+            "type": "string"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "function"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "index"
+        ],
+        "type": "object"
+      },
+      "ChatCompletionMessageToolCalls": {
+        "items": {
+          "discriminator": {
+            "propertyName": "type"
+          },
+          "oneOf": [
+            {
+              "$ref": "#/components/schemas/ChatCompletionMessageToolCall"
+            },
+            {
+              "$ref": "#/components/schemas/ChatCompletionMessageCustomToolCall"
+            }
+          ]
+        },
+        "type": "array"
+      },
+      "ChatCompletionModeration": {
+        "properties": {
+          "input": {
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ChatCompletionModerationResults"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionModerationError"
+              }
+            ]
+          },
+          "output": {
+            "discriminator": {
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/ChatCompletionModerationResults"
+              },
+              {
+                "$ref": "#/components/schemas/ChatCompletionModerationError"
+              }
+            ]
+          }
+        },
+        "required": [
+          "input",
+          "output"
+        ],
+        "type": "object"
+      },
+      "ChatCompletionModerationError": {
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "error"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "code",
+          "message"
+        ],
+        "type": "object"
+      },
+      "ChatCompletionModerationResults": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/ModerationResultBody"
+            },
+            "type": "array"
+          },
+          "type": {
+            "enum": [
+              "moderation_results"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "model",
+          "results"
+        ],
+        "type": "object"
+      },
+      "ChatCompletionNamedToolChoice": {
+        "properties": {
+          "function": {
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": {
+            "enum": [
+              "function"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "function"
+        ],
+        "title": "Function tool choice",
+        "type": "object"
+      },
+      "ChatCompletionNamedToolChoiceCustom": {
+        "properties": {
+          "custom": {
+            "properties": {
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "type": "object"
+          },
+          "type": {
+            "enum": [
+              "custom"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "custom"
+        ],
+        "title": "Custom tool choice",
+        "type": "object"
+      },
+      "ChatCompletionRequestAssistantMessage": {
+        "properties": {
+          "audio": {
+            "nullable": true,
+            "properties": {
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          },
+          "content": {
+            "nullable": true,
+            "oneOf": [
+              {
+                "title": "Text content",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatCompletionRequestAssistantMessageContentPart"
+                },
+                "minItems": 1,
+                "title": "Array of content parts",
+                "type": "array"
+              }
+            ]
+          },
+          "function_call": {
+            "deprecated": true,
+            "nullable": true,
+            "properties": {
+              "arguments": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "arguments",
+              "name"
+            ],
+            "type": "object"
+          },
+          "name": {
+            "type": "string"
+          },
+          "reasoning_content": {
+            "type": "string"
+          },
+          "refusal": {
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "assistant"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          },
+          "tool_calls": {
+            "$ref": "#/components/schemas/ChatCompletionMessageToolCalls"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "title": "Assistant message",
+        "type": "object"
+      },
+      "ChatCompletionRequestAssistantMessageContentPart": {
+        "discriminator": {
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartText"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartRefusal"
+          }
+        ]
+      },
+      "ChatCompletionRequestDeveloperMessage": {
+        "properties": {
+          "content": {
+            "oneOf": [
+              {
+                "title": "Text content",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartText"
+                },
+                "minItems": 1,
+                "title": "Array of content parts",
+                "type": "array"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "developer"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "content",
+          "role"
+        ],
+        "title": "Developer message",
+        "type": "object"
+      },
+      "ChatCompletionRequestFunctionMessage": {
+        "deprecated": true,
+        "properties": {
+          "content": {
+            "nullable": true,
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "function"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "role",
+          "content",
+          "name"
+        ],
+        "title": "Function message",
+        "type": "object"
+      },
+      "ChatCompletionRequestMessage": {
+        "discriminator": {
+          "propertyName": "role"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestDeveloperMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestSystemMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestUserMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestAssistantMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestToolMessage"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestFunctionMessage"
+          }
+        ]
+      },
+      "ChatCompletionRequestMessageContentPartAudio": {
+        "properties": {
+          "input_audio": {
+            "properties": {
+              "data": {
+                "type": "string"
+              },
+              "format": {
+                "enum": [
+                  "wav",
+                  "mp3"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "data",
+              "format"
+            ],
+            "type": "object"
+          },
+          "prompt_cache_breakpoint": {
+            "$ref": "#/components/schemas/PromptCacheBreakpointParam"
+          },
+          "type": {
+            "enum": [
+              "input_audio"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "input_audio"
+        ],
+        "title": "Audio content part",
+        "type": "object"
+      },
+      "ChatCompletionRequestMessageContentPartFile": {
+        "properties": {
+          "file": {
+            "properties": {
+              "file_data": {
+                "type": "string"
+              },
+              "file_id": {
+                "type": "string"
+              },
+              "filename": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "prompt_cache_breakpoint": {
+            "$ref": "#/components/schemas/PromptCacheBreakpointParam"
+          },
+          "type": {
+            "enum": [
+              "file"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "file"
+        ],
+        "title": "File content part",
+        "type": "object"
+      },
+      "ChatCompletionRequestMessageContentPartImage": {
+        "properties": {
+          "image_url": {
+            "properties": {
+              "detail": {
+                "default": "auto",
+                "enum": [
+                  "auto",
+                  "low",
+                  "high"
+                ],
+                "type": "string"
+              },
+              "url": {
+                "format": "uri",
+                "type": "string"
+              }
+            },
+            "required": [
+              "url"
+            ],
+            "type": "object"
+          },
+          "prompt_cache_breakpoint": {
+            "$ref": "#/components/schemas/PromptCacheBreakpointParam"
+          },
+          "type": {
+            "enum": [
+              "image_url"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "image_url"
+        ],
+        "title": "Image content part",
+        "type": "object"
+      },
+      "ChatCompletionRequestMessageContentPartRefusal": {
+        "properties": {
+          "refusal": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "refusal"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "refusal"
+        ],
+        "title": "Refusal content part",
+        "type": "object"
+      },
+      "ChatCompletionRequestMessageContentPartText": {
+        "properties": {
+          "prompt_cache_breakpoint": {
+            "$ref": "#/components/schemas/PromptCacheBreakpointParam"
+          },
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "text"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "title": "Text content part",
+        "type": "object"
+      },
+      "ChatCompletionRequestSystemMessage": {
+        "properties": {
+          "content": {
+            "oneOf": [
+              {
+                "title": "Text content",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatCompletionRequestSystemMessageContentPart"
+                },
+                "minItems": 1,
+                "title": "Array of content parts",
+                "type": "array"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "system"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "content",
+          "role"
+        ],
+        "title": "System message",
+        "type": "object"
+      },
+      "ChatCompletionRequestSystemMessageContentPart": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartText"
+          }
+        ]
+      },
+      "ChatCompletionRequestToolMessage": {
+        "properties": {
+          "content": {
+            "oneOf": [
+              {
+                "title": "Text content",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatCompletionRequestToolMessageContentPart"
+                },
+                "minItems": 1,
+                "title": "Array of content parts",
+                "type": "array"
+              }
+            ]
+          },
+          "role": {
+            "enum": [
+              "tool"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          },
+          "tool_call_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content",
+          "tool_call_id"
+        ],
+        "title": "Tool message",
+        "type": "object"
+      },
+      "ChatCompletionRequestToolMessageContentPart": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartText"
+          }
+        ]
+      },
+      "ChatCompletionRequestUserMessage": {
+        "properties": {
+          "content": {
+            "oneOf": [
+              {
+                "title": "Text content",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatCompletionRequestUserMessageContentPart"
+                },
+                "minItems": 1,
+                "title": "Array of content parts",
+                "type": "array"
+              }
+            ]
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "user"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "content",
+          "role"
+        ],
+        "title": "User message",
+        "type": "object"
+      },
+      "ChatCompletionRequestUserMessageContentPart": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartText"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartImage"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartAudio"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartFile"
+          }
+        ]
+      },
+      "ChatCompletionResponseMessage": {
+        "properties": {
+          "annotations": {
+            "items": {
+              "properties": {
+                "type": {
+                  "enum": [
+                    "url_citation"
+                  ],
+                  "type": "string",
+                  "x-stainless-const": true
+                },
+                "url_citation": {
+                  "properties": {
+                    "end_index": {
+                      "type": "integer"
+                    },
+                    "start_index": {
+                      "type": "integer"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "url": {
+                      "format": "uri",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "end_index",
+                    "start_index",
+                    "url",
+                    "title"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "type",
+                "url_citation"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "audio": {
+            "nullable": true,
+            "properties": {
+              "data": {
+                "type": "string"
+              },
+              "expires_at": {
+                "format": "unixtime",
+                "type": "integer"
+              },
+              "id": {
+                "type": "string"
+              },
+              "transcript": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "expires_at",
+              "data",
+              "transcript"
+            ],
+            "type": "object"
+          },
+          "content": {
+            "nullable": true,
+            "type": "string"
+          },
+          "function_call": {
+            "deprecated": true,
+            "properties": {
+              "arguments": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name",
+              "arguments"
+            ],
+            "type": "object"
+          },
+          "reasoning_content": {
+            "type": "string"
+          },
+          "refusal": {
+            "nullable": true,
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "assistant"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          },
+          "tool_calls": {
+            "$ref": "#/components/schemas/ChatCompletionMessageToolCalls"
+          }
+        },
+        "required": [
+          "role",
+          "content",
+          "refusal"
+        ],
+        "type": "object"
+      },
+      "ChatCompletionStreamOptions": {
+        "default": null,
+        "nullable": true,
+        "properties": {
+          "include_usage": {
+            "description": "当为 `true` 时，`data: [DONE]` 前的最终分块会报告整个请求的令牌用量。",
+            "type": "boolean"
+          }
+        },
+        "type": "object"
+      },
+      "ChatCompletionStreamResponseDelta": {
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "function_call": {
+            "deprecated": true,
+            "properties": {
+              "arguments": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "type": "object"
+          },
+          "reasoning_content": {
+            "type": "string"
+          },
+          "refusal": {
+            "type": "string",
+            "x-go-type": "nullable.Nullable[string]",
+            "x-go-type-import": {
+              "path": "github.com/oapi-codegen/nullable"
+            },
+            "x-go-type-skip-optional-pointer": true
+          },
+          "role": {
+            "enum": [
+              "developer",
+              "system",
+              "user",
+              "assistant",
+              "tool"
+            ],
+            "type": "string"
+          },
+          "tool_calls": {
+            "items": {
+              "$ref": "#/components/schemas/ChatCompletionMessageToolCallChunk"
+            },
+            "type": "array"
+          }
+        },
+        "type": "object"
+      },
+      "ChatCompletionTokenLogprob": {
+        "properties": {
+          "bytes": {
+            "items": {
+              "type": "integer"
+            },
+            "nullable": true,
+            "type": "array"
+          },
+          "logprob": {
+            "type": "number"
+          },
+          "token": {
+            "type": "string"
+          },
+          "top_logprobs": {
+            "items": {
+              "properties": {
+                "bytes": {
+                  "items": {
+                    "type": "integer"
+                  },
+                  "nullable": true,
+                  "type": "array"
+                },
+                "logprob": {
+                  "type": "number"
+                },
+                "token": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "token",
+                "logprob",
+                "bytes"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "token",
+          "logprob",
+          "bytes",
+          "top_logprobs"
+        ],
+        "type": "object"
+      },
+      "ChatCompletionTool": {
+        "properties": {
+          "function": {
+            "$ref": "#/components/schemas/FunctionObject"
+          },
+          "type": {
+            "enum": [
+              "function"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "function"
+        ],
+        "title": "Function tool",
+        "type": "object"
+      },
+      "ChatCompletionToolChoiceOption": {
+        "oneOf": [
+          {
+            "enum": [
+              "none",
+              "auto",
+              "required"
+            ],
+            "title": "Tool choice mode",
+            "type": "string"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionAllowedToolsChoice"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionNamedToolChoice"
+          },
+          {
+            "$ref": "#/components/schemas/ChatCompletionNamedToolChoiceCustom"
+          }
+        ]
+      },
+      "CompletionUsage": {
+        "properties": {
+          "completion_tokens": {
+            "default": 0,
+            "description": "生成的令牌，包括推理令牌。",
+            "type": "integer"
+          },
+          "completion_tokens_details": {
+            "properties": {
+              "accepted_prediction_tokens": {
+                "default": 0,
+                "type": "integer"
+              },
+              "audio_tokens": {
+                "default": 0,
+                "type": "integer"
+              },
+              "reasoning_tokens": {
+                "default": 0,
+                "type": "integer"
+              },
+              "rejected_prediction_tokens": {
+                "default": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "prompt_tokens": {
+            "default": 0,
+            "description": "请求的输入令牌，包括缓存读取和写入。",
+            "type": "integer"
+          },
+          "prompt_tokens_details": {
+            "properties": {
+              "audio_tokens": {
+                "default": 0,
+                "type": "integer"
+              },
+              "cache_write_tokens": {
+                "default": 0,
+                "type": "integer"
+              },
+              "cached_tokens": {
+                "default": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
+          },
+          "total_tokens": {
+            "default": 0,
+            "description": "`prompt_tokens` 与 `completion_tokens` 的总和。",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "prompt_tokens",
+          "completion_tokens",
+          "total_tokens"
+        ],
+        "type": "object"
+      },
+      "CreateChatCompletionRequest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/CreateModelResponseProperties"
+          },
+          {
+            "properties": {
+              "max_completion_tokens": {
+                "description": "此请求生成令牌数的上限，包括推理令牌。",
+                "nullable": true,
+                "type": "integer"
+              },
+              "max_tokens": {
+                "deprecated": true,
+                "description": "`max_completion_tokens` 的旧版别名。",
+                "nullable": true,
+                "type": "integer"
+              },
+              "messages": {
+                "description": "截至目前的对话，以包含 `role` 和 `content` 的消息对象数组表示。开头的 `system` 或 `developer` 消息将用作系统提示词。",
+                "items": {
+                  "$ref": "#/components/schemas/ChatCompletionRequestMessage"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "model": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ModelIdsShared"
+                  }
+                ],
+                "description": "用于处理请求的模型，以目录中的 `creator/model-name` id 表示 — 例如 `perplexity/kimi-k3`。此端点支持目录中的任何模型。"
+              },
+              "parallel_tool_calls": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ParallelToolCalls"
+                  }
+                ],
+                "description": "模型是否可以在单个轮次中请求多次工具调用。"
+              },
+              "reasoning_effort": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ReasoningEffort"
+                  }
+                ],
+                "description": "对于支持该功能的模型，模型在回答前进行的推理程度。省略时，将采用提供商为该模型设置的默认值；默认值因提供商和模型而异。"
+              },
+              "response_format": {
+                "description": "输出格式。严格结构化输出使用 `json_schema` 类型，JSON 模式使用 `json_object`。",
+                "discriminator": {
+                  "propertyName": "type"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ResponseFormatText"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResponseFormatJsonSchema"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ResponseFormatJsonObject"
+                  }
+                ]
+              },
+              "stop": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/StopConfiguration"
+                  }
+                ],
+                "description": "最多可指定 4 个停止生成的序列。"
+              },
+              "stream": {
+                "default": false,
+                "description": "当为 `true` 时，令牌会在生成时以服务器发送的事件形式传送，并以 `data: [DONE]` 结束。",
+                "nullable": true,
+                "type": "boolean"
+              },
+              "stream_options": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ChatCompletionStreamOptions"
+                  }
+                ],
+                "description": "流式选项。仅当 `stream` 为 `true` 时允许使用。"
+              },
+              "tool_choice": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/ChatCompletionToolChoiceOption"
+                  }
+                ],
+                "description": "控制模型是否可调用工具、是否必须调用特定工具，或通过 `allowed_tools` 限制可选工具。"
+              },
+              "tools": {
+                "description": "模型可调用的函数工具。每个工具都需要 `description`。",
+                "items": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ChatCompletionTool"
+                    },
+                    {
+                      "$ref": "#/components/schemas/CustomToolChatCompletions"
+                    }
+                  ]
+                },
+                "type": "array"
+              }
+            },
+            "required": [
+              "model",
+              "messages"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "CreateChatCompletionResponse": {
+        "properties": {
+          "choices": {
+            "description": "补全结果。恰好包含一个选项。",
+            "items": {
+              "properties": {
+                "finish_reason": {
+                  "enum": [
+                    "stop",
+                    "length",
+                    "tool_calls",
+                    "content_filter",
+                    "function_call"
+                  ],
+                  "type": "string"
+                },
+                "index": {
+                  "type": "integer"
+                },
+                "logprobs": {
+                  "nullable": true,
+                  "properties": {
+                    "content": {
+                      "items": {
+                        "$ref": "#/components/schemas/ChatCompletionTokenLogprob"
+                      },
+                      "nullable": true,
+                      "type": "array"
+                    },
+                    "refusal": {
+                      "items": {
+                        "$ref": "#/components/schemas/ChatCompletionTokenLogprob"
+                      },
+                      "nullable": true,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "refusal"
+                  ],
+                  "type": "object"
+                },
+                "message": {
+                  "$ref": "#/components/schemas/ChatCompletionResponseMessage"
+                }
+              },
+              "required": [
+                "finish_reason",
+                "index",
+                "message",
+                "logprobs"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "created": {
+            "description": "创建补全时的 Unix 时间戳。",
+            "format": "unixtime",
+            "type": "integer"
+          },
+          "id": {
+            "description": "补全的唯一标识符。",
+            "type": "string"
+          },
+          "model": {
+            "description": "您请求的模型 id。计费始终使用该模型公布的费率。",
+            "type": "string"
+          },
+          "moderation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatCompletionModeration"
+              }
+            ]
+          },
+          "object": {
+            "description": "始终为 `\"chat.completion\"`。",
+            "enum": [
+              "chat.completion"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          },
+          "service_tier": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ServiceTier"
+              }
+            ],
+            "description": "处理该请求的处理层级。"
+          },
+          "system_fingerprint": {
+            "deprecated": true,
+            "type": "string"
+          },
+          "usage": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/CompletionUsage"
+              }
+            ],
+            "description": "请求的令牌用量统计。"
+          }
+        },
+        "required": [
+          "choices",
+          "created",
+          "id",
+          "model",
+          "object"
+        ],
+        "type": "object"
+      },
+      "CreateChatCompletionStreamResponse": {
+        "properties": {
+          "choices": {
+            "description": "增量输出。设置 `stream_options.include_usage` 时，最终用量分块中为空。",
+            "items": {
+              "properties": {
+                "delta": {
+                  "$ref": "#/components/schemas/ChatCompletionStreamResponseDelta"
+                },
+                "finish_reason": {
+                  "enum": [
+                    "stop",
+                    "length",
+                    "tool_calls",
+                    "content_filter",
+                    "function_call"
+                  ],
+                  "nullable": true,
+                  "type": "string"
+                },
+                "index": {
+                  "type": "integer"
+                },
+                "logprobs": {
+                  "nullable": true,
+                  "properties": {
+                    "content": {
+                      "items": {
+                        "$ref": "#/components/schemas/ChatCompletionTokenLogprob"
+                      },
+                      "nullable": true,
+                      "type": "array"
+                    },
+                    "refusal": {
+                      "items": {
+                        "$ref": "#/components/schemas/ChatCompletionTokenLogprob"
+                      },
+                      "nullable": true,
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "content",
+                    "refusal"
+                  ],
+                  "type": "object"
+                }
+              },
+              "required": [
+                "delta",
+                "finish_reason",
+                "index"
+              ],
+              "type": "object"
+            },
+            "type": "array"
+          },
+          "created": {
+            "description": "创建补全时的 Unix 时间戳；所有分块中均相同。",
+            "format": "unixtime",
+            "type": "integer"
+          },
+          "id": {
+            "description": "补全的唯一标识符；同一响应的所有分块中均相同。",
+            "type": "string"
+          },
+          "model": {
+            "description": "您请求的模型 id。",
+            "type": "string"
+          },
+          "moderation": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatCompletionModeration"
+              }
+            ]
+          },
+          "object": {
+            "description": "始终为 `\"chat.completion.chunk\"`。",
+            "enum": [
+              "chat.completion.chunk"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          },
+          "service_tier": {
+            "type": "string",
+            "x-go-type": "ServiceTier"
+          },
+          "system_fingerprint": {
+            "deprecated": true,
+            "type": "string"
+          },
+          "usage": {
+            "description": "仅在最终分块中出现，且仅当请求设置了 `stream_options.include_usage` 时出现。",
+            "type": "object",
+            "x-go-type": "nullable.Nullable[CompletionUsage]",
+            "x-go-type-import": {
+              "path": "github.com/oapi-codegen/nullable"
+            },
+            "x-go-type-skip-optional-pointer": true
+          }
+        },
+        "required": [
+          "choices",
+          "created",
+          "id",
+          "model",
+          "object"
+        ],
+        "type": "object"
+      },
+      "CreateModelResponseProperties": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ModelResponseProperties"
+          },
+          {
+            "properties": {
+              "prompt_cache_options": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/PromptCacheOptionsParam"
+                  }
+                ],
+                "description": "提示词缓存设置。将 `ttl` 设为 `5m`、`1h` 或 `24h` 以控制缓存保留时长。"
+              }
+            },
+            "type": "object"
+          }
+        ]
+      },
+      "CustomToolChatCompletions": {
+        "properties": {
+          "custom": {
+            "properties": {
+              "format": {
+                "oneOf": [
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "type": {
+                        "enum": [
+                          "text"
+                        ],
+                        "type": "string",
+                        "x-stainless-const": true
+                      }
+                    },
+                    "required": [
+                      "type"
+                    ],
+                    "title": "Text format",
+                    "type": "object"
+                  },
+                  {
+                    "additionalProperties": false,
+                    "properties": {
+                      "grammar": {
+                        "properties": {
+                          "definition": {
+                            "type": "string"
+                          },
+                          "syntax": {
+                            "enum": [
+                              "lark",
+                              "regex"
+                            ],
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "definition",
+                          "syntax"
+                        ],
+                        "title": "Grammar format",
+                        "type": "object"
+                      },
+                      "type": {
+                        "enum": [
+                          "grammar"
+                        ],
+                        "type": "string",
+                        "x-stainless-const": true
+                      }
+                    },
+                    "required": [
+                      "type",
+                      "grammar"
+                    ],
+                    "title": "Grammar format",
+                    "type": "object"
+                  }
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "title": "Custom tool properties",
+            "type": "object"
+          },
+          "type": {
+            "enum": [
+              "custom"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "custom"
+        ],
+        "title": "Custom tool",
+        "type": "object"
+      },
+      "Error": {
+        "properties": {
+          "code": {
+            "description": "始终为 `null`。",
+            "nullable": true,
+            "type": "string"
+          },
+          "message": {
+            "description": "便于人类阅读的错误描述。",
+            "type": "string"
+          },
+          "param": {
+            "description": "错误所对应的请求参数（如适用）。",
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "description": "错误类别：4xx 对应 `invalid_request_error`，429 对应 `rate_limit_error`，5xx 对应 `server_error`。",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "message",
+          "param",
+          "code"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/Error"
+          }
+        },
+        "required": [
+          "error"
+        ],
+        "type": "object"
+      },
+      "FunctionObject": {
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "parameters": {
+            "$ref": "#/components/schemas/FunctionParameters"
+          },
+          "strict": {
+            "default": false,
+            "nullable": true,
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "FunctionParameters": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "Metadata": {
+        "additionalProperties": {
+          "type": "string"
+        },
+        "nullable": true,
+        "type": "object",
+        "x-oaiTypeLabel": "map"
+      },
+      "Model": {
+        "properties": {
+          "created": {
+            "format": "int64",
+            "type": "integer",
+            "x-order": 3
+          },
+          "id": {
+            "description": "公开模型 slug，例如 `perplexity/kimi-k3`。",
+            "type": "string",
+            "x-order": 1
+          },
+          "object": {
+            "description": "始终为 `model`。",
+            "type": "string",
+            "x-order": 2
+          },
+          "owned_by": {
+            "description": "slug 的提供商前缀，例如 `perplexity`。",
+            "type": "string",
+            "x-order": 4
+          },
+          "pricing": {
+            "$ref": "#/components/schemas/ModelPricing"
+          }
+        },
+        "required": [
+          "id",
+          "object",
+          "created",
+          "owned_by",
+          "pricing"
+        ],
+        "type": "object"
+      },
+      "ModelIdsShared": {
+        "description": "Router 目录中的 `creator/model-name` id。",
+        "example": "perplexity/kimi-k3",
+        "type": "string"
+      },
+      "ModelList": {
+        "properties": {
+          "data": {
+            "items": {
+              "$ref": "#/components/schemas/Model"
+            },
+            "type": "array",
+            "x-order": 2
+          },
+          "object": {
+            "description": "始终为 `list`。",
+            "type": "string",
+            "x-order": 1
+          }
+        },
+        "required": [
+          "object",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ModelPricing": {
+        "description": "基础令牌价格，以美元计，每百万令牌。所有字段均表示价格；cache_read 表示缓存输入的实际价格。",
+        "properties": {
+          "cache_read": {
+            "format": "double",
+            "type": "number",
+            "x-order": 4
+          },
+          "cache_write": {
+            "format": "double",
+            "type": "number",
+            "x-order": 3
+          },
+          "input": {
+            "format": "double",
+            "type": "number",
+            "x-order": 1
+          },
+          "output": {
+            "format": "double",
+            "type": "number",
+            "x-order": 2
+          },
+          "unit": {
+            "enum": [
+              "usd_per_1m_tokens"
+            ],
+            "type": "string",
+            "x-order": 5
+          }
+        },
+        "required": [
+          "input",
+          "output",
+          "unit"
+        ],
+        "type": "object"
+      },
+      "ModelResponseProperties": {
+        "properties": {
+          "metadata": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/Metadata"
+              }
+            ],
+            "description": "为兼容 SDK 而接受；不会转发给模型。"
+          },
+          "prompt_cache_key": {
+            "description": "用于对相关请求分组的稳定键，可提高提示词缓存命中率。",
+            "example": "prompt-cache-key-1234",
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "deprecated": true,
+            "description": "已弃用的缓存保留设置。新集成请使用 `prompt_cache_options.ttl`。",
+            "enum": [
+              "in_memory",
+              "24h"
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "safety_identifier": {
+            "description": "为兼容 SDK 而接受；不会转发给模型。",
+            "example": "safety-identifier-1234",
+            "maxLength": 64,
+            "nullable": true,
+            "type": "string"
+          },
+          "service_tier": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ServiceTier"
+              }
+            ],
+            "description": "请求的处理层级。`flex` 会将受支持模型的令牌费率减半；`auto` 与 `default` 等效。"
+          },
+          "temperature": {
+            "default": 1,
+            "description": "采样温度，范围为 0 到 2。值越高，输出越多样。调整此项或 `top_p`，不要同时调整两者。",
+            "example": 1,
+            "maximum": 2,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "top_p": {
+            "default": 1,
+            "description": "核心采样阈值，范围为 0 到 1。调整此项或 `temperature`，不要同时调整两者。",
+            "example": 1,
+            "maximum": 1,
+            "minimum": 0,
+            "nullable": true,
+            "type": "number"
+          },
+          "user": {
+            "deprecated": true,
+            "description": "为兼容 SDK 而接受；不会转发给模型。",
+            "example": "user-1234",
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "ModerationConfigParam": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/ModerationMode"
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "type": "object"
+      },
+      "ModerationInputType": {
+        "enum": [
+          "text",
+          "image"
+        ],
+        "type": "string"
+      },
+      "ModerationMode": {
+        "enum": [
+          "score",
+          "block"
+        ],
+        "type": "string"
+      },
+      "ModerationParam": {
+        "properties": {
+          "model": {
+            "type": "string"
+          },
+          "policy": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModerationPolicyParam"
+              }
+            ]
+          }
+        },
+        "required": [
+          "model"
+        ],
+        "type": "object"
+      },
+      "ModerationPolicyParam": {
+        "properties": {
+          "input": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModerationConfigParam"
+              }
+            ]
+          },
+          "output": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModerationConfigParam"
+              }
+            ]
+          }
+        },
+        "type": "object"
+      },
+      "ModerationResultBody": {
+        "properties": {
+          "categories": {
+            "additionalProperties": {
+              "type": "boolean"
+            },
+            "type": "object",
+            "x-oaiTypeLabel": "map"
+          },
+          "category_applied_input_types": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/ModerationInputType"
+              },
+              "type": "array"
+            },
+            "type": "object",
+            "x-oaiTypeLabel": "map"
+          },
+          "category_scores": {
+            "additionalProperties": {
+              "type": "number"
+            },
+            "type": "object",
+            "x-oaiTypeLabel": "map"
+          },
+          "flagged": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "type": {
+            "default": "moderation_result",
+            "enum": [
+              "moderation_result"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "model",
+          "flagged",
+          "categories",
+          "category_scores",
+          "category_applied_input_types"
+        ],
+        "title": "Moderation result",
+        "type": "object"
+      },
+      "ParallelToolCalls": {
+        "default": true,
+        "type": "boolean"
+      },
+      "PredictionContent": {
+        "properties": {
+          "content": {
+            "oneOf": [
+              {
+                "title": "Text content",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ChatCompletionRequestMessageContentPartText"
+                },
+                "minItems": 1,
+                "title": "Array of content parts",
+                "type": "array"
+              }
+            ]
+          },
+          "type": {
+            "enum": [
+              "content"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "content"
+        ],
+        "title": "Static Content",
+        "type": "object"
+      },
+      "PromptCacheBreakpointParam": {
+        "properties": {
+          "mode": {
+            "default": "explicit",
+            "enum": [
+              "explicit"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "mode"
+        ],
+        "title": "Prompt cache breakpoint",
+        "type": "object"
+      },
+      "PromptCacheModeEnum": {
+        "enum": [
+          "implicit",
+          "explicit"
+        ],
+        "type": "string"
+      },
+      "PromptCacheOptionsParam": {
+        "properties": {
+          "mode": {
+            "$ref": "#/components/schemas/PromptCacheModeEnum"
+          },
+          "ttl": {
+            "$ref": "#/components/schemas/PromptCacheTTLEnum"
+          }
+        },
+        "title": "Prompt cache options",
+        "type": "object"
+      },
+      "PromptCacheTTLEnum": {
+        "enum": [
+          "30m"
+        ],
+        "type": "string"
+      },
+      "ReasoningEffort": {
+        "enum": [
+          "none",
+          "minimal",
+          "low",
+          "medium",
+          "high",
+          "xhigh",
+          "max"
+        ],
+        "nullable": true,
+        "type": "string"
+      },
+      "ResponseFormatJsonObject": {
+        "properties": {
+          "type": {
+            "enum": [
+              "json_object"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "JSON object",
+        "type": "object"
+      },
+      "ResponseFormatJsonSchema": {
+        "properties": {
+          "json_schema": {
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "schema": {
+                "$ref": "#/components/schemas/ResponseFormatJsonSchemaSchema"
+              },
+              "strict": {
+                "default": false,
+                "nullable": true,
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "title": "JSON schema",
+            "type": "object"
+          },
+          "type": {
+            "enum": [
+              "json_schema"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type",
+          "json_schema"
+        ],
+        "title": "JSON schema",
+        "type": "object"
+      },
+      "ResponseFormatJsonSchemaSchema": {
+        "additionalProperties": true,
+        "title": "JSON schema",
+        "type": "object"
+      },
+      "ResponseFormatText": {
+        "properties": {
+          "type": {
+            "enum": [
+              "text"
+            ],
+            "type": "string",
+            "x-stainless-const": true
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "title": "Text",
+        "type": "object"
+      },
+      "ResponseModalities": {
+        "items": {
+          "enum": [
+            "text",
+            "audio"
+          ],
+          "type": "string"
+        },
+        "nullable": true,
+        "type": "array"
+      },
+      "ServiceTier": {
+        "default": "auto",
+        "enum": [
+          "auto",
+          "default",
+          "flex",
+          "scale",
+          "priority"
+        ],
+        "nullable": true,
+        "type": "string"
+      },
+      "StopConfiguration": {
+        "default": null,
+        "nullable": true,
+        "oneOf": [
+          {
+            "default": "<|endoftext|>",
+            "example": "\n",
+            "nullable": true,
+            "type": "string"
+          },
+          {
+            "items": {
+              "example": "[\"\\n\"]",
+              "type": "string"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "type": "array"
+          }
+        ]
+      },
+      "Verbosity": {
+        "default": "medium",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "nullable": true,
+        "type": "string"
+      },
+      "VoiceIdsOrCustomVoice": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/VoiceIdsShared"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "example": "voice_1234",
+                "type": "string"
+              }
+            },
+            "required": [
+              "id"
+            ],
+            "type": "object"
+          }
+        ],
+        "title": "Voice"
+      },
+      "VoiceIdsShared": {
+        "anyOf": [
+          {
+            "type": "string"
+          },
+          {
+            "enum": [
+              "alloy",
+              "ash",
+              "ballad",
+              "coral",
+              "echo",
+              "sage",
+              "shimmer",
+              "verse",
+              "marin",
+              "cedar"
+            ],
+            "type": "string"
+          }
+        ],
+        "example": "ash"
+      },
+      "WebSearchContextSize": {
+        "default": "medium",
+        "enum": [
+          "low",
+          "medium",
+          "high"
+        ],
+        "type": "string"
+      },
+      "WebSearchLocation": {
+        "properties": {
+          "city": {
+            "type": "string"
+          },
+          "country": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          },
+          "timezone": {
+            "type": "string"
+          }
+        },
+        "title": "Web search location",
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "description": "您的 Perplexity API key。",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "以兼容 OpenAI Chat Completions 的方式访问各提供商的模型，并提供模型目录。模式结构遵循 OpenAI Chat Completions 传输格式（源自采用 MIT 许可的 OpenAI OpenAPI 规范）；所有文档文本均由 Perplexity 编写。",
+    "title": "Perplexity Router API (OpenAI-compatible)",
+    "version": "2.3.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/router/v1/chat/completions": {
+      "post": {
+        "description": "使用 OpenAI Chat Completions 模式向任意 Router 模型发送对话。设置 `stream: true` 以接收服务器发送的事件；添加 `stream_options: {\"include_usage\": true}` 以在最终分块中获取令牌用量。",
+        "operationId": "gateway_create_chat_completion",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateChatCompletionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateChatCompletionResponse"
+                }
+              },
+              "text/event-stream": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreateChatCompletionStreamResponse"
+                }
+              }
+            },
+            "description": "成功响应。非流式请求返回 JSON；当 `stream` 为 true 时，返回以 `data: [DONE]` 结束的聊天补全分块 `text/event-stream`。"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "无效请求 — 请求正文格式错误、参数不受支持，或 Router 上没有可用的模型。"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "超出速率限制或上游模型过载。请在 `Retry-After` 指定的时间后重试。"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "创建聊天补全"
+      }
+    },
+    "/router/v1/models": {
+      "get": {
+        "description": "列出可通过 Router 使用的模型，并按 id 排序。每个模型的 `pricing` 中均包含基础令牌价格（每 100 万令牌的美元价格）。",
+        "operationId": "gateway_list_models",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ModelList"
+                }
+              }
+            },
+            "description": "包含基础令牌价格的可用模型列表。"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "列出模型"
+      }
+    },
+    "/router/v1/models/{model}": {
+      "get": {
+        "description": "按 id 获取单个模型，包括其基础令牌价格。模型 id 包含 `/`（例如 `perplexity/kimi-k3`）；请在路径中传入完整 id。",
+        "operationId": "gateway_retrieve_model",
+        "parameters": [
+          {
+            "description": "模型 id，例如 `perplexity/kimi-k3`。",
+            "in": "path",
+            "name": "model",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Model"
+                }
+              }
+            },
+            "description": "模型。"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "Router 上没有 id 为此值的可用模型。"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "获取模型"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.perplexity.ai"
+    }
+  ]
+}

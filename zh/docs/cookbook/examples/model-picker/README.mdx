@@ -1,0 +1,322 @@
+---
+title: "模型选择器"
+description: "描述任务需求，即可获得有据可依的开放模型推荐清单。一次 Agent API 请求即可结合 Hugging Face MCP 服务器与网页搜索，完成模型的查找、验证与推荐。"
+---
+
+<div id="model-picker">
+  # 模型选择器
+</div>
+
+一个命令行示例，可将自然语言描述的任务转化为一份开放模型候选清单，并给出一条推荐及其支撑依据。
+你只需描述需求——例如 `"on-device English speech-to-text, small enough to run on a laptop"`——模型便会返回一张真实 Hugging Face 仓库列表，以及一个站得住脚的推荐结果。
+
+这一切只需一次 Agent API 请求即可完成，其中组合了两种工具。
+[`mcp`](/zh/docs/agent-api/tools/mcp) 工具将模型连接到 [Hugging Face MCP 服务器](https://huggingface.co/settings/mcp)，使其能够检索实时的模型注册表，并读取每个仓库的真实元数据。
+[`web_search`](/zh/docs/agent-api/tools/web-search) 工具则让它在同一次运行中核查基准测试成绩、质量表现和已知问题。
+Hub 告诉你有哪些模型、采用情况如何、许可证是什么；网络则告诉你它们究竟好不好用。
+单靠其中任何一种工具都不够。
+
+<div id="what-mcp-does-here">
+  ## MCP 在这里的作用
+</div>
+
+* **为 模型 提供实时的注册表信息。** 借助 `mcp` 工具，它可以调用 `hub_repo_search` 和 `hub_repo_details`，拉取当前真实存在的模型及其真实的下载量、许可证和最后修改时间。
+* **你这边无需编写任何集成代码。** 请求启动时，Agent API 会自动发现该服务器提供的工具，并像调用原生工具一样调用它们。你只需把 `mcp` 工具指向服务器 URL —— 无需安装 Hugging Face SDK，无需封装接口，也无需维护 schema。
+* **设计上只读。** 该示例通过 `allowed_tools` 将 Hub 的只读工具 (`hub_repo_search`、`hub_repo_details`、`paper_search`、`hf_doc_search`、`hf_doc_fetch`) 列入允许列表，因此 模型 只能查询模型，无法执行其他操作。
+
+<div id="without-mcp">
+  ## 不使用 MCP
+</div>
+
+让普通的聊天模型来挑选模型，它只能凭训练数据作答：说出自己记得的仓库、猜测下载量，却无法告诉你上个月发布了什么，也不知道某个许可证是否有过变更。
+另一种办法是手动来做：调用 Hugging Face API 获取候选项，再自己抓取、排序，并逐一与网络信息交叉核对。
+而上面这一次请求中的 `mcp` 工具和 `web_search` 就把这整套活儿全干完了。
+
+<div id="installation">
+  ## 安装
+</div>
+
+请将 `model_picker.py` 和 `requirements.txt` 放在同一目录下。
+
+1. 安装 [Perplexity Python SDK](https://github.com/ppl-ai/perplexity-python)，其版本已在 `requirements.txt` 中锁定：
+
+```text requirements.txt theme={null}
+perplexityai==0.39.0
+```
+
+```bash theme={null}
+pip install -r requirements.txt
+```
+
+2. 设置你的 Perplexity API key：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key-here"
+```
+
+SDK 会从该环境变量中读取密钥。
+Hugging Face MCP 服务器 (`https://huggingface.co/mcp`) 无需密钥——示例以匿名方式连接。
+
+3. (可选) 提高 Hugging Face 的速率限制。匿名访问 MCP 服务器会受到速率限制。若使用量较大，请创建一个 [Hugging Face token](https://huggingface.co/settings/tokens) (只读 token 即可) ，并将其导出为 `HF_TOKEN`：
+
+```bash theme={null}
+export HF_TOKEN="hf_..."
+```
+
+设置该值后，脚本会通过 `mcp` 工具的 `authorization` 字段将其传给服务器。不设置则以匿名方式运行。
+
+<Note>
+  本示例使用 Agent API 的 `mcp` 工具。有关设置和使用详情，请参阅 [MCP 文档](/zh/docs/agent-api/tools/mcp)。
+</Note>
+
+<div id="usage">
+  ## 用法
+</div>
+
+将任务作为单个参数传入：
+
+```bash theme={null}
+python model_picker.py "on-device English speech-to-text, small enough to run on a laptop"
+```
+
+该脚本会输出一份 Markdown 简报：一张候选清单表格，以及一条附带引用的推荐结论。
+加上 `--show-tools` 还可按顺序打印 模型 发起的工具调用，方便你查看生成该答案所依据的 Hub 查询和网页搜索。
+
+<div id="how-it-works">
+  ## 工作原理
+</div>
+
+整个运行过程就是一次 `client.responses.create` 调用，其中提供了两个工具——Hugging Face 的 `mcp` 服务器和 `web_search`——以及一条指令：所有结论都必须以工具返回的信息为依据。
+
+这条指令正是本示例的关键。
+没有它，模型 就会把工具当成可选项而直接跳过。
+system prompt 堵死了这条退路：它要求 模型 在推荐任何模型之前，先在 Hub 和网络上逐一核实每个候选项。
+
+实际运行分为两个阶段。
+首先，模型 在 Hub 上缩小范围，多次优化搜索条件，再读取入围项的仓库详情。
+然后，它转向网络，核查这些入围项的实际表现，最后才给出候选清单和最终选择。
+
+<Accordion title="查看工具调用（--show-tools）">
+  在追踪记录中，Hugging Face MCP 调用显示为 `mcp:<tool>`；Agent API 的网络搜索显示为 `web_search`，并附带其实际执行的查询。
+  在下面这次运行中，模型 在 Hub 上搜索了七次，读取了一次入围项的详情，然后进行了一轮网络搜索才作答——先 Hub，后网络。
+
+  ```text theme={null}
+  1. mcp:hub_repo_search {"filters":["automatic-speech-recognition"],"query":"English speech to text on device small whisper","sort":"downloads"}
+  2. mcp:hub_repo_search {"author":"openai","filters":["automatic-speech-recognition"],"query":"whisper"}
+     ... (searches 3-7: distil-whisper, wav2vec2, faster-whisper, facebook/wav2vec2-base-960h, nvidia parakeet) ...
+  8. mcp:hub_repo_details {"repo_ids":["openai/whisper-base.en","openai/whisper-small.en","distil-whisper/distil-small.en","distil-whisper/distil-medium.en","facebook/wav2vec2-base-960h"], ...}
+  9. web_search openai whisper base.en small.en benchmarks known issues; distil-whisper distil-small.en distil-medium.en benchmarks; facebook wav2vec2-base-960h benchmarks
+  ```
+
+  这些查询由 模型 自行编写，并在两次调用之间不断优化，因此每次运行的具体形态都会有所不同。
+</Accordion>
+
+<div id="full-code">
+  ## 完整代码
+</div>
+
+整个脚本只有一个文件：构建两个工具，提交一个后台请求，轮询至任务完成，然后打印答案 (以及可选的工具调用轨迹) 。
+
+<Accordion title="完整代码 - model_picker.py">
+  ```python model_picker.py theme={null}
+  #!/usr/bin/env python3
+  """Model Picker - turn a plain-language task into a grounded shortlist of open
+  models, using one Agent API request that combines the Hugging Face MCP server
+  with web search. See the README for details.
+  """
+
+  import argparse
+  import os
+  import sys
+  import time
+  from typing import Any, List
+
+  from perplexity import Perplexity
+
+  POLL_INTERVAL_SECONDS = 4
+  POLL_TIMEOUT_SECONDS = 600
+  MAX_STEPS = 20
+  MODEL = "openai/gpt-5.5"
+  HF_MCP_URL = "https://huggingface.co/mcp"
+
+  # 只开放该服务器工具中的只读部分，这样 model 只能查询模型，做不了别的事。
+  HF_ALLOWED_TOOLS = [
+      "hub_repo_search",
+      "hub_repo_details",
+      "paper_search",
+      "hf_doc_search",
+      "hf_doc_fetch",
+  ]
+
+  # 强制 model 借助工具核实，而不是凭记忆作答。
+  INSTRUCTIONS = """You recommend open models from Hugging Face for a user's task.
+
+  Ground every claim in tools - never recommend a model from memory:
+  - Find candidates with hub_repo_search. If a search returns weak or empty
+    results, refine it (change the query wording, task filter, or sort) and
+    search again before giving up.
+  - For each finalist, call hub_repo_details to confirm its real task, license,
+    download count, and last-modified date. Drop candidates you cannot verify.
+  - Use web_search to check each finalist's benchmarks, quality, and any known
+    issues or deprecations. Always run at least one web_search before you
+    recommend.
+
+  Then answer in Markdown:
+  1. A shortlist table with columns: Model | Downloads | License | Hugging Face link.
+  2. One recommendation with a short justification tied to the task's
+     constraints, citing the Hub links and the web sources you used.
+  Prefer models with a clear open license and real adoption over obscure repos."""
+
+  PROMPT_TEMPLATE = """Recommend an open model for this task:
+
+  {task}
+
+  Search Hugging Face for candidates, verify each with its repo details, and
+  check the web for benchmarks and known issues before recommending one."""
+
+
+  def build_tools() -> List[dict]:
+      mcp_tool = {
+          "type": "mcp",
+          "server_label": "huggingface",
+          "server_url": HF_MCP_URL,
+          "allowed_tools": HF_ALLOWED_TOOLS,
+      }
+      # 可选：设置 HF_TOKEN 以进行身份验证，并提高匿名访问的速率限制。
+      token = os.environ.get("HF_TOKEN")
+      if token:
+          mcp_tool["authorization"] = token
+      return [mcp_tool, {"type": "web_search"}]
+
+
+  def submit_and_wait(client: Perplexity, **create_kwargs: Any) -> Any:
+      response = client.responses.create(background=True, **create_kwargs)
+      print(f"Submitted response {response.id}; working...", file=sys.stderr)
+      deadline = time.time() + POLL_TIMEOUT_SECONDS
+      while response.status in ("queued", "in_progress"):
+          if time.time() > deadline:
+              raise TimeoutError("Timed out waiting for the response to finish.")
+          time.sleep(POLL_INTERVAL_SECONDS)
+          response = client.responses.retrieve(response.id)
+      if response.status != "completed":
+          raise RuntimeError(f"Request ended with status {response.status!r}.")
+      return response
+
+
+  def final_text(response: Any) -> str:
+      # 手动拼接：消息块没有文本时，response.output_text 会抛出异常。
+      chunks: List[str] = []
+      for item in response.output or []:
+          if getattr(item, "type", None) != "message":
+              continue
+          for block in getattr(item, "content", None) or []:
+              if getattr(block, "type", None) == "output_text" and block.text:
+                  chunks.append(block.text)
+      return "\n\n".join(chunks)
+
+
+  def print_tool_trace(response: Any) -> None:
+      # MCP 调用以 mcp_call 项返回；网页搜索则以 search_results 项返回。
+      print("--- tool trace ---", file=sys.stderr)
+      n = 0
+      for item in response.output or []:
+          kind = getattr(item, "type", None)
+          if kind == "mcp_call":
+              n += 1
+              print(f"\n{n}. mcp:{item.name} {(item.arguments or '').strip()[:200]}", file=sys.stderr)
+          elif kind == "search_results":
+              n += 1
+              queries = getattr(item, "queries", None) or []
+              print(f"\n{n}. web_search {'; '.join(queries)}", file=sys.stderr)
+
+
+  def main() -> int:
+      parser = argparse.ArgumentParser(description="Recommend an open model for a task.")
+      parser.add_argument(
+          "task",
+          help='The task in plain language, e.g. "on-device English speech-to-text".',
+      )
+      parser.add_argument(
+          "--show-tools",
+          action="store_true",
+          help="Print the tool calls the model made, in order.",
+      )
+      args = parser.parse_args()
+
+      if not os.environ.get("PERPLEXITY_API_KEY"):
+          print("Set PERPLEXITY_API_KEY in your environment.", file=sys.stderr)
+          return 1
+
+      client = Perplexity()
+      print(f"Finding open models for: {args.task}", file=sys.stderr)
+      try:
+          response = submit_and_wait(
+              client,
+              model=MODEL,
+              instructions=INSTRUCTIONS,
+              input=PROMPT_TEMPLATE.format(task=args.task),
+              tools=build_tools(),
+              max_steps=MAX_STEPS,
+          )
+      except Exception as err:
+          print(f"Error: {err}", file=sys.stderr)
+          return 2
+
+      if args.show_tools:
+          print_tool_trace(response)
+      print(final_text(response) or "(no answer returned)")
+      return 0
+
+
+  if __name__ == "__main__":
+      sys.exit(main())
+  ```
+</Accordion>
+
+<div id="example-output">
+  ## 示例输出
+</div>
+
+一次真实运行 —— `python model_picker.py "on-device English speech-to-text, small enough to run on a laptop"` (结果会随 Hub 与网络的实时内容而变化) ：
+
+```markdown theme={null}
+## 候选清单
+
+| 模型 | 下载量 | 许可证 | Hugging Face 链接 |
+|---|---:|---|---|
+| distil-whisper/distil-small.en | 895.7K | MIT | https://hf.co/distil-whisper/distil-small.en |
+| openai/whisper-small.en | 3.7M | Apache-2.0 | https://hf.co/openai/whisper-small.en |
+| openai/whisper-base.en | 20.7M | Apache-2.0 | https://hf.co/openai/whisper-base.en |
+| distil-whisper/distil-medium.en | 6.5M | MIT | https://hf.co/distil-whisper/distil-medium.en |
+| facebook/wav2vec2-base-960h | 113.6M | Apache-2.0 | https://hf.co/facebook/wav2vec2-base-960h |
+
+## 推荐：distil-whisper/distil-small.en
+
+若要在笔记本电脑上进行端侧英语语音转文字，我会选择 distil-whisper/distil-small.en。
+它在 Hub 上已确认为 automatic-speech-recognition 任务，仅支持英语，参数量 166.1M，采用 MIT
+许可证，是体积最小的 Distil-Whisper 检查点——专为内存受限的端侧场景打造，推理速度约快 6 倍，
+质量仍接近 Whisper。它比 openai/whisper-small.en 更小（166M 对 242M）；只要内存够用，
+它在准确率与速度上的取舍也优于 whisper-base.en。已知注意事项：蒸馏模型应通过 Hugging Face Transformers
+运行，而非 openai/whisper 软件包；另外准确率会随音频质量和口音而波动。
+```
+
+表中的每个 模型 都是该请求在 Hub 上实际查到的，下载量和许可证信息均取自仓库的真实元数据。
+
+<div id="limitations">
+  ## 局限性
+</div>
+
+* **实时结果存在差异。** 候选清单取决于实时的 Hub 数据和当前的网络搜索结果，因此每次运行得到的具体 模型 和推荐结果可能不同。
+* **匿名速率限制。** 该示例以匿名方式连接 Hugging Face MCP 服务器，会受到速率限制。如需更高频次的使用，请设置 `HF_TOKEN` (参见[安装](#installation)) 以完成身份验证并提高限额。
+* **第三方服务器。** 远程 MCP 服务器属于第三方服务——请仅连接你信任的服务器。参见[风险与安全](/zh/docs/agent-api/tools/mcp#risks-and-safety)。
+
+<div id="resources">
+  ## 相关资源
+</div>
+
+* [MCP 工具](/zh/docs/agent-api/tools/mcp)
+* [网页搜索工具](/zh/docs/agent-api/tools/web-search)
+* [Hugging Face MCP 服务器](https://huggingface.co/settings/mcp)
+* [Agent API 快速上手](/zh/docs/agent-api/quickstart)
+* [定价](/zh/docs/getting-started/pricing)
+* [Perplexity Python SDK](https://github.com/ppl-ai/perplexity-python)

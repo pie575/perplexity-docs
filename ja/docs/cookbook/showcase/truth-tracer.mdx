@@ -1,0 +1,148 @@
+---
+title: "TruthTracer | AIを活用した誤情報検出プラットフォーム"
+description: "PerplexityのSonar APIを用いて主張を分析し、信頼の連鎖を追跡し、事実検証のためのソクラテス的推論を提供する包括的な誤情報検出プラットフォーム"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+**TruthTracer** は、PerplexityのSonar APIを活用して多層的な主張分析を行う、総合的な誤情報検出プラットフォームです。ファクトチェック、信頼チェーンの追跡、ソクラテス的推論を組み合わせることで、信頼度スコアと詳細な出典情報を備えた、正確で根拠に基づく検証結果を提供します。
+
+<div id="demo">
+  ### デモ
+</div>
+
+<iframe className="w-full aspect-video rounded-xl" src="https://www.youtube.com/embed/twXeyK5ajyE" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+
+<div id="features">
+  ## 機能
+</div>
+
+* **複数手法による分析** — ファクトチェック、信頼チェーン分析、ソクラテス的推論を組み合わせ
+* **AIによる検証** — PerplexityのSonar、Sonar Deep Research、Sonar Reasoning Proの各モデルを利用
+* **リアルタイム処理** — 複数の分析手法を並列実行
+* **エビデンスに基づく結果** — 情報源、信頼度スコア、詳細な推論過程を提供
+* **クリーンアーキテクチャ** — NestJSバックエンドとReactフロントエンドを採用
+* **本番運用に対応** — Dockerによるデプロイ、包括的なテスト、APIドキュメントを完備
+* **設定可能な信頼度スコアリング** — 重みとしきい値をカスタマイズ可能
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+* Node.js 18以上とnpm
+* Perplexity API key (Sonarモデルへのアクセス権) 
+* Docker (デプロイする場合のみ) 
+* リポジトリのクローンに使用するGit
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+# バックエンドのリポジトリをクローン
+git clone https://github.com/anthony-okoye/truth-tracer-backend.git
+cd truth-tracer-backend
+
+# 依存関係をインストール
+npm install
+
+# フロントエンドのリポジトリをクローン
+git clone https://github.com/anthony-okoye/truth-tracer-front.git
+cd truth-tracer-front
+
+# フロントエンドの依存関係をインストール
+npm install
+```
+
+<div id="configuration">
+  ## 設定
+</div>
+
+バックエンドディレクトリに `.env` ファイルを作成します。
+
+```ini theme={null}
+# 必須
+SONAR_API_KEY=your_perplexity_api_key
+SONAR_API_URL=https://api.perplexity.ai
+
+# 任意の設定
+SONAR_TIMEOUT=30000
+SONAR_MAX_RETRIES=3
+CONFIDENCE_WEIGHT_FACT_CHECK=0.35
+CONFIDENCE_WEIGHT_TRUST_CHAIN=0.25
+CONFIDENCE_WEIGHT_SOCRATIC=0.20
+```
+
+<div id="usage">
+  ## 使い方
+</div>
+
+1. **バックエンドの起動**:
+
+```bash theme={null}
+   cd truth-tracer-backend
+   npm run start:dev
+```
+
+2. **フロントエンドの起動**:
+
+```bash theme={null}
+   cd truth-tracer-front
+   npm start
+```
+
+3. **アプリケーションへのアクセス**: ブラウザで [http://localhost:3000](http://localhost:3000) を開きます
+
+4. **主張の分析**:
+   * テキストエリアに主張を入力します
+   * &quot;Analyze Claim&quot; をクリックすると、ファクトチェック、信頼チェーン分析、ソクラテス的推論が実行されます
+   * 信頼度スコア、情報源、詳細な説明を含む結果を確認します
+
+<div id="code-explanation">
+  ## コードの解説
+</div>
+
+* **バックエンド**: TypeScript のベストプラクティスに沿ったクリーンアーキテクチャの NestJS アプリケーション
+* **AI 統合**: 用途別の 3 つの model を使い分ける Perplexity Sonar API — ファクトチェックには Sonar、信頼チェーン分析には Sonar Deep Research、論理評価には Sonar Reasoning Pro
+* **並列処理**: 3 つの分析手法を同時に実行し、主張を効率よく検証
+* **レスポンスのサニタイズ**: さまざまな API レスポンス形式に対応する独自の JSON 解析と検証
+* **信頼度スコアリング**: 3 つの分析手法の結果を統合した加重スコアリング方式
+* **フロントエンド**: 直感的な主張の送信インターフェースと詳細な結果の可視化を備えた React アプリケーション
+* **テスト**: ユニットテスト、エンドツーエンドテスト、主張分析のテストを網羅した包括的なテストスイート
+
+<div id="how-the-sonar-api-is-used">
+  ## Sonar API の活用方法
+</div>
+
+TruthTracer は、次の 3 つの異なる分析アプローチで Perplexity の Sonar API を活用しています。
+
+```typescript theme={null}
+// 複数の Sonar モデルを並列実行
+const [factCheckResult, trustChainResult, socraticResult] = await Promise.all([
+  sonarClient.chat.completions.create({
+    model: "sonar",
+    messages: [{ role: "user", content: factCheckPrompt }],
+    max_tokens: 500
+  }),
+  sonarClient.chat.completions.create({
+    model: "sonar-deep-research", 
+    messages: [{ role: "user", content: trustChainPrompt }],
+    max_tokens: 2500
+  }),
+  sonarClient.chat.completions.create({
+    model: "sonar-reasoning-pro",
+    messages: [{ role: "user", content: socraticPrompt }],
+    max_tokens: 4000
+  })
+]);
+```
+
+<div id="links">
+  ## リンク
+</div>
+
+* [ライブデモ](https://truthtracer.netlify.app/)
+* [バックエンドリポジトリ](https://github.com/anthony-okoye/truth-tracer-backend)
+* [フロントエンドリポジトリ](https://github.com/anthony-okoye/truth-tracer-front)

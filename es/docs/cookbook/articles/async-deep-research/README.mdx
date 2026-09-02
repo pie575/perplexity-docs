@@ -1,0 +1,401 @@
+---
+title: "Flujos de trabajo de investigación profunda"
+description: "Usa el preset medium de la Agent API para tareas de investigación exhaustivas y de varios pasos: uso síncrono, concurrencia por lotes, procesamiento de resultados y patrones de producción"
+---
+
+Esta guía muestra cómo usar el preset `medium` de la Agent API para tareas de investigación exhaustivas y de varios pasos. La investigación profunda lleva a cabo una búsqueda web extendida: sigue cadenas de fuentes y sintetiza respuestas detalladas. Aprenderás a ejecutar consultas de investigación profunda, procesar resultados, gestionar solicitudes de larga duración y ejecutar flujos de trabajo de investigación por lotes.
+
+<Info>
+  El preset `medium` de la Agent API realiza investigación web de varios pasos, siguiendo cadenas de fuentes y sintetizando respuestas exhaustivas. Selecciona automáticamente el mejor modelo y configura las herramientas para la investigación profunda. Para más información sobre los presets, consulta la documentación de [presets de la Agent API](/es/docs/agent-api/presets).
+</Info>
+
+<div id="prerequisites">
+  ## Requisitos previos
+</div>
+
+Instala el SDK de Perplexity:
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+Si aún no tienes una API key:
+
+<Card title="Obtén tu API key de Perplexity" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Haz clic aquí" href="https://perplexity.ai/account/api">
+  Ve a la pestaña **API Keys** del portal de API y genera una nueva key.
+</Card>
+
+Luego, exporta tu API key como variable de entorno:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="basic-deep-research">
+  ## Investigación profunda básica
+</div>
+
+Usa el preset `medium` para consultas de investigación exhaustivas.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="medium",
+      input=(
+          "Provide a comprehensive analysis of the current state of nuclear fusion research. "
+          "Cover the main approaches (tokamak, stellarator, inertial confinement, laser-driven), "
+          "key milestones achieved in the past 2 years, major private companies involved, "
+          "and realistic timelines for commercial fusion power."
+      ),
+  )
+
+  print(f"Model: {response.model}")
+  print(f"\n{response.output_text}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      preset: "medium",
+      input: "Provide a comprehensive analysis of the current state of nuclear fusion research. Cover the main approaches (tokamak, stellarator, inertial confinement, laser-driven), key milestones achieved in the past 2 years, major private companies involved, and realistic timelines for commercial fusion power.",
+  });
+
+  console.log(`Model: ${response.model}`);
+  console.log(`\n${response.output_text}`);
+  ```
+
+  ```bash curl theme={null}
+  curl "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "medium",
+      "input": "Provide a comprehensive analysis of the current state of nuclear fusion research."
+    }'
+  ```
+</CodeGroup>
+
+<Tip>
+  El preset `medium` selecciona automáticamente el mejor modelo y configura las herramientas necesarias para investigaciones de varios pasos. No hace falta especificar ningún modelo ni herramientas cuando usas presets.
+</Tip>
+
+<div id="processing-deep-research-results">
+  ## Procesamiento de los resultados de la investigación profunda
+</div>
+
+Extrae y da formato a las partes clave de una respuesta de investigación profunda.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def deep_research(query: str) -> dict:
+      """Ejecuta una consulta de investigación profunda y extrae resultados estructurados."""
+      print(f"Researching: {query[:80]}...")
+
+      response = client.responses.create(
+          preset="medium",
+          input=query,
+      )
+
+      content = response.output_text
+      usage = response.usage
+
+      return {
+          "content": content,
+          "model": response.model,
+          "tokens": {
+              "input": usage.input_tokens if usage else 0,
+              "output": usage.output_tokens if usage else 0,
+          },
+          "word_count": len(content.split()),
+      }
+
+
+  if __name__ == "__main__":
+      output = deep_research(
+          "What is the current state of solid-state battery technology? "
+          "Cover the leading companies, technical challenges remaining, "
+          "and expected timeline for mass production in EVs."
+      )
+      print(f"\nModel: {output['model']}")
+      print(f"Words: {output['word_count']}")
+      print(f"Tokens: {output['tokens']['input']} in, {output['tokens']['output']} out")
+      print(f"\n{'='*60}\n")
+      print(output["content"][:2000])
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  async function deepResearch(query: string) {
+      console.log(`Researching: ${query.slice(0, 80)}...`);
+
+      const response = await client.responses.create({
+          preset: "medium",
+          input: query,
+      });
+
+      const content = response.output_text;
+      const usage = response.usage;
+
+      return {
+          content,
+          model: response.model,
+          tokens: {
+              input: usage?.input_tokens ?? 0,
+              output: usage?.output_tokens ?? 0,
+          },
+          wordCount: content.split(/\s+/).length,
+      };
+  }
+
+  const output = await deepResearch(
+      "What is the current state of solid-state battery technology? Cover the leading companies, technical challenges remaining, and expected timeline for mass production in EVs."
+  );
+
+  console.log(`\nModel: ${output.model}`);
+  console.log(`Words: ${output.wordCount}`);
+  console.log(`Tokens: ${output.tokens.input} in, ${output.tokens.output} out`);
+  console.log(`\n${"=".repeat(60)}\n`);
+  console.log(output.content.slice(0, 2000));
+  ```
+</CodeGroup>
+
+<div id="deep-research-with-domain-filtering">
+  ## Investigación profunda con filtrado por dominios
+</div>
+
+Combina la investigación profunda con filtros de dominio para obtener una investigación centrada y respaldada por fuentes autorizadas.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Investigación profunda restringida a fuentes gubernamentales y académicas
+  response = client.responses.create(
+      model="openai/gpt-5.2",
+      input=(
+          "Analyze the current regulatory landscape for AI in healthcare. "
+          "Cover FDA guidance, EU AI Act implications, and recent enforcement actions."
+      ),
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": [".gov", ".europa.eu", "who.int", "nature.com", ".edu"],
+          },
+      }],
+      instructions=(
+          "Conduct thorough research using only government and academic sources. "
+          "Provide specific regulatory references, dates, and policy details."
+      ),
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.2",
+      input: "Analyze the current regulatory landscape for AI in healthcare. Cover FDA guidance, EU AI Act implications, and recent enforcement actions.",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: [".gov", ".europa.eu", "who.int", "nature.com", ".edu"],
+          },
+      }],
+      instructions: "Conduct thorough research using only government and academic sources. Provide specific regulatory references, dates, and policy details.",
+  });
+
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="batch-research-with-concurrency">
+  ## Investigación por lotes con concurrencia
+</div>
+
+Ejecuta varias consultas de investigación profunda de forma concurrente con asyncio y el SDK de Perplexity.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import time
+  from perplexity import AsyncPerplexity
+
+
+  async def single_research(client: AsyncPerplexity, query: str) -> dict:
+      """Ejecuta una única consulta de investigación profunda."""
+      start = time.time()
+      try:
+          response = await client.responses.create(
+              preset="medium",
+              input=query,
+          )
+          return {
+              "query": query,
+              "content": response.output_text,
+              "model": response.model,
+              "elapsed": time.time() - start,
+          }
+      except Exception as e:
+          return {"query": query, "error": str(e), "elapsed": time.time() - start}
+
+
+  async def batch_research(queries: list[str], max_concurrent: int = 3) -> list[dict]:
+      """Ejecuta varias consultas de investigación profunda con límites de concurrencia."""
+      semaphore = asyncio.Semaphore(max_concurrent)
+
+      async def limited_research(client, query):
+          async with semaphore:
+              return await single_research(client, query)
+
+      async with AsyncPerplexity() as client:
+          tasks = [limited_research(client, q) for q in queries]
+          return await asyncio.gather(*tasks)
+
+
+  if __name__ == "__main__":
+      queries = [
+          "What are the latest advances in room-temperature superconductors?",
+          "What is the current state of quantum error correction?",
+          "What are the most promising approaches to carbon capture and storage?",
+      ]
+
+      print(f"Starting batch research: {len(queries)} queries\n")
+      results = asyncio.run(batch_research(queries, max_concurrent=3))
+
+      for r in results:
+          status = "OK" if "content" in r else f"FAILED ({r.get('error')})"
+          word_count = len(r.get("content", "").split()) if "content" in r else 0
+          print(f"  [{r['elapsed']:.0f}s] {r['query'][:60]}... → {status} ({word_count} words)")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  interface ResearchResult {
+    query: string;
+    content?: string;
+    model?: string;
+    elapsed: number;
+    error?: string;
+  }
+
+  const client = new Perplexity();
+
+  async function singleResearch(query: string): Promise<ResearchResult> {
+    const start = Date.now();
+    try {
+      const response = await client.responses.create({
+        preset: 'medium',
+        input: query,
+      });
+      return {
+        query,
+        content: response.output_text,
+        model: response.model,
+        elapsed: (Date.now() - start) / 1000,
+      };
+    } catch (e) {
+      return { query, error: String(e), elapsed: (Date.now() - start) / 1000 };
+    }
+  }
+
+  async function batchResearch(queries: string[], maxConcurrent = 3) {
+    const results: ResearchResult[] = [];
+    const queue = [...queries];
+    async function worker() {
+      while (queue.length) {
+        const q = queue.shift()!;
+        results.push(await singleResearch(q));
+      }
+    }
+    await Promise.all(
+      Array.from({ length: maxConcurrent }, () => worker())
+    );
+    return results;
+  }
+
+  const queries = [
+    'What are the latest advances in room-temperature superconductors?',
+    'What is the current state of quantum error correction?',
+    'What are the most promising approaches to carbon capture and storage?',
+  ];
+
+  console.log(`Starting batch research: ${queries.length} queries\n`);
+  const results = await batchResearch(queries, 3);
+
+  for (const r of results) {
+    const status = r.content ? 'OK' : `FAILED (${r.error})`;
+    const words = r.content ? r.content.split(/\s+/).length : 0;
+    console.log(`  [${r.elapsed.toFixed(0)}s] ${r.query.slice(0, 60)}... → ${status} (${words} words)`);
+  }
+  ```
+</CodeGroup>
+
+<Warning>
+  Las consultas de investigación profunda consumen muchos recursos de cómputo. Limita las solicitudes concurrentes a entre 3 y 5 para no exceder los límites de tasa y evitar el throttling. Consulta tus [límites de tasa](/es/docs/admin/rate-limits-usage-tiers) para conocer los umbrales específicos.
+</Warning>
+
+<div id="tips-and-best-practices">
+  ## Consejos y buenas prácticas
+</div>
+
+1. **Usa el preset `medium`** para la integración más sencilla. Selecciona automáticamente el mejor modelo y configura las herramientas.
+
+2. **Combínalo con filtros de dominio** cuando necesites fuentes autorizadas. Usa `search_domain_filter` para limitar la búsqueda a dominios específicos.
+
+3. **Usa `instructions`** para orientar la profundidad y el enfoque de la investigación. Sé específico sobre los aspectos que quieres cubrir.
+
+4. **Limita la concurrencia.** Ejecutar demasiadas consultas de investigación profunda a la vez puede activar los límites de tasa. Usa un semáforo para acotar las solicitudes concurrentes a 3-5.
+
+5. **Usa el cliente asíncrono para flujos de trabajo por lotes.** `AsyncPerplexity` permite realizar solicitudes concurrentes sin bloqueos.
+
+6. **Configura `max_output_tokens`** para controlar los costos cuando necesites resúmenes breves en lugar de informes exhaustivos.
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Presets de la Agent API" icon="settings" href="/es/docs/agent-api/presets">
+    Referencia completa de los presets disponibles, incluido medium.
+  </Card>
+
+  <Card title="Inicio rápido de la Agent API" icon="rocket" href="/es/docs/agent-api/quickstart">
+    Empieza a usar la Agent API para acceder a múltiples proveedores y herramientas.
+  </Card>
+
+  <Card title="Filtrado por dominio" icon="filter" href="/es/docs/cookbook/articles/search-domain-filtering/README">
+    Controla qué dominios incluye o excluye la búsqueda.
+  </Card>
+
+  <Card title="Límites de tasa" icon="gauge-max" href="/es/docs/admin/rate-limits-usage-tiers">
+    Conoce los límites de tasa aplicables a flujos de trabajo de investigación y por lotes.
+  </Card>
+</CardGroup>

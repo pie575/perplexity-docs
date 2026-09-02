@@ -1,0 +1,311 @@
+---
+title: "CLI d'agent en TypeScript"
+description: "Une CLI TypeScript interactive offrant des réponses en streaming, la sélection du modèle et la recherche web via l'Agent API de Perplexity"
+---
+
+<div id="typescript-agent-cli">
+  # CLI d'agent en TypeScript
+</div>
+
+Une interface en ligne de commande interactive, pensée avant tout pour TypeScript, qui se connecte à l&#39;Agent API de Perplexity avec des réponses en streaming, la sélection du modèle à l&#39;exécution et une recherche web intégrée.
+
+<div id="features">
+  ## Fonctionnalités
+</div>
+
+* REPL interactif avec sortie de tokens en streaming
+* Sélection du modèle à l&#39;exécution parmi une liste prédéfinie
+* Intégration de la recherche web via l&#39;outil `web_search`
+* Patterns spécifiques à TypeScript : affinement de type, assertions const, classes d&#39;erreur typées
+* Historique de conversation pour les interactions multi-tours
+* Gestion des erreurs en douceur et arrêt propre
+
+<div id="installation">
+  ## Installation
+</div>
+
+```bash theme={null}
+mkdir typescript-agent-cli && cd typescript-agent-cli
+npm init -y
+npm install @perplexity-ai/perplexity_ai
+npm install -D typescript @types/node tsx
+```
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## Utilisation
+</div>
+
+```bash theme={null}
+npx tsx src/cli.ts
+```
+
+La CLI vous invite à sélectionner un modèle, puis entre dans une boucle interactive :
+
+```
+Available models:
+  1. OpenAI GPT-5.1 (openai/gpt-5.4)
+  2. Google Gemini 3 Flash (google/gemini-3.1-flash-lite)
+
+Select a model (1-2): 1
+
+> What is the current state of quantum computing?
+```
+
+Commandes : `/search` (activer la recherche web), `/nosearch` (la désactiver), `/clear` (réinitialiser l&#39;historique), `/quit` (quitter).
+
+<div id="full-code">
+  ## Code complet
+</div>
+
+Enregistrez le fichier sous `src/cli.ts` :
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+import * as readline from "readline";
+
+// --- Configuration ---
+
+const AVAILABLE_MODELS = [
+  { name: "openai/gpt-5.4", label: "OpenAI GPT-5.1" },
+  { name: "google/gemini-3.1-flash-lite", label: "Google Gemini 3 Flash" },
+] as const;
+
+type ModelName = (typeof AVAILABLE_MODELS)[number]["name"];
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// --- Utilitaires ---
+
+function createRL(): readline.Interface {
+  return readline.createInterface({ input: process.stdin, output: process.stdout });
+}
+
+function ask(rl: readline.Interface, prompt: string): Promise<string> {
+  return new Promise((resolve) => rl.question(prompt, (a) => resolve(a.trim())));
+}
+
+// --- Sélection du modèle ---
+
+async function selectModel(rl: readline.Interface): Promise<ModelName> {
+  console.log("\nAvailable models:");
+  AVAILABLE_MODELS.forEach((m, i) =>
+    console.log(`  ${i + 1}. ${m.label} (${m.name})`)
+  );
+  while (true) {
+    const idx = parseInt(await ask(rl, `\nSelect a model (1-${AVAILABLE_MODELS.length}): `), 10) - 1;
+    if (idx >= 0 && idx < AVAILABLE_MODELS.length) {
+      console.log(`Using model: ${AVAILABLE_MODELS[idx].name}\n`);
+      return AVAILABLE_MODELS[idx].name;
+    }
+    console.log("Invalid selection.");
+  }
+}
+
+// --- Requête en streaming ---
+
+async function streamQuery(
+  client: Perplexity,
+  model: ModelName,
+  history: Message[],
+  userMessage: string,
+  useWebSearch: boolean
+): Promise<string> {
+  const input = [
+    ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    { role: "user" as const, content: userMessage },
+  ];
+
+  const tools: Array<{ type: "web_search" }> = useWebSearch
+    ? [{ type: "web_search" as const }]
+    : [];
+
+  const stream = await client.responses.create({
+    model,
+    input,
+    tools,
+    stream: true,
+    instructions: "You are a helpful assistant. Use web search when available for current events. Be concise.",
+    max_output_tokens: 2048,
+  });
+
+  let fullResponse = "";
+  for await (const chunk of stream) {
+    if (chunk.type === "response.output_text.delta") {
+      const delta = (chunk as any).delta as string;
+      process.stdout.write(delta);
+      fullResponse += delta;
+    }
+    if (chunk.type === "response.output_item.added") {
+      const item = (chunk as any).item;
+      if (item?.type === "search_results") {
+        process.stdout.write("\n[Searching the web...]\n");
+      }
+    }
+    if (chunk.type === "response.completed") {
+      const usage = (chunk as any).response?.usage;
+      if (usage) {
+        process.stdout.write(`\n\n[Tokens: ${usage.input_tokens} in / ${usage.output_tokens} out]`);
+      }
+    }
+  }
+  process.stdout.write("\n");
+  return fullResponse;
+}
+
+// --- Gestion des commandes ---
+
+function handleCommand(cmd: string, state: { webSearch: boolean; history: Message[] }): boolean {
+  switch (cmd.toLowerCase()) {
+    case "/quit": case "/exit":
+      console.log("Goodbye."); return true;
+    case "/search":
+      state.webSearch = true; console.log("Web search enabled."); return false;
+    case "/nosearch":
+      state.webSearch = false; console.log("Web search disabled."); return false;
+    case "/clear":
+      state.history = []; console.log("History cleared."); return false;
+    case "/help":
+      console.log("\n  /search  /nosearch  /clear  /quit  /help\n"); return false;
+    default:
+      console.log(`Unknown command: ${cmd}. Type /help.`); return false;
+  }
+}
+
+// --- Programme principal ---
+
+async function main(): Promise<void> {
+  const client = new Perplexity();
+  const rl = createRL();
+  const model = await selectModel(rl);
+  const state = { webSearch: true, history: [] as Message[] };
+
+  console.log("Type a message to chat, or /help for commands. Web search is ON.\n");
+  process.on("SIGINT", () => { console.log("\nGoodbye."); rl.close(); process.exit(0); });
+
+  while (true) {
+    const input = await ask(rl, "> ");
+    if (!input) continue;
+    if (input.startsWith("/")) { if (handleCommand(input, state)) break; continue; }
+
+    try {
+      const response = await streamQuery(client, model, state.history, input, state.webSearch);
+      state.history.push({ role: "user", content: input });
+      state.history.push({ role: "assistant", content: response });
+      if (state.history.length > 20) state.history = state.history.slice(-20);
+    } catch (error: unknown) {
+      if (error instanceof Perplexity.APIConnectionError) {
+        console.error("\nConnection error. Check your network.");
+      } else if (error instanceof Perplexity.RateLimitError) {
+        console.error("\nRate limit exceeded. Wait and retry.");
+      } else if (error instanceof Perplexity.APIStatusError) {
+        console.error(`\nAPI error: ${(error as any).message}`);
+      } else {
+        console.error("\nUnexpected error:", error);
+      }
+    }
+    console.log();
+  }
+  rl.close();
+}
+
+main();
+```
+
+<div id="example-session">
+  ## Exemple de session
+</div>
+
+```
+Modèles disponibles :
+  1. OpenAI GPT-5.1 (openai/gpt-5.4)
+  2. Google Gemini 3 Flash (google/gemini-3.1-flash-lite)
+
+Sélectionnez un modèle (1-2) : 1
+Modèle utilisé : openai/gpt-5.4
+
+Saisissez un message pour discuter, ou /help pour afficher les commandes. La recherche web est ACTIVÉE.
+
+> Quelles ont été les principales annonces en IA cette semaine ?
+[Recherche sur le web...]
+Cette semaine a été marquée par plusieurs avancées notables en IA :
+1. Anthropic a lancé Claude 4, doté d'un raisonnement amélioré...
+2. Google DeepMind a publié de nouveaux résultats sur le repliement des protéines...
+3. OpenAI a annoncé des partenariats entreprise pour GPT-5...
+
+[Tokens : 1420 en entrée / 287 en sortie]
+
+> /nosearch
+Recherche web désactivée.
+
+> Expliquez les transformeurs en termes simples
+Un transformeur est une architecture de réseau de neurones qui traite toutes
+les parties d'une entrée simultanément plutôt que séquentiellement...
+
+[Tokens : 2580 en entrée / 195 en sortie]
+
+> /quit
+Au revoir.
+```
+
+<div id="key-typescript-patterns">
+  ## Principaux patterns TypeScript
+</div>
+
+<div id="const-assertions-for-tool-types">
+  ### Assertions `const` pour les types d&#39;outils
+</div>
+
+Utilisez `as const` pour restreindre les littéraux de type d&#39;outil :
+
+```typescript theme={null}
+const tools = [{ type: "web_search" as const }];
+```
+
+<div id="streaming-event-type-narrowing">
+  ### Affinement de type des événements de streaming
+</div>
+
+Vérifiez `chunk.type` avant d&#39;accéder aux champs spécifiques à un événement :
+
+```typescript theme={null}
+for await (const chunk of stream) {
+  if (chunk.type === "response.output_text.delta") {
+    process.stdout.write((chunk as any).delta);
+  }
+}
+```
+
+<div id="typed-error-handling">
+  ### Gestion typée des erreurs
+</div>
+
+```typescript theme={null}
+try {
+  // Appel à l'API
+} catch (error) {
+  if (error instanceof Perplexity.APIConnectionError) {
+    // Gérer les problèmes réseau
+  } else if (error instanceof Perplexity.RateLimitError) {
+    // Gérer les limites de débit
+  }
+}
+```
+
+<Tip>
+  L&#39;historique de la conversation est conservé d&#39;un tour à l&#39;autre, ce qui permet au modèle de faire référence aux messages précédents. Utilisez `/clear` pour démarrer une nouvelle conversation sans redémarrer la CLI.
+</Tip>
+
+<div id="limitations">
+  ## Limitations
+</div>
+
+* La CLI utilise le module `readline` de Node.js, qui ne prend pas en charge la navigation dans l&#39;historique à l&#39;aide des touches fléchées. Pour une expérience plus riche, envisagez `inquirer` ou `prompts`.
+* L&#39;historique de conversation est conservé uniquement en mémoire et perdu à l&#39;arrêt du processus.
+* Les événements de streaming peuvent varier selon le fournisseur du modèle. L&#39;événement `response.output_text.delta`, lui, est identique pour tous les modèles.

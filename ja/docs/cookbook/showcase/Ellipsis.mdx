@@ -1,0 +1,130 @@
+---
+title: "Ellipsis | ワンクリックでポッドキャストを生成するエージェント"
+description: "ワンクリックで、あらゆるトピックについて人間らしい高品質な音声コンテンツを生み出す次世代ポッドキャスト生成エージェント"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+**Ellipsis** は、ワンクリックであらゆるトピックについて人間らしい高品質な音声コンテンツを生み出す、次世代のポッドキャスト生成エージェントです。速報ニュース、テクノロジーの深掘り解説、映画レビュー、試合後のスポーツ分析まで、Ellipsis はプロのスタジオでベテランホストが制作したかのようなポッドキャストエピソードを巧みに作り上げます。
+
+<div id="features">
+  ## 機能
+</div>
+
+* **インテリジェントなマルチスピーカー対話** — 個性の異なる複数の話者による会話
+* **幅広いトピックへの対応** — LLMアーキテクチャから月食まで
+* **独自の評価エンジン** — 事実の正確性、法令遵守、会話品質を担保
+* **完全自動のポッドキャスト生成** — 人間らしく、そのまま配信できる音声を出力
+* **リアルタイムのストリーミング更新** — Server-Sent Events (SSE) による配信
+* **Podbean連携** — ポッドキャストを直接公開
+* **トレンドトピックの検出** — Perplexity APIを利用
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+* Node.js v16以上とnpm/yarn
+* Python 3.10以上とpip
+* 稼働中のRedisサーバー (デフォルトではポート6380) 
+* Perplexity APIキー、Podbeanの認証情報
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+# リポジトリをクローン
+git clone https://github.com/dineshkannan010/Ellipsis.git
+cd Ellipsis
+
+# バックエンドのセットアップ
+cd backend
+python -m venv venv
+source venv/bin/activate    # macOS/Linux
+pip install -r requirements.txt
+
+# ネイティブパッケージをインストール
+pip install llama-cpp-python --extra-index-url https://abetlen.github.io/llama-cpp-python/whl/cpu
+pip install git+https://github.com/freddyaboulton/orpheus-cpp.git
+pip install huggingface_hub[hf_xet] hf_xet
+
+# フロントエンドのセットアップ
+cd ../frontend
+npm install
+```
+
+<div id="configuration">
+  ## 設定
+</div>
+
+`backend/.env` を作成します。
+
+```ini theme={null}
+REDIS_URL=redis://your-redis-host:6379
+PERPLEXITY_API_KEY=your_key_here
+PODBEAN_CLIENT_ID=...
+PODBEAN_CLIENT_SECRET=...
+```
+
+`frontend/.env` を作成します。
+
+```ini theme={null}
+REACT_APP_API_URL=http://your-backend-host:5000
+```
+
+<div id="usage">
+  ## 使い方
+</div>
+
+1. **Redis サーバーの起動**:
+   ```bash theme={null}
+   redis-server --port 6380
+   ```
+
+2. **バックエンドの起動**:
+   ```bash theme={null}
+   cd backend
+   python app.py
+   ```
+
+3. **フロントエンドの起動**:
+   ```bash theme={null}
+   cd frontend
+   npm run dev
+   ```
+
+4. **オプション: Podbean 連携**:
+   ```bash theme={null}
+   cd backend/integrations/podbean_mcp
+   pip install -e .
+   python server.py
+   python client.py server.py
+   ```
+
+5. **コンテンツの生成**: ホームページのテキストボックスにトピックを入力し、Enter キーを押します。`ContentGenerationView` に切り替えると、スクリプトと音声の生成状況をリアルタイムで確認できます。
+
+<div id="code-explanation">
+  ## コードの解説
+</div>
+
+* **バックエンド**: Python Flask に Redis pub/sub、llama.cpp、音声生成用の Orpheus TTS を組み合わせた構成
+* **フロントエンド**: React + Vite、Tailwind CSS、リアルタイム更新用の Server-Sent Events
+* **AI 連携**: コンテンツ生成とトレンドトピックの検出に Perplexity API を利用
+* **音声処理**: 話者ごとに異なる声質を持つマルチスピーカー TTS
+* **コンテンツ評価**: 事実の正確性と法令遵守をチェックする組み込みパイプライン
+* **ポッドキャスト公開**: MCP サーバー経由で Podbean と直接連携
+
+<div id="demo-video">
+  ## デモ動画
+</div>
+
+<iframe className="w-full aspect-video rounded-xl" src="https://www.youtube.com/embed/XUPsSuCBTFw" title="YouTube video player" frameBorder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />
+
+<div id="links">
+  ## リンク
+</div>
+
+* [GitHub リポジトリ](https://github.com/dineshkannan010/Ellipsis)
+* [Devpost 応募ページ](https://devpost.com/software/ellipsis)

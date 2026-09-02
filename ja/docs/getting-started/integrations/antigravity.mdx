@@ -1,0 +1,218 @@
+---
+title: "Perplexity と Google Antigravity"
+description: "Google Antigravity 内で構築・編集するアプリケーションから Perplexity の Agent API を呼び出します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[Google Antigravity](https://antigravity.google) は、AIエージェントがエディター、ターミナル、ブラウザーにまたがってコードの計画・記述・改善を行う、エージェントファーストの開発環境です。Antigravityには独自の組み込みエージェントモデルが同梱されていますが、エージェントが書いたコードからは、リアルタイムのウェブ調査、引用、根拠のある回答を得るために、Perplexityの [Agent API](/ja/docs/agent-api/quickstart) や [Search API](/ja/docs/search/quickstart) を含む任意の外部APIを呼び出せます。
+
+このガイドでは、OpenAI Responses互換のインターフェースを使って、Antigravity内で開発しているプロジェクトにPerplexity Agent APIを追加する方法を説明します。
+
+<Info>
+  **このガイドの適用範囲。** Antigravityは現時点で、組み込みエージェントモデルをPerplexityに差し替えるためのBYOKやカスタムプロバイダー用のフックを提供していません。本ガイドで扱うのはサポート対象の方法、すなわちAntigravity内で作成した**アプリケーションコード** (ウェブアプリ、CLI、コーディングアシスタント、社内ツールなど) からPerplexityを呼び出す方法です。今後Antigravityがカスタムプロバイダー設定に対応した場合も、ここで説明するベースURLとAPI キーがそのまま利用できます。
+</Info>
+
+<Card title="Perplexity API キーを取得する" icon="key" arrow="True" horizontal="True" iconType="solid" cta="キーを取得" href="https://console.perplexity.ai/project/keys">
+  Perplexity API コンソールでAPI キーを生成し、`PERPLEXITY_API_KEY` としてプロジェクトに保存してください。
+</Card>
+
+***
+
+<div id="when-to-use-this">
+  ## 利用シーン
+</div>
+
+Agent API は、Antigravity で構築したプロジェクトにおいて、検索・スクレイピング・引用処理を自前で組み上げることなく、根拠のあるウェブ対応の回答が必要な場合に最適です。よくあるパターンは次のとおりです。
+
+* **ウェブアプリやモバイルアプリの AI 機能** — 独自の検索基盤を構築せずに、リサーチや Q&amp;A の画面を製品に組み込む。
+* **コーディングアシスタントや開発ツール** — 最新のライブラリドキュメント、エラーの解説、変更履歴を実行時にエージェントへ取得させる。
+* **社内ツールやダッシュボード** — 最新のウェブ情報 (市場データ、競合の動向、ニュース) をもとに、出典付きで質問に回答する。
+* **CLI やスクリプト** — Antigravity のターミナルから実行する、手軽なリサーチ用ユーティリティ。
+
+***
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+<Steps>
+  <Step title="API キーを環境変数として保存する">
+    Antigravity のターミナル (またはプロジェクトの `.env` ファイル) で、次のように設定します。
+
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash theme={null}
+        export PERPLEXITY_API_KEY="pplx-..."
+        ```
+      </Tab>
+
+      <Tab title="Windows (PowerShell)">
+        ```powershell theme={null}
+        setx PERPLEXITY_API_KEY "pplx-..."
+        ```
+      </Tab>
+
+      <Tab title=".env ファイル">
+        ```bash theme={null}
+        PERPLEXITY_API_KEY=pplx-...
+        ```
+      </Tab>
+    </Tabs>
+
+    キーをソースファイルにハードコードしないでください。Antigravity のエージェントは読み取ったコードをコミットしたり共有したりする可能性があります。キーを環境変数として扱っておけば、リポジトリに含まれてしまうのを防げます。
+  </Step>
+
+  <Step title="SDK をインストールする">
+    Agent API は [OpenAI Responses API](/ja/docs/agent-api/openai-compatibility) と互換性があるため、OpenAI SDK をそのまま利用できます。ネイティブの Perplexity SDK も用意されており、プリセット をよりすっきりした記法で指定できます。
+
+    <Tabs>
+      <Tab title="TypeScript / Node">
+        ```bash theme={null}
+        npm install openai
+        ```
+      </Tab>
+
+      <Tab title="Python">
+        ```bash theme={null}
+        pip install openai
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="クライアントの向き先を Perplexity にする">
+    ベース URL を `https://api.perplexity.ai/v1` に設定し、API キーを環境変数から読み込みます。
+
+    <Tabs>
+      <Tab title="TypeScript / Node">
+        ```typescript theme={null}
+        import OpenAI from "openai";
+
+        const client = new OpenAI({
+          apiKey: process.env.PERPLEXITY_API_KEY,
+          baseURL: "https://api.perplexity.ai/v1",
+        });
+
+        const response = await client.responses.create({
+          input: "Summarize the top three AI infrastructure announcements this week with sources.",
+          preset: "low",
+        } as any);
+
+        console.log(response.output_text);
+        ```
+      </Tab>
+
+      <Tab title="Python">
+        ```python theme={null}
+        import os
+        from openai import OpenAI
+
+        client = OpenAI(
+            api_key=os.environ.get("PERPLEXITY_API_KEY"),
+            base_url="https://api.perplexity.ai/v1",
+        )
+
+        response = client.responses.create(
+            input="Summarize the top three AI infrastructure announcements this week with sources.",
+            extra_body={"preset": "low"},
+        )
+
+        print(response.output_text)
+        ```
+      </Tab>
+    </Tabs>
+
+    OpenAI SDK は `client.responses.create(...)` を `POST /v1/responses` に送信し、Perplexity はこれを正規のエンドポイント `POST /v1/agent` のエイリアスとして受け付けます。これ以外の設定は不要です。
+  </Step>
+</Steps>
+
+***
+
+<div id="using-it-from-inside-antigravity">
+  ## Antigravity 内部からの利用
+</div>
+
+クライアントの設定が済んだら、アプリで根拠付きの回答が必要な箇所ではどこでも、Antigravity のエージェントに Perplexity クライアントを使うよう指示できます。うまく機能するプロンプトの例をいくつか挙げます。
+
+* *「`query` 文字列を受け取り、引用付きで Perplexity Agent API のレスポンスを返す `/research` エンドポイントを追加して。」*
+* *「Perplexity の呼び出しを `researchTopic(topic: string)` ヘルパーでラップして、ダッシュボードのニュースウィジェットから呼び出して。」*
+* *「Perplexity Agent API のレスポンスを stdout にストリーミングする CLI サブコマンド `pplx ask` を書いて。」*
+
+SDK は標準の OpenAI クライアントなので、Antigravity のエージェントは呼び出しの形式をすでに把握しています。あとは、正しい `baseURL` を使い、環境変数から `PERPLEXITY_API_KEY` を読み込むようにすることが主なポイントです。
+
+<Tip>
+  Antigravity のエージェントが `https://api.openai.com/v1` を指すコードを生成したり、`baseURL` をまったく指定しなかったりした場合は、「Perplexity のベース URL `https://api.perplexity.ai/v1` を使って」と指示してください。正しいエンドポイントでクライアントを再生成してくれます。
+</Tip>
+
+***
+
+<div id="troubleshooting">
+  ## トラブルシューティング
+</div>
+
+<AccordionGroup>
+  <Accordion title="ベース URL は必ず https://api.perplexity.ai/v1 にする">
+    OpenAI SDK は、ベース URL に `/responses` を自動で付加します。ベース URL に `/agent` や `/responses` を**含めない**でください。また `/v1` を省略しないでください。
+
+    | 正しい                            | 誤り                                       |
+    | ------------------------------ | ---------------------------------------- |
+    | `https://api.perplexity.ai/v1` | `https://api.perplexity.ai/v1/agent`     |
+    |                                | `https://api.perplexity.ai/v1/responses` |
+    |                                | `https://api.perplexity.ai` (`/v1` がない)  |
+
+    ベース URL が誤っていると、通常は 404 または認証エラーとして現れます。
+  </Accordion>
+
+  <Accordion title="Antigravity の組み込みエージェント モデル を Perplexity に置き換えられますか？">
+    現時点ではできません。Antigravity には、エディター内のエージェントを Perplexity 経由にルーティングできるカスタムプロバイダー設定や BYOK 設定がありません。代わりに、本ガイドのパターン (アプリケーションコードから Perplexity Agent API を呼び出す方法) をご利用ください。
+
+    将来 Antigravity がカスタムプロバイダーに対応した場合、設定は次のようになります。ベース URL は `https://api.perplexity.ai/v1`、API キー は `PERPLEXITY_API_KEY` から取得、トランスポートは OpenAI Responses 互換のものです。
+  </Accordion>
+
+  <Accordion title="API キー が読み込まれない">
+    Antigravity のターミナルセッションは、Antigravity を起動した環境から環境変数を継承します。統合ターミナルで `echo $PERPLEXITY_API_KEY` が空の場合は、シェルのプロファイル (`~/.zshrc`、`~/.bashrc`) に設定したうえで Antigravity を再起動するか、`dotenv` などを使ってプロジェクト内の `.env` ファイルから読み込んでください。
+  </Accordion>
+
+  <Accordion title="モデル と プリセット のどちらを選ぶか">
+    `low` のような プリセット は一般的なリサーチ用途向けに事前構成されており、最も手軽な出発点です。特定のサードパーティ モデル (Claude、GPT、Gemini など) が必要な場合は、`preset` の代わりに `model="anthropic/claude-sonnet-4-6"` (または [Agent API モデル一覧](/ja/docs/agent-api/models)にある別の値) を渡してください。
+  </Accordion>
+</AccordionGroup>
+
+***
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API クイックスタート" icon="rocket" href="/ja/docs/agent-api/quickstart">
+    OpenAI 互換 SDK またはネイティブ SDK を使って Agent API で開発を始めましょう。
+  </Card>
+
+  <Card title="OpenAI 互換性" icon="plug" href="/ja/docs/agent-api/openai-compatibility">
+    OpenAI SDK から Perplexity を利用するための完全なリファレンス。
+  </Card>
+
+  <Card title="Agent API のプリセット" icon="sparkles" href="/ja/docs/agent-api/presets">
+    一般的なワークロード向けに事前構成された `low` などの設定。
+  </Card>
+
+  <Card title="Agent API のモデル" icon="brain" href="/ja/docs/agent-api/models">
+    Agent API 経由で利用できるサードパーティおよび Perplexity のモデル一覧。
+  </Card>
+
+  <Card title="Perplexity SDK" icon="code" href="/ja/docs/sdk/overview">
+    よりすっきりしたプリセット構文と完全な型安全性を備えたネイティブ SDK。
+  </Card>
+
+  <Card title="API コンソール" icon="key" href="https://console.perplexity.ai">
+    Perplexity API キーの発行と管理を行います。
+  </Card>
+</CardGroup>

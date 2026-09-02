@@ -1,0 +1,311 @@
+---
+title: "TypeScript Agent CLI"
+description: "Perplexity Agent API を使用した、ストリーミング応答、モデル選択、ウェブ検索に対応するインタラクティブな TypeScript CLI"
+---
+
+<div id="typescript-agent-cli">
+  # TypeScript Agent CLI
+</div>
+
+Perplexity Agent API に接続する TypeScript ファーストの対話型コマンドラインインターフェイスです。ストリーミング応答、実行時の モデル 選択、ウェブ検索の統合に対応しています。
+
+<div id="features">
+  ## 機能
+</div>
+
+* tokenをストリーミング出力する対話型REPL
+* 厳選されたリストからの実行時のモデル選択
+* `web_search` ツールによるウェブ検索の統合
+* TypeScript固有のパターン: 型の絞り込み、const アサーション、型付きエラークラス
+* マルチターン対話に対応する会話履歴
+* 堅実なエラーハンドリングとクリーンなシャットダウン
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+mkdir typescript-agent-cli && cd typescript-agent-cli
+npm init -y
+npm install @perplexity-ai/perplexity_ai
+npm install -D typescript @types/node tsx
+```
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## 使い方
+</div>
+
+```bash theme={null}
+npx tsx src/cli.ts
+```
+
+CLI は モデル の選択を求めた後、対話型ループに入ります。
+
+```
+Available models:
+  1. OpenAI GPT-5.1 (openai/gpt-5.4)
+  2. Google Gemini 3 Flash (google/gemini-3.1-flash-lite)
+
+Select a model (1-2): 1
+
+> What is the current state of quantum computing?
+```
+
+コマンド: `/search` (ウェブ検索を有効化) 、`/nosearch` (無効化) 、`/clear` (履歴をリセット) 、`/quit` (終了) 。
+
+<div id="full-code">
+  ## コード全文
+</div>
+
+`src/cli.ts` として保存します。
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+import * as readline from "readline";
+
+// --- 設定 ---
+
+const AVAILABLE_MODELS = [
+  { name: "openai/gpt-5.4", label: "OpenAI GPT-5.1" },
+  { name: "google/gemini-3.1-flash-lite", label: "Google Gemini 3 Flash" },
+] as const;
+
+type ModelName = (typeof AVAILABLE_MODELS)[number]["name"];
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// --- ヘルパー ---
+
+function createRL(): readline.Interface {
+  return readline.createInterface({ input: process.stdin, output: process.stdout });
+}
+
+function ask(rl: readline.Interface, prompt: string): Promise<string> {
+  return new Promise((resolve) => rl.question(prompt, (a) => resolve(a.trim())));
+}
+
+// --- モデル選択 ---
+
+async function selectModel(rl: readline.Interface): Promise<ModelName> {
+  console.log("\nAvailable models:");
+  AVAILABLE_MODELS.forEach((m, i) =>
+    console.log(`  ${i + 1}. ${m.label} (${m.name})`)
+  );
+  while (true) {
+    const idx = parseInt(await ask(rl, `\nSelect a model (1-${AVAILABLE_MODELS.length}): `), 10) - 1;
+    if (idx >= 0 && idx < AVAILABLE_MODELS.length) {
+      console.log(`Using model: ${AVAILABLE_MODELS[idx].name}\n`);
+      return AVAILABLE_MODELS[idx].name;
+    }
+    console.log("Invalid selection.");
+  }
+}
+
+// --- ストリーミングクエリ ---
+
+async function streamQuery(
+  client: Perplexity,
+  model: ModelName,
+  history: Message[],
+  userMessage: string,
+  useWebSearch: boolean
+): Promise<string> {
+  const input = [
+    ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    { role: "user" as const, content: userMessage },
+  ];
+
+  const tools: Array<{ type: "web_search" }> = useWebSearch
+    ? [{ type: "web_search" as const }]
+    : [];
+
+  const stream = await client.responses.create({
+    model,
+    input,
+    tools,
+    stream: true,
+    instructions: "You are a helpful assistant. Use web search when available for current events. Be concise.",
+    max_output_tokens: 2048,
+  });
+
+  let fullResponse = "";
+  for await (const chunk of stream) {
+    if (chunk.type === "response.output_text.delta") {
+      const delta = (chunk as any).delta as string;
+      process.stdout.write(delta);
+      fullResponse += delta;
+    }
+    if (chunk.type === "response.output_item.added") {
+      const item = (chunk as any).item;
+      if (item?.type === "search_results") {
+        process.stdout.write("\n[Searching the web...]\n");
+      }
+    }
+    if (chunk.type === "response.completed") {
+      const usage = (chunk as any).response?.usage;
+      if (usage) {
+        process.stdout.write(`\n\n[Tokens: ${usage.input_tokens} in / ${usage.output_tokens} out]`);
+      }
+    }
+  }
+  process.stdout.write("\n");
+  return fullResponse;
+}
+
+// --- コマンド処理 ---
+
+function handleCommand(cmd: string, state: { webSearch: boolean; history: Message[] }): boolean {
+  switch (cmd.toLowerCase()) {
+    case "/quit": case "/exit":
+      console.log("Goodbye."); return true;
+    case "/search":
+      state.webSearch = true; console.log("Web search enabled."); return false;
+    case "/nosearch":
+      state.webSearch = false; console.log("Web search disabled."); return false;
+    case "/clear":
+      state.history = []; console.log("History cleared."); return false;
+    case "/help":
+      console.log("\n  /search  /nosearch  /clear  /quit  /help\n"); return false;
+    default:
+      console.log(`Unknown command: ${cmd}. Type /help.`); return false;
+  }
+}
+
+// --- メイン ---
+
+async function main(): Promise<void> {
+  const client = new Perplexity();
+  const rl = createRL();
+  const model = await selectModel(rl);
+  const state = { webSearch: true, history: [] as Message[] };
+
+  console.log("Type a message to chat, or /help for commands. Web search is ON.\n");
+  process.on("SIGINT", () => { console.log("\nGoodbye."); rl.close(); process.exit(0); });
+
+  while (true) {
+    const input = await ask(rl, "> ");
+    if (!input) continue;
+    if (input.startsWith("/")) { if (handleCommand(input, state)) break; continue; }
+
+    try {
+      const response = await streamQuery(client, model, state.history, input, state.webSearch);
+      state.history.push({ role: "user", content: input });
+      state.history.push({ role: "assistant", content: response });
+      if (state.history.length > 20) state.history = state.history.slice(-20);
+    } catch (error: unknown) {
+      if (error instanceof Perplexity.APIConnectionError) {
+        console.error("\nConnection error. Check your network.");
+      } else if (error instanceof Perplexity.RateLimitError) {
+        console.error("\nRate limit exceeded. Wait and retry.");
+      } else if (error instanceof Perplexity.APIStatusError) {
+        console.error(`\nAPI error: ${(error as any).message}`);
+      } else {
+        console.error("\nUnexpected error:", error);
+      }
+    }
+    console.log();
+  }
+  rl.close();
+}
+
+main();
+```
+
+<div id="example-session">
+  ## セッション例
+</div>
+
+```
+利用可能なモデル:
+  1. OpenAI GPT-5.1 (openai/gpt-5.4)
+  2. Google Gemini 3 Flash (google/gemini-3.1-flash-lite)
+
+モデルを選択してください (1-2): 1
+使用するモデル: openai/gpt-5.4
+
+チャットするにはメッセージを入力してください。コマンド一覧は /help です。ウェブ検索: ON
+
+> 今週の主要なAI関連の発表は何でしたか？
+[ウェブを検索中...]
+今週は注目すべきAIの動きがいくつかありました:
+1. Anthropicが推論性能を強化したClaude 4をリリース...
+2. Google DeepMindがタンパク質折りたたみに関する新たな成果を発表...
+3. OpenAIがGPT-5のエンタープライズ向け提携を発表...
+
+[トークン: 入力 1420 / 出力 287]
+
+> /nosearch
+ウェブ検索を無効にしました。
+
+> トランスフォーマーをわかりやすく説明して
+トランスフォーマーとは、入力のすべての部分を逐次的にではなく
+同時に処理するニューラルネットワークのアーキテクチャです...
+
+[トークン: 入力 2580 / 出力 195]
+
+> /quit
+さようなら。
+```
+
+<div id="key-typescript-patterns">
+  ## 主要な TypeScript パターン
+</div>
+
+<div id="const-assertions-for-tool-types">
+  ### ツール型のための const アサーション
+</div>
+
+`as const` を使ってツール型のリテラルを絞り込みます。
+
+```typescript theme={null}
+const tools = [{ type: "web_search" as const }];
+```
+
+<div id="streaming-event-type-narrowing">
+  ### ストリーミングイベントの型の絞り込み
+</div>
+
+イベント固有のフィールドにアクセスする前に、`chunk.type` を確認します。
+
+```typescript theme={null}
+for await (const chunk of stream) {
+  if (chunk.type === "response.output_text.delta") {
+    process.stdout.write((chunk as any).delta);
+  }
+}
+```
+
+<div id="typed-error-handling">
+  ### 型付きエラーハンドリング
+</div>
+
+```typescript theme={null}
+try {
+  // API 呼び出し
+} catch (error) {
+  if (error instanceof Perplexity.APIConnectionError) {
+    // ネットワーク関連のエラーを処理
+  } else if (error instanceof Perplexity.RateLimitError) {
+    // レート制限を処理
+  }
+}
+```
+
+<Tip>
+  会話履歴はターンをまたいで保持されるため、モデル は以前のメッセージを参照できます。CLI を再起動せずに新しい会話を始めたい場合は、`/clear` を使用してください。
+</Tip>
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+* この CLI は Node.js の `readline` を使用しているため、矢印キーでの履歴の呼び出しには対応していません。より使いやすい操作性を求める場合は、`inquirer` や `prompts` の利用を検討してください。
+* 会話履歴はメモリ上にのみ保持されるため、プロセスの終了時に失われます。
+* ストリーミングイベントはモデルのプロバイダーによって異なる場合があります。`response.output_text.delta` イベントはすべてのモデルで共通して利用できます。

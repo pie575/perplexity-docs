@@ -1,0 +1,136 @@
+---
+title: "Perplexity con Pipedream"
+description: "Conecta Perplexity a tus flujos de trabajo de Pipedream junto con más de 3000 aplicaciones: automatiza tareas de investigación, resúmenes y respuestas fundamentadas con pasos de código y sin código."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+[Pipedream](https://pipedream.com) es una plataforma de automatización de flujos de trabajo con más de 3000 integraciones de aplicaciones listas para usar. La aplicación de Perplexity te permite autenticarte una sola vez y, a partir de ahí, invocar la Agent API y los endpoints de Search de Perplexity desde cualquier flujo de trabajo de Pipedream, ya se active con un correo electrónico, un webhook, un feed RSS, un mensaje de Slack, una actualización de Google Sheets o una programación.
+
+<Info>
+  **Pipedream** admite tanto pasos visuales sin código como pasos de código completo en Node.js / Python dentro del mismo flujo de trabajo. Más información en [pipedream.com](https://pipedream.com).
+</Info>
+
+<div id="authentication">
+  ## Autenticación
+</div>
+
+<Steps>
+  <Step title="Obtén tu API key">
+    Genera una API key de Perplexity desde el [portal de API](https://console.perplexity.ai/project/keys).
+  </Step>
+
+  <Step title="Conecta Perplexity en Pipedream">
+    En Pipedream, abre cualquier flujo de trabajo y añade la app **Perplexity** a un paso. Haz clic en **Connect new account** y pega tu API key. Pipedream la almacena de forma segura y la referencia mediante `$auth.api_key` en todos los pasos posteriores.
+  </Step>
+</Steps>
+
+<Card title="Obtener API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Genera tu API key de Perplexity desde el portal de API.
+</Card>
+
+<div id="built-in-action-create-response">
+  ## Acción integrada: Create Response
+</div>
+
+La aplicación de Perplexity incluye una acción **Create Response (Agent API)** que ejecuta una solicitud a la Agent API, sin necesidad de escribir código.
+
+* **Endpoint**: `POST /v1/agent`
+* **Entradas**: un preset o un modelo, la entrada, herramientas (`web_search`, `fetch_url`) e instrucciones opcionales.
+* **Salida**: la respuesta de la Agent API, incluidos `status`, `output` y el uso.
+
+Agrégala desde el selector de pasos buscando **Perplexity → Create Response (Agent API)**.
+
+<div id="custom-code-step">
+  ## Paso de código personalizado
+</div>
+
+Para integrar nuevos modelos, usa un **paso de código Node.js** de Pipedream para llamar a la Agent API con la conexión de Perplexity que guardaste:
+
+```javascript theme={null}
+import { axios } from "@pipedream/platform";
+
+export default defineComponent({
+  props: {
+    perplexity: {
+      type: "app",
+      app: "perplexity",
+    },
+  },
+  async run({ steps, $ }) {
+    return await axios($, {
+      method: "POST",
+      url: "https://api.perplexity.ai/v1/agent",
+      headers: {
+        Authorization: `Bearer ${this.perplexity.$auth.api_key}`,
+        "Content-Type": "application/json",
+        "X-Pplx-Integration": "pipedream/1.0",
+      },
+      data: {
+        preset: "low",
+        input: "Summarize this week's AI research.",
+      },
+    });
+  },
+});
+```
+
+Puedes cambiar la URL para llamar a cualquier [endpoint de la Perplexity API](/es/api-reference):
+
+* `/v1/agent` — Agent API con modelos de terceros y presets
+* `/search` — resultados web sin procesar, ordenados por relevancia
+* `/v1/embeddings` — embeddings vectoriales
+
+<div id="example-workflows">
+  ## Flujos de trabajo de ejemplo
+</div>
+
+Patrones habituales de Perplexity en Pipedream:
+
+* **Automatización de la atención al cliente**: un correo entrante activa un paso de la Agent API de Perplexity que redacta una respuesta y después registra la conversación en un CRM.
+* **Resumen de fuentes de noticias**: Perplexity resume cada artículo nuevo procedente de un disparador RSS y lo publica en un canal de Slack con las citas correspondientes.
+* **Monitoreo de marca**: las menciones en redes sociales pasan por Perplexity para realizar análisis de sentimiento y extracción de entidades, y después se escriben en una hoja de Google Sheets.
+* **Resumen diario de investigación**: un cron programado lanza una consulta a Perplexity y el resultado se envía por correo o se publica en un canal de chat cada mañana.
+
+<div id="security-credentials">
+  ## Seguridad y credenciales
+</div>
+
+Pipedream almacena tu API key de Perplexity cifrada en reposo y la inyecta en cada paso mediante el objeto `$auth`: tu clave nunca aparece en la interfaz de los pasos ni en los logs. Puedes rotar la clave en cualquier momento desde la página **Connected Accounts** de tu cuenta.
+
+<div id="links-resources">
+  ## Enlaces y recursos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Aplicación de Perplexity en Pipedream" icon="plug" href="https://pipedream.com/apps/perplexity">
+    Aplicación oficial de Perplexity en Pipedream.
+  </Card>
+
+  <Card title="Documentación de Pipedream" icon="book" href="https://pipedream.com/docs">
+    Documentación completa de Pipedream.
+  </Card>
+
+  <Card title="Referencia de la Perplexity API" icon="code" href="/es/api-reference">
+    Referencia completa de la Perplexity API.
+  </Card>
+
+  <Card title="Modelos de la Agent API" icon="cpu" href="/es/docs/agent-api/models">
+    Compara los modelos disponibles a través de la Agent API.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Soporte
+</div>
+
+¿Necesitas ayuda con la integración?
+
+* Consulta la [documentación de Pipedream](https://pipedream.com/docs)
+* Revisa nuestras [preguntas frecuentes](/es/docs/resources/faq)

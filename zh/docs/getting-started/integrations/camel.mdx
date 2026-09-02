@@ -1,0 +1,158 @@
+---
+title: "Perplexity 与 CAMEL-AI 集成"
+description: "在 CAMEL-AI 多智能体系统中将 Perplexity Search API 用作工具。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+CAMEL-AI 的 `SearchToolkit` 内置了 `search_perplexity` 方法，将 [Perplexity Search API](/zh/docs/search/quickstart) 封装为原生 CAMEL 工具。该工具会返回经过排序的网页结果——包含标题、URL、摘要片段和日期——让调用它的 `ChatAgent` 能够基于最新且可引用的来源生成回答。
+
+<Info>
+  **CAMEL-AI** 是一个用于构建通信式多智能体系统的开源框架。了解更多请访问 [camel-ai.org](https://www.camel-ai.org)。
+</Info>
+
+<div id="installation">
+  ## 安装
+</div>
+
+```bash theme={null}
+pip install camel-ai
+```
+
+<div id="api-key-setup">
+  ## API key 设置
+</div>
+
+将你的 Perplexity API key 设置为环境变量：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="获取 API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 Perplexity 控制台中生成你的 API key。
+</Card>
+
+<div id="quick-start">
+  ## 快速开始
+</div>
+
+在 `ChatAgent` 上将 `search_perplexity` 注册为工具：
+
+```python theme={null}
+from camel.agents import ChatAgent
+from camel.toolkits import FunctionTool, SearchToolkit
+
+agent = ChatAgent(
+    system_message=(
+        "You are a helpful assistant that can use the Perplexity "
+        "search engine to answer questions."
+    ),
+    tools=[FunctionTool(SearchToolkit().search_perplexity)],
+)
+
+response = agent.step(
+    input_message="What are the latest developments in multi-agent AI systems?",
+    response_format=None,
+)
+print(response.msgs[0].content)
+```
+
+该工具在底层调用 `POST https://api.perplexity.ai/search`，并返回原始 API 响应，以便智能体自行决定引用哪些结果。
+
+<div id="configuration">
+  ## 配置
+</div>
+
+`search_perplexity` 直接支持所有 Search API 参数：
+
+```python theme={null}
+from camel.toolkits import SearchToolkit
+
+toolkit = SearchToolkit()
+
+results = toolkit.search_perplexity(
+    query="AI safety research",
+    max_results=5,
+    max_tokens_per_page=512,
+    country="US",
+    search_recency_filter="week",                         # hour | day | week | month | year
+    search_domain_filter=["arxiv.org", "-medium.com"],   # 加前缀 '-' 表示排除
+    search_language_filter=["en"],
+)
+```
+
+你也可以传入查询列表进行批量搜索，或使用 `extra_params` 转发任何尚未作为一级参数提供的 Search API 字段：
+
+```python theme={null}
+results = toolkit.search_perplexity(
+    query=["NVIDIA earnings", "AMD earnings"],
+    max_results=3,
+    extra_params={
+        "search_after_date_filter": "1/1/2026",
+        "search_before_date_filter": "5/1/2026",
+    },
+)
+```
+
+<div id="response-shape">
+  ## 响应结构
+</div>
+
+`search_perplexity` 会以 `Dict[str, Any]` 的形式返回 Perplexity Search API 的原始响应。成功时，响应中包含一个 `results` 列表，以及 `id` 和 `server_time`：
+
+```python theme={null}
+{
+    "id": "...",
+    "server_time": "...",
+    "results": [
+        {
+            "title": "...",
+            "url": "...",
+            "snippet": "...",
+            "date": "...",          # 可能存在
+            "last_updated": "...",  # 可能存在
+        },
+        # ...
+    ],
+}
+```
+
+失败时，响应是一个字典，其中的 `error` 键说明了具体问题 (缺少 API key、HTTP 错误或请求异常) 。
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="CAMEL-AI 文档" icon="book" href="https://docs.camel-ai.org">
+    使用 CAMEL-AI 构建多智能体系统。
+  </Card>
+
+  <Card title="工具源码" icon="brand-github" href="https://github.com/camel-ai/camel/blob/master/camel/toolkits/search_toolkit.py">
+    SearchToolkit.search&#95;perplexity 的实现代码。
+  </Card>
+
+  <Card title="Search API 快速入门" icon="search" href="/zh/docs/search/quickstart">
+    进一步了解底层的 Perplexity Search API。
+  </Card>
+
+  <Card title="示例脚本" icon="code" href="https://github.com/camel-ai/camel/blob/master/examples/toolkits/search_toolkit.py">
+    使用 Perplexity 搜索的端到端 CAMEL 示例。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中需要帮助？
+
+* 查阅 [CAMEL-AI 文档](https://docs.camel-ai.org)
+* 参阅我们的[常见问题](/zh/docs/resources/faq)

@@ -1,0 +1,146 @@
+---
+title: "n8n で Perplexity を使う"
+description: "ネイティブの Perplexity ノードを使って、リアルタイムのウェブ検索、AI エージェント、埋め込みを n8n のワークフローに追加します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+n8n には、Agent、Search、Embeddings の各リソースを備えたネイティブの **Perplexity ノード**が用意されており、いずれもビジュアルキャンバス上から設定できます。モデルは API から動的に読み込まれるため、ドロップダウンには常に最新の選択肢が表示されます。
+
+<Info>
+  **n8n** はノードベースのワークフロー自動化プラットフォームです。セルフホストとクラウドのどちらのデプロイにも対応しており、以下の例はいずれの環境でも動作します。セルフホストの場合は、インスタンスから `api.perplexity.ai` へのアウトバウンド通信が可能であることを確認してください。詳細は [n8n.io](https://n8n.io) をご覧ください。
+</Info>
+
+このノードは 3 つのリソースをサポートしています。
+
+* **Agent** — ツール呼び出しと構造化出力に対応したサードパーティ製モデル (OpenAI、Anthropic、Google、xAI)
+* **Search** — 独自に処理できる、ランク付けされた生のウェブ検索結果
+* **Embeddings** — RAG や検索パイプライン向けのベクトル生成
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+* n8n 2.14.0以降 ([app.n8n.cloud](https://app.n8n.cloud) のクラウド版、またはセルフホスト版)
+* Perplexity APIキー
+
+<Card title="APIキーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  コンソールからPerplexity APIキーを生成します。
+</Card>
+
+<div id="credential-setup">
+  ## 認証情報のセットアップ
+</div>
+
+<Steps>
+  <Step title="認証情報を開く">
+    n8n で **Settings → Credentials → Add credential** の順に移動します。
+  </Step>
+
+  <Step title="Perplexity を選択">
+    **Perplexity API** を検索して選択します。
+  </Step>
+
+  <Step title="キーを追加">
+    API キーを貼り付けて保存します。ノードはこの認証情報を自動的に参照します。
+  </Step>
+</Steps>
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_credentials.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=43dac8012eb71603e45c77afad6959e8" alt="Perplexity credential setup" />
+
+***
+
+<div id="agent">
+  ## Agent
+</div>
+
+Agent リソースを使用すると、Perplexity の `web_search` および `fetch_url` ツールを利用しながら、サードパーティ製モデル (OpenAI、Anthropic、Google、xAI) へルーティングできます。
+
+**Resource** を `Agent` に設定し、次の項目を設定します。
+
+| パラメーター                  | 説明                                                                          |
+| ----------------------- | --------------------------------------------------------------------------- |
+| **Model**               | 動的ドロップダウンから選択できる任意のモデル (例: `openai/gpt-5.5`、`anthropic/claude-sonnet-4-6`)  |
+| **Input**               | プロンプト — n8n の式に対応                                                           |
+| **Tools**               | `web_search`、`fetch_url`、またはその両方を選択                                         |
+| **System Instructions** | エージェント向けのシステムプロンプト (省略可)                                                    |
+| **Response Format**     | 構造化出力用の JSON スキーマ (省略可)                                                     |
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_agent_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=5ead62566997fab45106e72a292e8d92" alt="Agent resource configuration" />
+
+***
+
+<div id="search">
+  ## Search
+</div>
+
+LLMによる処理を挟まず、ランク付けされた生のWeb検索結果を取得します。**Resource** に `Search` を指定します。
+
+| パラメータ             | 説明                                |
+| ----------------- | --------------------------------- |
+| **Query**         | 検索クエリ — n8nの式に対応                  |
+| **Recency**       | `day`、`week`、`month`、`year` のいずれか |
+| **Domain Filter** | 特定のドメインに限定                        |
+| **Language**      | ISO 639-1 言語コード                   |
+| **Country**       | 2文字の国コード                          |
+
+各結果には `title`、`url`、`snippet`、`date` が含まれます。
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_search_results.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=ce3da801cd5fe19dddd11d293084714f" alt="Search resource results" />
+
+***
+
+<div id="embeddings">
+  ## Embeddings
+</div>
+
+RAG や検索パイプライン向けのベクトルを生成します。**Resource** に `Embeddings` を設定します。
+
+| パラメータ     | 説明                                                               |
+| --------- | ---------------------------------------------------------------- |
+| **Model** | `pplx-embed-v1-4b` (2560 次元) または `pplx-embed-v1-0.6b` (1024 次元)  |
+| **Input** | 埋め込み対象のテキスト — n8n の式に対応                                          |
+
+このノードは、`POST /v1/contextualizedembeddings` を使ったコンテキスト付き埋め込みにも対応しており、ドキュメントチャンクを考慮したベクトルを生成できます。
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_embeddings_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=3e84f575f042b158214dab7ce8ea6db0" alt="Embeddings resource configuration" />
+
+***
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+一時的なエラーに対処するには、n8n の **Error Trigger** ワークフロー、または組み込みの **Retry on Fail** 設定 (ノード設定 → Retry on Fail) を使用します。
+
+* **429 Too Many Requests** — **Wait** ノードを追加し、指数バックオフを挟んでから再試行する
+* **401 Unauthorized** — Perplexity API の認証情報が正しく保存されているか確認する
+* **500 エラー** — ノード設定で Retry on Fail を有効にする
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="n8n ドキュメント" icon="book" href="https://docs.n8n.io">
+    n8n の公式ドキュメント
+  </Card>
+
+  <Card title="n8n コミュニティ" icon="users" href="https://community.n8n.io">
+    テンプレート、ワークフロー、コミュニティサポート
+  </Card>
+
+  <Card title="Perplexity API リファレンス" icon="code" href="/ja/api-reference">
+    API リファレンスの全内容
+  </Card>
+
+  <Card title="Agent API" icon="sparkles" href="/ja/docs/agent-api/models">
+    利用可能な model と機能
+  </Card>
+</CardGroup>

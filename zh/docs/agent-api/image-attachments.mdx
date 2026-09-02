@@ -1,0 +1,257 @@
+---
+title: "图像附件"
+description: "了解如何通过 base64 编码或 HTTPS URL 上传并分析图像"
+---
+
+<div id="overview">
+  ## 概览
+</div>
+
+Agent API 支持通过直接上传图像进行图像分析。图像可以以 data URI 中的 base64 编码字符串形式提供，也可以使用标准的 HTTPS URL。
+
+<Warning>
+  * 使用 base64 编码时，API 目前仅支持单张不超过 50 MB 的图像。
+  * base64 编码图像支持的格式：PNG (image/png)、JPEG (image/jpeg)、WEBP (image/webp) 和 GIF (image/gif)。
+  * 使用 HTTPS URL 时，模型会尝试从所提供的 URL 获取图像，请确保该 URL 可公开访问。
+</Warning>
+
+<div id="examples">
+  ## 示例
+</div>
+
+<Tabs>
+  <Tab title="Base64 编码数据">
+    <Info>当图片文件位于本地，并希望将其直接嵌入请求体时，可使用此方法。请注意 50MB 的大小限制以及支持的格式 (PNG、JPEG、WEBP、GIF) 。</Info>
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import base64
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      # 读取图片并编码为 base64
+      def encode_image(image_path):
+          with open(image_path, "rb") as image_file:
+              return base64.b64encode(image_file.read()).decode("utf-8")
+
+      image_path = "image.png"
+      base64_image = encode_image(image_path)
+
+      # 分析图片
+      response = client.responses.create(
+          model="openai/gpt-5.6-sol",
+          input=[
+              {
+                  "role": "user",
+                  "content": [
+                      {"type": "input_text", "text": "what's in this image?"},
+                      {
+                          "type": "input_image",
+                          "image_url": f"data:image/png;base64,{base64_image}",
+                      },
+                  ],
+              }
+          ],
+      )
+
+      print(response.output_text)
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+      import * as fs from 'fs';
+
+      const client = new Perplexity();
+
+      // 读取图片并编码为 base64
+      const imageBuffer = fs.readFileSync('image.png');
+      const base64Image = imageBuffer.toString('base64');
+      const imageDataUri = `data:image/png;base64,${base64Image}`;
+
+      // 分析图片
+      const response = await client.responses.create({
+          model: 'openai/gpt-5-mini',
+          input: [
+              {
+                  role: 'user',
+                  content: [
+                      { type: 'input_text', text: "What's in this image?" },
+                      { type: 'input_image', image_url: imageDataUri }
+                  ]
+              }
+          ],
+      } as any);
+
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "openai/gpt-5-mini",
+          "input": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What'\''s in this image?"
+                },
+                {
+                  "type": "input_image",
+                  "image_url": "data:image/png;base64,$BASE64_ENCODED_IMAGE"
+                }
+              ]
+            }
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </Tab>
+
+  <Tab title="HTTPS URL">
+    <Info>当你有可公开访问的图片 URL 时，请使用此方法。model 会从所提供的 URL 拉取该图片。</Info>
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+
+      # 分析图片
+      response = client.responses.create(
+          model="openai/gpt-5.6-sol",
+          input=[
+              {
+                  "role": "user",
+                  "content": [
+                      {"type": "input_text", "text": "Can you describe the image at this URL?"},
+                      {
+                          "type": "input_image",
+                          "image_url": image_url,
+                      },
+                  ],
+              }
+          ],
+      )
+
+      print(response.output_text)
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const imageHttpsUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg";
+
+      // 分析图片
+      const response = await client.responses.create({
+          model: 'openai/gpt-5-mini',
+          input: [
+              {
+                  role: 'user',
+                  content: [
+                      { type: 'input_text', text: 'Can you describe the image at this URL?' },
+                      { type: 'input_image', image_url: imageHttpsUrl }
+                  ]
+              }
+          ],
+      } as any);
+
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "openai/gpt-5-mini",
+          "input": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Can you describe the image at this URL?"
+                },
+                {
+                  "type": "input_image",
+                  "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+                }
+              ]
+            }
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </Tab>
+</Tabs>
+
+<div id="request-format">
+  ## 请求格式
+</div>
+
+<div id="agent-api">
+  ### Agent API
+</div>
+
+使用消息数组格式时，图像必须嵌入 `input` 数组中。每个图像都应使用以下结构提供：
+
+```json theme={null}
+{
+  "role": "user",
+  "content": [
+    {
+      "type": "input_text",
+      "text": "What's in this image?"
+    },
+    {
+      "type": "input_image",
+      "image_url": "<IMAGE_URL_OR_BASE64_DATA>"
+    }
+  ]
+}
+```
+
+`image_url` 字段接受以下两种形式之一：
+
+* **图像 URL**：可公开访问的 HTTPS URL，直接指向图像文件
+* **base64 编码的图像数据**：格式为 `data:image/{format};base64,{base64_content}` 的 data URI
+
+<div id="pricing">
+  ## 定价
+</div>
+
+图像会根据其像素尺寸，按以下公式换算为 token：
+
+```
+tokens = (width px × height px) / 750
+```
+
+**示例：**
+
+* 一张 1024×768 的图像将消耗：(1024 × 768) / 750 = 1,048 个 token
+* 一张 512×512 的图像将消耗：(512 × 512) / 750 = 349 个 token
+
+这些图像 token 随后会按照所用 model 的输入 token 价格计费，并与文本 token 一并计入该请求的 token 总数。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 快速开始" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    开始使用 Agent API
+  </Card>
+
+  <Card title="网页搜索" icon="settings-bolt" href="/zh/docs/agent-api/tools/web-search">
+    了解 `web_search` 工具。
+  </Card>
+</CardGroup>

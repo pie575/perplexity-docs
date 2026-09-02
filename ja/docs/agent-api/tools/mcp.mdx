@@ -1,0 +1,678 @@
+---
+title: "MCP"
+description: "リモートの Model Context Protocol (MCP) サーバーを Agent API リクエストに接続し、model からサーバーのツールを呼び出せるようにします。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+自分で定義する `function` ツール以外にも、リモートの [Model Context Protocol](https://modelcontextprotocol.io) (MCP) サーバーに接続することで、modelに新しい機能を与えられます。modelはプロンプトへの回答に必要になった時点でそのサーバーのツールを呼び出し、外部サービスへアクセスして操作します。
+
+`mcp` ツールは、ユーザーが用意したリモートMCPサーバーをAgent APIリクエストに接続します。Agent APIはリクエスト開始時にサーバーのツールを検出し、実行中はネイティブツールと同じように呼び出すため、ツールごとにカスタムの `function` ツールを書く必要はありません。
+
+<Note>
+  リクエストごとにMCPサーバーのURLと認証情報を渡す代わりに、[Connectors](/ja/docs/agent-api/tools/connectors) を使えば、接続と認証をPerplexity側が管理します。API Portalで一度連携を設定すれば、あとはIDで参照するだけ — `server_url` もリクエストごとのトークンも不要です。さらにConnectorsには、`mcp` ツールでは実現できない利点があります。認証情報を [Sandbox](/ja/docs/agent-api/tools/sandbox) と共有できる点です。GitHubコネクタを使えば、modelはsandbox内で `git` や `gh` を実行し、コードのレビューや変更、プルリクエストの作成まで行えます。
+
+  **プレビュー:** Connectorsはプレビュー段階です。対応サービスや動作は変更される可能性があります。
+</Note>
+
+以下の例では、認証不要の公開MCPサーバーである [DeepWiki](https://deepwiki.com) に接続し、そのサーバーのツールを使ってGitHubリポジトリに関する質問に答えるようmodelに指示しています。
+
+<Tip>
+  MCPサーバーとmodel自身のウェブ検索を組み合わせた、より充実した実行可能な例については、cookbookレシピの [Model Picker](/ja/docs/cookbook/examples/model-picker/README) を参照してください。
+</Tip>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Ask DeepWiki which Python versions the perplexityai/perplexity-py repository supports.",
+      tools=[
+          {
+              "type": "mcp",
+              "server_label": "deepwiki",
+              "server_url": "https://mcp.deepwiki.com/mcp",
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Ask DeepWiki which Python versions the perplexityai/perplexity-py repository supports.',
+    tools: [
+      {
+        type: 'mcp',
+        server_label: 'deepwiki',
+        server_url: 'https://mcp.deepwiki.com/mcp',
+      },
+    ],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Ask DeepWiki which Python versions the perplexityai/perplexity-py repository supports.",
+      "tools": [
+        {
+          "type": "mcp",
+          "server_label": "deepwiki",
+          "server_url": "https://mcp.deepwiki.com/mcp"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+以下のサンプルは、レスポンスの `output` 配列のみを示したもので、長いMCPツールの出力は省略しています。
+
+<Accordion title="レスポンス">
+  ```json theme={null}
+  [
+    {
+      "type": "mcp_list_tools",
+      "id": "mcpl_b6875670-9dd5-46e0-9616-2f15e35bc0d1",
+      "server_label": "deepwiki",
+      "tools": [
+        {
+          "name": "ask_question",
+          "description": "Ask any question about a GitHub repository and get an AI-powered, context-grounded response.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "repoName": {
+                "description": "GitHub repository or list of repositories (max 10) in owner/repo format.",
+                "anyOf": [
+                  { "type": "string" },
+                  { "type": "array", "items": { "type": "string" } }
+                ]
+              },
+              "question": {
+                "type": "string",
+                "description": "The question to ask about the repository."
+              }
+            },
+            "required": ["repoName", "question"]
+          }
+        },
+        {
+          "name": "read_wiki_contents",
+          "description": "View documentation about a GitHub repository.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "repoName": {
+                "type": "string",
+                "description": "GitHub repository in owner/repo format (e.g. \"facebook/react\")."
+              }
+            },
+            "required": ["repoName"]
+          }
+        },
+        {
+          "name": "read_wiki_structure",
+          "description": "Get a list of documentation topics for a GitHub repository.",
+          "input_schema": {
+            "type": "object",
+            "properties": {
+              "repoName": {
+                "type": "string",
+                "description": "GitHub repository in owner/repo format (e.g. \"facebook/react\")."
+              }
+            },
+            "required": ["repoName"]
+          }
+        }
+      ]
+    },
+    {
+      "type": "mcp_call",
+      "id": "call_Ev48gan4OR0rrPQYb8xuSq3r",
+      "server_label": "deepwiki",
+      "name": "ask_question",
+      "arguments": "{\"question\":\"Which Python versions does this repository support? Please cite the repository files or documentation that specify the supported versions, and distinguish package metadata requirements from tested CI versions if applicable.\",\"repoName\":\"perplexityai/perplexity-py\"}",
+      "output": "The `perplexity-py` repository supports Python versions 3.9 and higher. This is specified in the `pyproject.toml` file, which indicates a `requires-python` constraint of `>= 3.9`.\n\nThe project metadata also lists classifiers for Python versions 3.9 through 3.14, indicating that these versions are considered compatible... [truncated]",
+      "error": null
+    },
+    {
+      "type": "message",
+      "id": "msg_b80c49c9-1215-4c0a-94f0-188ecc2b1e22",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "The `perplexityai/perplexity-py` repository supports **Python 3.9 and newer** (`requires-python = \">=3.9\"` in `pyproject.toml`).\n\nIts package classifiers list compatibility with **Python 3.9 through 3.14**. Python 3.8 support was previously dropped. Note that Ruff's `py38` target concerns source-code syntax and does not change the runtime requirement.",
+          "annotations": []
+        }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+<div id="defer-tool-definitions">
+  ## ツール定義の遅延読み込み
+</div>
+
+デフォルトでは、リクエストが公開するすべての MCP ツール定義が model の初期コンテキストに入ります。サーバーが多数のツールや大きなスキーマを持つ場合、あるいは複数のサーバーを同時に接続する場合は、`defer_loading` を `true` に設定してください。そうすれば model はカタログを検索し、必要なスキーマだけを読み込めます。このフィールドはサーバー単位で指定するため、遅延させたいサーバーごとに設定してください。フィールドを省略した場合や `false` を指定した場合は、デフォルトの即時読み込み動作のままになります。
+
+遅延読み込みでは、最初のツール呼び出しに至るまでに model のターンを余分に消費します。model がカタログを検索したうえで、見つけたツールを呼び出すところまで到達できるよう、[`max_steps`](/ja/docs/agent-api/building-agents/define-the-run#customize-the-loop-max-steps) を十分に大きく設定してください。そうしないと、検索直後に実行が終わり、ツールを一度も呼び出さないまま回答してしまうことがあります。
+
+以下の例では、DeepWiki の 3 つのツール定義はいずれも model のコンテキストに最初から含まれていません。model はカタログを検索し、検索に一致したものだけを読み込み、見つけたツールを呼び出します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Ask DeepWiki this exact question: which license does fastapi/fastapi use?",
+      max_steps=6,
+      tools=[
+          {
+              "type": "mcp",
+              "server_label": "deepwiki",
+              "server_url": "https://mcp.deepwiki.com/mcp",
+              "defer_loading": True,
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Ask DeepWiki this exact question: which license does fastapi/fastapi use?',
+    max_steps: 6,
+    tools: [
+      {
+        type: 'mcp',
+        server_label: 'deepwiki',
+        server_url: 'https://mcp.deepwiki.com/mcp',
+        defer_loading: true,
+      },
+    ],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Ask DeepWiki this exact question: which license does fastapi/fastapi use?",
+      "max_steps": 6,
+      "tools": [
+        {
+          "type": "mcp",
+          "server_label": "deepwiki",
+          "server_url": "https://mcp.deepwiki.com/mcp",
+          "defer_loading": true
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+以下のサンプルはレスポンスの `output` 配列のみを示したもので、長い MCP ツール出力は省略しています。
+
+<Accordion title="レスポンス">
+  ```json theme={null}
+  [
+    {
+      "type": "mcp_list_tools",
+      "id": "mcpl_737d73ac-416a-4cde-a296-479de85a65d1",
+      "server_label": "deepwiki",
+      "tools": [
+        {
+          "name": "ask_question",
+          "description": "Ask any question about a GitHub repository and get an AI-powered, context-grounded response.",
+          "input_schema": {
+            "properties": {
+              "question": {
+                "description": "The question to ask about the repository.",
+                "type": "string"
+              },
+              "repoName": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                ],
+                "description": "GitHub repository or list of repositories (max 10) in owner/repo format."
+              }
+            },
+            "required": [
+              "repoName",
+              "question"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "read_wiki_contents",
+          "description": "View documentation about a GitHub repository.",
+          "input_schema": {
+            "properties": {
+              "repoName": {
+                "description": "GitHub repository in owner/repo format (e.g. \"facebook/react\").",
+                "type": "string"
+              }
+            },
+            "required": [
+              "repoName"
+            ],
+            "type": "object"
+          }
+        },
+        {
+          "name": "read_wiki_structure",
+          "description": "Get a list of documentation topics for a GitHub repository.",
+          "input_schema": {
+            "properties": {
+              "repoName": {
+                "description": "GitHub repository in owner/repo format (e.g. \"facebook/react\").",
+                "type": "string"
+              }
+            },
+            "required": [
+              "repoName"
+            ],
+            "type": "object"
+          }
+        }
+      ]
+    },
+    {
+      "type": "tool_search_output",
+      "id": "tso_call_4ZM8bZTRYO2Cq6ZvY5WBJPvK",
+      "call_id": null,
+      "status": "completed",
+      "execution": "server",
+      "arguments": "{\"paths\":[\"deepwiki\"],\"queries\":[\"ask\",\"question\"]}",
+      "tools": [
+        {
+          "type": "namespace",
+          "name": "deepwiki",
+          "description": "",
+          "tools": [
+            {
+              "type": "function",
+              "name": "ask_question",
+              "description": "Ask any question about a GitHub repository and get an AI-powered, context-grounded response.",
+              "parameters": {
+                "properties": {
+                  "question": {
+                    "description": "The question to ask about the repository.",
+                    "type": "string"
+                  },
+                  "repoName": {
+                    "anyOf": [
+                      {
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      }
+                    ],
+                    "description": "GitHub repository or list of repositories (max 10) in owner/repo format."
+                  }
+                },
+                "required": [
+                  "repoName",
+                  "question"
+                ],
+                "type": "object"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "mcp_call",
+      "id": "call_EDUuJFdKLABQvPUuDl0WeRwK",
+      "server_label": "deepwiki",
+      "name": "ask_question",
+      "arguments": "{\"question\":\"which license does fastapi/fastapi use?\",\"repoName\":\"fastapi/fastapi\"}",
+      "output": "The `fastapi/fastapi` project is licensed under the MIT License... [truncated]",
+      "error": null
+    },
+    {
+      "type": "message",
+      "id": "msg_dc0c8b47-fe82-40db-a6ec-e84ac99d7710",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "DeepWiki says **fastapi/fastapi uses the MIT License**.",
+          "annotations": []
+        }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+<Tip>
+  MCP を多用するリクエストが model のコンテキストウィンドウに迫る、あるいは超えてしまう場合は、プロンプトを短くしたり有用なツールを削ったりする前に `defer_loading` を有効にしてください。こうすることで、対象となるすべての MCP スキーマを初期コンテキストに載せることなく、それらのツールを model から利用できる状態に保てます。
+</Tip>
+
+各 `tool_search_output` 項目は、遅延読み込みされたカタログに対する 1 回の検索を表します。検索対象は遅延対象のすべてのサーバーにも、特定の 1 つに絞ることもでき、一致したツールのみが返されます — 上記の DeepWiki の 3 つのツールのいずれかです。一致するものがなければ何も返らず、その場合 model は再度検索できるため、1 回の実行でこの項目が複数含まれることもあります。呼び出しはこれまでどおり `mcp_call` として現れます。また、Agent API はリクエスト開始時に各サーバーのツールを引き続き検出するため、遅延読み込みを使っても検出にかかる時間がなくなるわけではなく、[検出失敗時の動作](#error-handling)も変わりません。
+
+小さなツールが 3 つだけのカタログは規模が小さいため、ここでは検索ステップを追加してもほとんど効果はありません。遅延読み込みが効いてくるのはカタログが大きくなってからです。サーバーが増える、ツールが増える、スキーマが大きくなる、あるいは遅延読み込みなしではコンテキストウィンドウを超えてしまう、といった場合です。
+
+<div id="authentication">
+  ## 認証
+</div>
+
+上記の DeepWiki サーバーとは異なり、ほとんどの MCP サーバーでは認証が必要です。最も一般的な方式は OAuth アクセストークンで、`mcp` ツールの `authorization` フィールドに渡します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Use GitHub to find open issues about authentication in perplexityai/perplexity-py.",
+      tools=[
+          {
+              "type": "mcp",
+              "server_label": "github",
+              "server_url": "https://api.githubcopilot.com/mcp/",
+              "authorization": os.environ["GITHUB_MCP_TOKEN"],
+              "allowed_tools": ["search_repositories", "list_issues", "issue_read"],
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Use GitHub to find open issues about authentication in perplexityai/perplexity-py.',
+    tools: [
+      {
+        type: 'mcp',
+        server_label: 'github',
+        server_url: 'https://api.githubcopilot.com/mcp/',
+        authorization: process.env.GITHUB_MCP_TOKEN,
+        allowed_tools: ['search_repositories', 'list_issues', 'issue_read'],
+      },
+    ],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Use GitHub to find open issues about authentication in perplexityai/perplexity-py.",
+      "tools": [
+        {
+          "type": "mcp",
+          "server_label": "github",
+          "server_url": "https://api.githubcopilot.com/mcp/",
+          "authorization": "'"$GITHUB_MCP_TOKEN"'",
+          "allowed_tools": ["search_repositories", "list_issues", "issue_read"]
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Info>
+  この例では [GitHub MCP Server](https://github.com/github/github-mcp-server) を使用しています。model に調査させたいリポジトリへのアクセス権を持つ [GitHub パーソナルアクセストークン](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) を作成し、`GITHUB_MCP_TOKEN` としてエクスポートしてください。
+</Info>
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+| パラメータ           | 型       | 必須  | 説明                                                                                            |
+| --------------- | ------- | --- | --------------------------------------------------------------------------------------------- |
+| `type`          | string  | はい  | `"mcp"` を指定します。                                                                               |
+| `server_label`  | string  | はい  | リクエストごとに一意で、`^[a-zA-Z0-9_-]{1,64}$` に一致する必要があります。サーバーのツールの名前空間として機能します。                       |
+| `server_url`    | string  | はい  | リモート MCP サーバーの HTTPS URL。Streamable HTTP の MCP エンドポイントである必要があり、レガシーの SSE トランスポートはサポートされていません。 |
+| `authorization` | string  | いいえ | 認証のためにリモート MCP サーバーへ渡すアクセストークン。トークン値をそのまま指定します。ログに記録されることも、そのまま返されることもありません。                  |
+| `headers`       | object  | いいえ | MCP サーバーへ送信する追加のリクエストヘッダー (文字列値) 。                                                            |
+| `allowed_tools` | array   | いいえ | model に公開するツール名の許可リスト。省略するか空にした場合は、検出されたすべてのツールが公開されます。                                       |
+| `defer_loading` | boolean | いいえ | `true` の場合、検出されたツール定義を初期の model コンテキストに含めず、model が必要に応じて関連するスキーマを読み込みます。既定値は `false` です。      |
+
+<div id="response-shape">
+  ## レスポンスの構造
+</div>
+
+`mcp` ツールが使用されると、レスポンスの `output` 配列には、最終的な `message` アイテムに加えて、MCP 固有の 2 種類のアイテムが含まれることがあります。
+
+* `mcp_list_tools` — サーバーごとに 1 回出力され、リクエスト開始時に検出されたツールを一覧表示します。
+* `mcp_call` — model がサーバー上で呼び出したツールごとに出力されます。
+
+`defer_loading: true` を指定した場合、model が遅延カタログを検索すると、配列に `tool_search_output` アイテムが含まれることもあります。ツールの呼び出しは、引き続き `mcp_call` アイテムとして出力されます。
+
+<div id="mcp_list_tools">
+  ### `mcp_list_tools`
+</div>
+
+| フィールド          | 型      | 説明                           |
+| -------------- | ------ | ---------------------------- |
+| `type`         | string | 常に `mcp_list_tools`。         |
+| `id`           | string | この出力項目の識別子。                  |
+| `server_label` | string | このサーバーに指定した `server_label`。  |
+| `tools`        | array  | サーバー上で検出されたツール。              |
+| `error`        | string | サーバーのツール一覧の取得に成功した場合は含まれません。 |
+
+`tools` の各エントリには次のフィールドがあります:
+
+| フィールド          | 型      | 説明                                           |
+| -------------- | ------ | -------------------------------------------- |
+| `name`         | string | サーバーが公開しているツール名。                             |
+| `description`  | string | サーバーから取得したツールの説明。                            |
+| `input_schema` | object | ツールの入力に対するサーバーの JSON Schema。変更されずにそのまま渡されます。 |
+
+<div id="mcp_call">
+  ### `mcp_call`
+</div>
+
+| フィールド          | 型             | 説明                                                              |
+| -------------- | ------------- | --------------------------------------------------------------- |
+| `type`         | string        | 常に `mcp_call`。                                                  |
+| `id`           | string        | この出力項目の識別子。                                                   |
+| `server_label` | string        | ツールを実行したサーバーの `server_label`。                                   |
+| `name`         | string        | 呼び出されたツールの名前。                                                   |
+| `arguments`    | string        | model が渡した JSON エンコード済みの引数。                                     |
+| `output`       | string        | ツールの出力テキスト。呼び出しが失敗した場合は空。                                       |
+| `error`        | string | null | 成功時は `null`。呼び出しが失敗した場合は失敗内容の文字列を保持し、同じ内容が model にもインバンドで返されます。 |
+
+<div id="tool_search_output">
+  ### `tool_search_output`
+</div>
+
+`defer_loading: true` の場合にのみ出力され、model が遅延カタログに対して実行する検索1回につき1件発行されます。
+
+| Field       | Type   | Description                                                                     |                        |
+| ----------- | ------ | ------------------------------------------------------------------------------- | ---------------------- |
+| `type`      | string | 常に `tool_search_output`。                                                        |                        |
+| `id`        | string | この出力項目の識別子。                                                                     |                        |
+| `call_id`   | string | null                                                                            | ホスト型カタログ検索では常に `null`。 |
+| `execution` | string | 検索が実行された場所。現在は常に `server` ですが、他の値も許容してください。                                     |                        |
+| `status`    | string | 検索のステータス。例: `completed`。                                                        |                        |
+| `arguments` | string | model が生成した不透明な検索テキストで、含まれない場合もあります。非構造化データとして扱い、パースしないでください。その形式は仕様として保証されません。 |                        |
+| `tools`     | array  | 一致したツール。サーバーごとにグループ化されます。該当するものがない場合は空になります。                                    |                        |
+
+`tools` の各エントリは、1つのサーバーに対応する名前空間です。
+
+| Field         | Type   | Description                                                                                     |
+| ------------- | ------ | ----------------------------------------------------------------------------------------------- |
+| `type`        | string | 常に `namespace`。                                                                                 |
+| `name`        | string | ツールが属するサーバーの `server_label`。                                                                    |
+| `description` | string | 名前空間の説明。MCP サーバーの場合は空です。                                                                        |
+| `tools`       | array  | 一致したツール。各ツールは `type` (`function`) 、`name`、`description`、`parameters` (サーバーの JSON Schema) を持ちます。 |
+
+レスポンスの `output` 配列の例:
+
+```json theme={null}
+[
+  {
+    "type": "mcp_list_tools",
+    "id": "mcpl_01bcb639-715a-4d5e-be5e-712ac7120bb2",
+    "server_label": "github",
+    "tools": [
+      {
+        "name": "issue_read",
+        "description": "Get information about a specific issue in a GitHub repository.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "method": { "type": "string" },
+            "owner": { "type": "string" },
+            "repo": { "type": "string" },
+            "issue_number": { "type": "number" }
+          },
+          "required": ["method", "owner", "repo", "issue_number"]
+        }
+      },
+      {
+        "name": "list_issues",
+        "description": "List issues in a GitHub repository.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "owner": { "type": "string" },
+            "repo": { "type": "string" },
+            "state": { "type": "string" }
+          },
+          "required": ["owner", "repo"]
+        }
+      },
+      {
+        "name": "search_repositories",
+        "description": "Find GitHub repositories by name, description, readme, topics, or other metadata.",
+        "input_schema": {
+          "type": "object",
+          "properties": { "query": { "type": "string" } },
+          "required": ["query"]
+        }
+      }
+    ]
+  },
+  {
+    "type": "mcp_call",
+    "id": "call_dQzJLduEASo7JlHfwN0w09xL",
+    "server_label": "github",
+    "name": "list_issues",
+    "arguments": "{\"owner\":\"perplexityai\",\"repo\":\"perplexity-py\",\"state\":\"OPEN\",\"orderBy\":\"CREATED_AT\",\"direction\":\"DESC\"}",
+    "output": "{\"issues\":[{\"number\":60,\"title\":\"Feature Bundle Request: Explicit Prompt Caching, Multi-Model Fusion, and Granular API Key Controls\"}, ...]}",
+    "error": null
+  },
+  {
+    "type": "message",
+    "role": "assistant",
+    "content": [
+      {
+        "type": "output_text",
+        "text": "I found one open issue in `perplexityai/perplexity-py` relevant to authentication / access control: #60 — \"Feature Bundle Request: Explicit Prompt Caching, Multi-Model Fusion, and Granular API Key Controls\" — which requests enterprise-grade API key controls (per-key spending limits, model whitelisting, workspace segregation)."
+      }
+    ]
+  }
+]
+```
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+| ケース            | 発生する内容                                                                                                                                                                                                          |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **検出の失敗** | リクエストは `external_connector_error` (HTTP `424 Failed Dependency`) で失敗します。サーバーのツールを列挙できなかったため、実行は開始されず、`output` 配列も返されません。エラー本文の `message` には対象のサーバー名が示されます (例: `MCP server "github" could not be initialized`) 。 |
+| **ツール呼び出しの失敗** | 該当する `mcp_call` アイテムは `output` が空になり、`error` 文字列が設定されます。この失敗はインバンドで model にも返されるため、model は復旧を試みるか、最終的な回答の中で説明できます。                                                                                              |
+
+検出の失敗は、実行の開始時にツールを列挙する際、サーバーに到達できない場合や、利用できないレスポンスが返された場合に発生します。検出は model の実行前に行われるため、リクエスト全体が `external_connector_error` で失敗し、`output` 配列は返されません。
+
+実行中にツール呼び出しが失敗しても、リクエスト自体は失敗しません。エラーは上記のとおり `mcp_call` アイテム上でインバンドで model に返されるため、model は復旧を試みるか、最終的な回答の中で説明できます。
+
+<div id="risks-and-safety">
+  ## リスクと安全性
+</div>
+
+`mcp` ツールを使うと、modelを外部サービスに接続できます。これは強力な機能である一方、リスクも伴います。リモートMCPサーバーはPerplexityによる検証を受けていないサードパーティのサービスです。これらのサーバーを通じて、modelはデータの読み取り・送信・受信や、接続先サービス内での操作の実行が可能になります。また、各サーバーはそれぞれ独自の利用規約の対象となります。信頼できるサーバーのみを接続してください。
+
+<Warning>
+  Agent APIは**まだ**MCPの承認フローに対応していません。すべてのMCPツール呼び出しは自動的に実行されるため、承認ステップなしで実行しても問題ないと信頼できるMCPサーバーとツールのみを接続・公開してください。
+</Warning>
+
+`allowed_tools` を使用して、modelが呼び出せるサーバーツールを制限してください。書き込みや管理操作を伴うサーバーの場合は、読み取り専用のサーバーモードや読み取り専用のトークン、あるいは読み取り専用ツールに絞った許可リストの利用をおすすめします。
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+`mcp` ツールは OpenAI の Responses MCP API と後方互換性があります。以下の OpenAI MCP 機能は現時点ではサポートされていません:
+
+| 機能またはフィールド                                       | 動作                                                     |
+| ------------------------------------------------ | ------------------------------------------------------ |
+| `require_approval`                               | 無視されます。すべての MCP ツール呼び出しが自動的に実行されます。                    |
+| `mcp_approval_request` / `mcp_approval_response` | 送出も受理もされません。承認による一時停止・再開のフローはまだ利用できません。                |
+| `connector_id` およびホスト型コネクタカタログ                   | 無視されます。自身で指定した `server_url` のみが有効です。                   |
+| コネクタの OAuth フロー                                  | サポートされていません。`authorization` で独自のリモートサーバーに認証情報を渡してください。 |
+| MCP のリソース、プロンプト、サンプリング                           | まだサポートされていません。サポート対象の MCP 機能はツールのみです。                  |
+| MCP 出力項目の `approval_request_id` および `status`   | MCP 出力項目の構造には含まれません。                                 |
+
+<div id="pricing">
+  ## 料金
+</div>
+
+MCP のツール呼び出しは無料です。Agent API では、リモート MCP サーバーの呼び出しに対して呼び出しごとの料金は発生しません。ただし、モデルの トークン 使用量は Agent API の トークン 料金に基づいて別途課金されます (モデルごとの料金は [Models](/ja/docs/agent-api/models) を参照してください) 。また、リモート MCP サーバーはお客様自身が運用するため、そこで発生する費用は Agent API の課金対象外となります。

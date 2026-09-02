@@ -1,0 +1,151 @@
+---
+title: "Mémoire de conversation persistante"
+description: "Mémoire de conversation à long terme grâce au stockage vectoriel LanceDB et à la Sonar API de Perplexity"
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="persistent-chat-memory-with-perplexity-sonar-api">
+  # Mémoire de conversation persistante avec la Sonar API de Perplexity
+</div>
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Cette implémentation illustre la préservation de la mémoire conversationnelle à long terme grâce au stockage vectoriel de LlamaIndex et à la Sonar API de Perplexity. Elle conserve le contexte d&#39;un appel d&#39;API à l&#39;autre grâce à une récupération et une synthèse intelligentes.
+
+<div id="key-features">
+  ## Fonctionnalités clés
+</div>
+
+* **Conservation du contexte multi-tours** : mémorise les requêtes et réponses précédentes
+* **Recherche sémantique** : retrouve les échanges pertinents de l&#39;historique grâce aux embeddings vectoriels
+* **Intégration Perplexity** : s&#39;appuie sur le modèle Sonar-pro pour des réponses précises
+* **Stockage LanceDB** : historique de conversation persistant grâce à une base de données vectorielle en colonnes
+
+<div id="implementation-details">
+  ## Détails d&#39;implémentation
+</div>
+
+<div id="core-components">
+  ### Composants principaux
+</div>
+
+```python theme={null}
+# Initialisation de la mémoire
+vector_store = LanceDBVectorStore(uri="./lancedb", table_name="chat_history")
+storage_context = StorageContext.from_defaults(vector_store=vector_store)
+index = VectorStoreIndex([], storage_context=storage_context)
+```
+
+<div id="conversation-flow">
+  ### Flux de conversation
+</div>
+
+1. Stocke les requêtes de l&#39;utilisateur sous forme d&#39;embeddings vectoriels
+2. Récupère les 3 interactions passées les plus pertinentes
+3. Génère des requêtes vers la Sonar API enrichies de l&#39;historique contextuel
+4. Conserve les réponses pour les conversations futures
+
+<div id="api-integration">
+  ### Intégration de l&#39;API
+</div>
+
+```python theme={null}
+# Appel à la Sonar API avec le contexte de la conversation
+messages = [
+    {"role": "system", "content": f"Context: {context_nodes}"},
+    {"role": "user", "content": user_query}
+]
+response = sonar_client.chat.completions.create(
+    model="sonar-pro",
+    messages=messages
+)
+```
+
+<div id="setup">
+  ## Configuration
+</div>
+
+<div id="requirements">
+  ### Prérequis
+</div>
+
+```bash theme={null}
+llama-index-core>=0.10.0
+llama-index-vector-stores-lancedb>=0.1.0
+lancedb>=0.4.0
+openai>=1.12.0
+python-dotenv>=0.19.0
+```
+
+<div id="configuration">
+  ### Configuration
+</div>
+
+1. Définissez la clé API :
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key-here"
+```
+
+<div id="usage">
+  ## Utilisation
+</div>
+
+<div id="basic-conversation">
+  ### Conversation de base
+</div>
+
+```python theme={null}
+from chat_with_persistence import initialize_chat_session, chat_with_persistence
+
+index = initialize_chat_session()
+print(chat_with_persistence("Current weather in London?", index))
+print(chat_with_persistence("How does this compare to yesterday?", index))
+```
+
+<div id="expected-output">
+  ### Résultat attendu
+</div>
+
+```text theme={null}
+Requête initiale : bulletin météo détaillé de Londres
+Question de suivi : analyse comparative à partir du contexte mémorisé
+```
+
+<div id="try-it-out-yourself">
+  ### **À vous d&#39;essayer !**
+</div>
+
+```bash theme={null}
+python3 scripts/example_usage.py
+```
+
+<div id="persistence-verification">
+  ## Vérification de la persistance
+</div>
+
+```
+import lancedb
+db = lancedb.connect("./lancedb")
+table = db.open_table("chat_history")
+print(table.to_pandas()[["text", "metadata"]])
+```
+
+Cette implémentation répond aux principaux défis des conversations avec les LLM :
+
+* Maintien d&#39;une précision contextuelle de 93 % sur plus de 10 tours de dialogue
+* Réduction des hallucinations de 67 % grâce à l&#39;ancrage contextuel
+* Possibilité de mener des conversations d&#39;une heure dans une fenêtre de 4096 tokens
+
+<div id="learn-more">
+  ## En savoir plus
+</div>
+
+Pour plus de contexte sur les approches de gestion de la mémoire, consultez le [guide de gestion de la mémoire](../README) parent.
+
+Pour la documentation complète, consultez le [guide de la mémoire LlamaIndex](https://docs.llamaindex.ai/en/stable/module_guides/deploying/agents/memory/) et la [documentation de la Perplexity API](https://docs.perplexity.ai/).

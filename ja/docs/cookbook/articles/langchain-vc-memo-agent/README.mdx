@@ -1,0 +1,405 @@
+---
+title: "LangGraph で構築する VC 投資メモエージェント"
+description: "LangGraph と Perplexity Agent API で、監査可能かつ引用に裏付けられた VC リサーチエージェントを構築し、LangSmith の評価ハーネスで最適な検索プロバイダーを選定します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+このガイドでは、企業名を受け取り、Snapshot、Team、Financials、Product、Market、Risks、そして一行の推奨で締めくくる Thesis という7つのセクションから成る、出典に裏付けられた VC 投資メモを返すエージェントを構築します。**すべての主張は一次情報源まで辿れます。**
+
+このエージェントは [Perplexity Agent API](/ja/docs/agent-api/quickstart) と、その組み込みツールである `web_search` および `finance_search` を利用し、[LangGraph](https://langchain-ai.github.io/langgraph/) でオーケストレーションされ、[LangSmith](https://docs.langchain.com/langsmith/home) で評価されます。処理全体は約90秒で完了し、コストはメモ1件あたりおよそ $0.40 です。
+
+この設計から得られる教訓は金融分野に限らず応用できます。**検索と統合を分離することは、リサーチエージェントの信頼性を構造的に高める手法です。** 4つのリサーチノードが並列に展開し、それぞれが独自のツールで Agent API を呼び出します。最後のシンセサイザーノードはツールを持たず、リサーチノードがすでに収集した根拠しか引用できないため、メモが出典を捏造することはありません。
+
+<img src="https://mintcdn.com/perplexity/PUYTpeKNbln7dn87/docs/cookbook/static/img/langchain-vc-memo-architecture.png?fit=max&auto=format&n=PUYTpeKNbln7dn87&q=85&s=7d8be1fd753996f5128676f5a3e18b2f" alt="企業名がSTARTに入力され、4つの並列リサーチノード（team、financials、product、market）に展開し、それらすべてが単一のシンセサイザーノードに流れ込み、ENDでメモを生成する図。" />
+
+<div id="features">
+  ## 機能
+</div>
+
+* **並列リサーチのファンアウト。** 4つの専門リサーチノード (チーム、財務、プロダクト、市場) が並行して実行され、それぞれ独自のツールと検索予算を持ちます。
+* **ツールを使わないシンセサイザー。** 最終メモは上流のエビデンスのみから構成されるため、引用の捏造を構造的に防げます。
+* **Agent API の組み込みツール。** `web_search` と `finance_search` をそのまま利用でき、コアエージェントのためにクライアント側で検索処理を組む必要はありません。
+* **LangSmith で監査可能。** 各ノードのツール呼び出しと出力がすべて記録されるため、あらゆる記述をその根拠となった検索結果までたどれます。
+* **プロバイダー評価ハーネス。** 一次情報源の割合、財務概念の網羅性、レイテンシ、コストで検索プロバイダーを採点する LangSmith 比較。
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+* Python 3.10以上
+* [Perplexity API key](/ja/docs/admin/api-key-management) (`PPLX_API_KEY`)
+* トレースと評価に使用する [LangSmith API key](https://docs.smith.langchain.com/)
+* (プロバイダー比較を行う場合のみ) [Parallel](https://platform.parallel.ai/) と [Exa](https://dashboard.exa.ai/) の API key
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+```bash theme={null}
+pip install "langchain-perplexity>=1.4.0" langgraph langsmith
+```
+
+```bash theme={null}
+# ChatPerplexity は PPLX_API_KEY を参照します。
+export PPLX_API_KEY="pplx-..."
+export LANGSMITH_API_KEY="ls__..."
+export LANGSMITH_TRACING="true"   # 各ノードのツール呼び出しをエンドツーエンドで記録
+```
+
+<div id="build-the-agent">
+  ## エージェントを構築する
+</div>
+
+このセクションの内容はすべて1つのファイルにまとめます。各ブロックを順番に `memo.py` に貼り付ければ、エージェントが完成します。
+
+<div id="graph-state">
+  ### グラフの状態
+</div>
+
+各リサーチノードは共有状態から `company` を読み取り、調査結果を `research_output` に書き込みます。並列の書き込みはリデューサーがマージします。
+
+```python theme={null}
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Annotated, Any, TypedDict
+
+from langchain_core.messages import AIMessage
+from langchain_perplexity import ChatPerplexity
+from langgraph.graph import END, START, StateGraph
+
+
+def merge_research_output(left: dict[str, str], right: dict[str, str]) -> dict[str, str]:
+    """Each research node returns {"<section>": "..."}; merge into one dict."""
+    return {**(left or {}), **(right or {})}
+
+
+class MemoState(TypedDict):
+    company: str
+    research_output: Annotated[dict[str, str], merge_research_output]
+    memo: str
+```
+
+<div id="models-and-tools">
+  ### モデルとツール
+</div>
+
+Agent API は Perplexity の組み込みツールをそのまま利用できます。財務ノードでは `finance_search` を追加し、それ以外のノードでは `web_search` を使用します。`max_steps` は各ノードの内部検索ループの上限であり、ノードごとの検索予算として機能します。
+
+```python theme={null}
+SUBNODE_MODEL_NAME = "openai/gpt-5.5"
+SYNTHESIZER_MODEL_NAME = "openai/gpt-5.5"
+
+
+def _agent_model(model: str) -> ChatPerplexity:
+    """Build a ChatPerplexity client wired to the Responses API."""
+    # Responses (Agent) API は temperature などのサンプリングパラメータを無視するため、指定しない。
+    return ChatPerplexity(model=model, use_responses_api=True)
+
+
+SUBNODE_MODEL = _agent_model(SUBNODE_MODEL_NAME)
+SYNTHESIZER_MODEL = _agent_model(SYNTHESIZER_MODEL_NAME)
+
+
+# リサーチノードごとのツール定義。
+TEAM_TOOLS = [{
+    "type": "web_search",
+    "filters": {"search_recency_filter": "year"},
+}]
+
+PRODUCT_TOOLS = [{"type": "web_search"}]
+
+MARKET_TOOLS = [{"type": "web_search"}]
+
+FINANCIALS_TOOLS = [{"type": "finance_search"}, {"type": "web_search"}]
+
+
+# リサーチノードごとの max_steps で Perplexity Agent API の内部検索ループを制限する。
+RESEARCH_MAX_STEPS = {
+    "team": 2, "financials": 5, "product": 2, "market": 2,
+}
+```
+
+<div id="research-prompts">
+  ### 調査用プロンプト
+</div>
+
+1つのプロンプトテンプレートで4つのノードすべてをカバーし、セクションごとのガイダンスによって、各ノードが何を探し、どのソースを優先するかを方向づけます。
+
+```python theme={null}
+RESEARCH_PROMPT = """You are a VC analyst writing the {section} section of the research output for {company}.
+
+{guidance}
+
+Return a markdown section, then end the document with a "### Citations" header \
+followed by a markdown list of:
+
+  - <url> — one-sentence evidence quoted from the source
+
+Cite only URLs that came back from your tool calls; never fabricate URLs. \
+Keep the section focused — 250-400 words is appropriate for the body."""
+
+
+GUIDANCE = {
+    "team": (
+        "Search for the founders, CEO, and other named executives. Capture each "
+        "leader's prior roles and education. Prioritize the company's own About/Team "
+        "page and reputable public biographies."
+    ),
+    "financials": (
+        "If the company is public, use finance_search for revenue, margins, and analyst "
+        "estimates. If private, use web_search for funding rounds, valuation, and "
+        "disclosed revenue. Cross-check structured data against recent news."
+    ),
+    "product": (
+        "Describe the company's flagship product, recent launches, and technical "
+        "differentiators. Cite the company's own product or engineering pages where "
+        "possible, plus tech-press coverage for context."
+    ),
+    "market": (
+        "Map the competitive landscape, name direct competitors, and surface market "
+        "sizing. Your web_search is scoped to analyst and trade-press sources."
+    ),
+}
+```
+
+<div id="research-nodes">
+  ### リサーチノード
+</div>
+
+4つのノードはすべて同じランナーを共有します。つまり、そのノードのツールと検索予算を指定した Agent API 呼び出し 1 回だけです。検索ループは API がサーバー側で実行するため、ここではクライアント側でツールを配線する必要はありません。
+
+```python theme={null}
+def _run_research(
+    state: MemoState,
+    *,
+    section: str,
+    tools: list[dict[str, Any]],
+    max_steps: int,
+) -> dict[str, dict[str, str]]:
+    """Run one research section with the given tools and return its output."""
+    msg: AIMessage = SUBNODE_MODEL.invoke(
+        [
+            {"role": "system", "content": RESEARCH_PROMPT.format(
+                section=section, company=state["company"], guidance=GUIDANCE[section],
+            )},
+            {"role": "user", "content": f"Research the {section} of {state['company']}."},
+        ],
+        tools=tools,
+        extra_body={"max_steps": max_steps},
+    )
+    return {"research_output": {section: msg.content}}
+
+
+def team_node(state):
+    """Research the founders and leadership team."""
+    return _run_research(state, section="team",
+        tools=TEAM_TOOLS, max_steps=RESEARCH_MAX_STEPS["team"])
+
+def financials_node(state):
+    """Research revenue, funding, and financial metrics."""
+    return _run_research(state, section="financials",
+        tools=FINANCIALS_TOOLS, max_steps=RESEARCH_MAX_STEPS["financials"])
+
+def product_node(state):
+    """Research the product, launches, and technical differentiators."""
+    return _run_research(state, section="product",
+        tools=PRODUCT_TOOLS, max_steps=RESEARCH_MAX_STEPS["product"])
+
+def market_node(state):
+    """Research the competitive landscape and market sizing."""
+    return _run_research(state, section="market",
+        tools=MARKET_TOOLS, max_steps=RESEARCH_MAX_STEPS["market"])
+```
+
+<div id="the-synthesizer">
+  ### シンセサイザー
+</div>
+
+シンセサイザーはツールを一切使いません。4つのノードの調査結果をもとにメモの7つのセクションすべてを組み立てるため、引用されたすべての主張は、いずれかのノードが実際に行った調査に裏付けられています。セクション1〜6は、それぞれの末尾に、各ソースURLとそれが裏付ける根拠を対応付けた `### Citations` リストが付きます。Thesisのみが分析だけで構成されるセクションで、引用はありません。
+
+```python theme={null}
+SYNTH_PROMPT = """あなたは {company} に関する最終メモを執筆するシニアVCパートナーです。
+
+引用できるのは以下のリサーチ出力に現れる根拠のみです。ツールは利用できません。\
+ブラウジングや出典の捏造は行わないでください。
+
+次の7つのセクションを、この順序でマークダウンのメモとして作成してください:
+
+  1. スナップショット — 会社の概要、設立、バリュエーション、ポジショニング(3〜4文)
+  2. チーム — 創業者、経営陣、最近の幹部採用
+  3. 財務 — 売上、成長、資金調達履歴、比較対象企業
+  4. プロダクト — 販売しているもの、技術、流通
+  5. 市場 — TAM、直接competitors、カテゴリーの動向
+  6. リスク — 上位3〜5個のリスクと簡潔な理由
+  7. 投資仮説 — 1〜2段落の分析、最後に次の1行で締めくくる:
+     "Recommendation: <PASS | TRACK | ADVANCE | LEAD>"
+
+各セクションのH2見出しは必ず `## <N> · <Section Name>` の形式\
+(例: `## 1 · Snapshot`)とし、中黒(・)区切りを使用してください — 評価器はこの形式に\
+依存しています。
+
+セクション1〜6のそれぞれは、リサーチ出力から得た <url> — <evidence> の組を列挙する\
+`### Citations` サブセクションで終える必要があります。セクション7(投資仮説)には\
+独自の引用は不要です。
+
+あるセクションについてリサーチ出力に根拠がない場合は、推測せずにそのセクションの本文に\
+"Insufficient evidence in research outputs." と記載してください。"""
+
+
+def synthesizer_node(state: MemoState) -> dict[str, str]:
+    """Combine all research outputs into the final memo. No tools attached."""
+    research_output_block = "\n\n".join(
+        f"## Research output: {name}\n\n{body}"
+        for name, body in sorted(state["research_output"].items())
+    )
+    msg: AIMessage = SYNTHESIZER_MODEL.invoke([
+        {"role": "system", "content": SYNTH_PROMPT.format(company=state["company"])},
+        {"role": "user", "content": (
+            f"Company: {state['company']}\n"
+            f"As-of: {datetime.now(timezone.utc).isoformat(timespec='seconds')}\n\n"
+            f"Research outputs:\n\n{research_output_block}"
+        )},
+    ])
+    return {"memo": msg.content}
+```
+
+<div id="wiring-the-graph">
+  ### グラフの配線
+</div>
+
+4つのリサーチノードが `START` から並列にファンアウトし、シンセサイザーに集約されます。配線はごく短く書けます。
+
+```python theme={null}
+def build_graph():
+    """Wire the four research nodes in parallel from START into the synthesizer, then END."""
+    g = StateGraph(MemoState)
+    g.add_node("team", team_node)
+    g.add_node("financials", financials_node)
+    g.add_node("product", product_node)
+    g.add_node("market", market_node)
+    g.add_node("synthesizer", synthesizer_node)
+
+    for section in ("team", "financials", "product", "market"):
+        g.add_edge(START, section)
+        g.add_edge(section, "synthesizer")
+
+    g.add_edge("synthesizer", END)
+    return g.compile()
+```
+
+<div id="running-it">
+  ### 実行してみる
+</div>
+
+```python theme={null}
+import argparse
+import asyncio
+
+
+async def run_memo(company: str) -> str:
+    """Run the full memo agent for one company and return the final markdown memo."""
+    graph = build_graph()
+    final = await graph.ainvoke({"company": company, "research_output": {}, "memo": ""})
+    return final["memo"]
+
+
+def main() -> None:
+    """CLI entrypoint: parse `--company` and print the generated memo."""
+    parser = argparse.ArgumentParser(description="VC investment memo agent.")
+    parser.add_argument("--company", required=True)
+    args = parser.parse_args()
+    print(asyncio.run(run_memo(args.company)))
+
+
+if __name__ == "__main__":
+    main()
+```
+
+```bash theme={null}
+python memo.py --company "Anthropic"
+```
+
+メモ1件の生成には約90秒、コストはおよそ$0.40かかります。`LANGSMITH_TRACING="true"` を設定すると、実行全体が各ノードのツール呼び出しまで含めて LangSmith に表示されます。実際の[実行例の公開トレース](https://smith.langchain.com/public/cd9926c8-edc1-4d52-9bfa-b9642ebd267f/r)を用意しているので、ぜひ確認してください。
+
+<img src="https://mintcdn.com/perplexity/X5JcIOX7i0z8S6ii/docs/cookbook/static/img/langchain-vc-memo-trace.png?fit=max&auto=format&n=X5JcIOX7i0z8S6ii&q=85&s=fde491b6a54994eff85e10272e32a436" alt="メモ1件の実行に対する LangSmith のトレース: 4つの並列リサーチノードがシンセサイザーに入力を渡し、メモの出力には一次情報源のURLを含む Citations セクションが表示されている。" />
+
+<div id="choosing-a-search-provider">
+  ## 検索プロバイダーの選択
+</div>
+
+エージェントを支える検索プロバイダーには何を選ぶべきでしょうか。`memo/profiles.py` は、差し替え可能な3つのクライアントサイド検索ツール (`PerplexitySearchResults`、`ParallelSearchTool`、`ExaSearchResults`) で同じグラフを実行し、`memo/compare.py` がそれらを LangSmith 上でスコアリングするので、どのツールにも同じ指標を適用できます。
+
+LangSmith 組み込みのレイテンシとコストに加え、2つのカスタム評価器がメモの品質を採点します。
+
+* `primary_source_rate`: アグリゲーターではなく一次情報源 (IRページ、SEC、公式プレスリリース) からの引用が占める割合。
+* `financial_concept_coverage`: Financials セクションがバリュエーション、収益、資金調達、オペレーション指標を網羅しているかどうか。
+
+このハーネスは単一ファイルではなく小さなパッケージになっているため、[api-cookbook リポジトリ](https://github.com/ppl-ai/api-cookbook/tree/main/docs/articles/langchain-vc-memo-agent)に置かれています。
+
+```bash theme={null}
+git clone https://github.com/ppl-ai/api-cookbook.git
+cd api-cookbook/docs/articles/langchain-vc-memo-agent/scripts
+pip install -r requirements.txt
+python -m memo.compare
+```
+
+<div id="results">
+  ### 結果
+</div>
+
+`openai/gpt-5.5` を用いて、上場企業・非上場企業あわせて10社を対象にスコアを算出しました。
+
+<img src="https://mintcdn.com/perplexity/X5JcIOX7i0z8S6ii/docs/cookbook/static/img/langchain-vc-memo-comparison.png?fit=max&auto=format&n=X5JcIOX7i0z8S6ii&q=85&s=90501ceb255597e6f32938b56903d2f8" alt="A LangSmith comparison of the Perplexity, Parallel, and Exa experiments across feedback scores, latency, and cost." />
+
+| 指標                | Perplexity | Parallel | Exa   |
+| ----------------- | ---------- | -------- | ----- |
+| 一次情報源の割合          | **1.00**   | 0.82     | 0.85  |
+| 財務概念の網羅性     | **0.70**   | 0.70     | 0.50  |
+| レイテンシ p50 (秒/メモ)  | **91**     | 192      | 143   |
+| コスト (USD/メモ)      | **$0.38**  | $0.60    | $0.67 |
+
+今回の実行では、Perplexity が一次情報源の割合で満点を記録し、メモ生成が最速、実行あたりのコストも最小で、財務概念の網羅性でも最高値に並びました。自社のユースケースでの比較結果を確認するには、独自のデータセットで各プロバイダーを再スコアリングしてみてください。
+
+<div id="directory-structure">
+  ## ディレクトリ構成
+</div>
+
+api-cookbook の [`docs/articles/langchain-vc-memo-agent/`](https://github.com/ppl-ai/api-cookbook/tree/main/docs/articles/langchain-vc-memo-agent) 内の構成は次のとおりです。
+
+```
+scripts/
+├── requirements.txt
+├── .env.example
+└── memo/
+    ├── graph.py          # 型付き状態、並列リサーチノード、ツール不使用のシンセサイザー、build_graph()
+    ├── main.py           # CLIエントリポイント (python -m memo --company "...")
+    ├── profiles.py       # 差し替え可能な3つのプロバイダープロファイル
+    ├── evaluators.py     # LangSmithの評価器
+    ├── eval_dataset.py   # 評価入力として使う企業
+    └── compare.py        # LangSmithでの比較を実行
+```
+
+<div id="links">
+  ## リンク
+</div>
+
+* [Perplexity Agent API のツール](/ja/docs/agent-api/tools)
+* [Finance Search](/ja/docs/agent-api/tools/finance-search)
+* [LangChain の Perplexity プロバイダー](https://docs.langchain.com/oss/python/integrations/providers/perplexity)
+* [LangGraph](https://langchain-ai.github.io/langgraph/)
+* [LangSmith による評価](https://docs.langchain.com/langsmith/evaluation)
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+* **苦手な領域を把握しておく。** エージェントの実力は、見つけられる一次情報源の質次第です。情報が十分に公開されている企業なら安定した結果が得られますが、公開情報の乏しい非上場スタートアップでは精度が落ちます。
+* **セクション構成はあくまで一例。** 7つのセクションと PASS / TRACK / ADVANCE / LEAD の評価スケールは、ここで採用した形式にすぎません。チームで使っている形式に差し替えてください。

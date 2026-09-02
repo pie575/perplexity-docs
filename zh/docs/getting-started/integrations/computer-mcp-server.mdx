@@ -1,0 +1,521 @@
+---
+title: "Perplexity Computer MCP Server"
+sidebarTitle: "Perplexity Computer MCP"
+description: "借助 Model Context Protocol (MCP)，让 AI 助手能够通过 Perplexity Computer 完成现实世界的任务。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+Perplexity Computer MCP Server 将 AI 助手连接到 [Perplexity Computer](https://www.perplexity.ai)——一个几乎可以代你完成任何任务的通用 AI 智能体。通过 Model Context Protocol，你的 MCP 客户端可以将复杂的多步骤工作委派给 Computer，并获得结构化结果。
+
+<Note>
+  该集成与 [Perplexity API MCP Server](/zh/docs/getting-started/integrations/mcp-server) 相互独立，后者聚焦于 Perplexity 的 Search 与 Completion API。
+</Note>
+
+Computer 可以：
+
+* **搜索并浏览**网页以获取实时信息，包括需要登录才能访问的页面
+* 在交互式 Linux sandbox 中**编写并执行代码**，环境预置 Python、Node 及标准 Unix 工具
+* **创建文档与媒体**，包括 PDF、幻灯片、电子表格、图片和视频
+* 通过 Gmail 和 Outlook **读取和发送邮件**，并安排日历事件
+* 在 GitHub、Linear、Jira、Asana、Slack、Notion 等平台中**管理任务**
+* **分析数据**，数据源可以是 Snowflake、Databricks、Google Sheets、Salesforce 等
+* **构建并部署网站**，几分钟内即可获得可公开访问的线上 URL
+* 通过支持一键 OAuth 的托管式连接器框架**连接 400 多种服务**
+
+<div id="authentication">
+  ## 身份验证
+</div>
+
+Computer MCP Server 使用你的 Perplexity 账户，通过 **OAuth 2.0** 对用户进行身份验证，无需 API key。
+
+首次使用时，兼容的 MCP 客户端会自动打开浏览器窗口以完成授权流程。
+
+<Info>
+  Computer 的使用会从你的 Perplexity 账户额度中扣费。若余额不足，Computer 会返回 `insufficient_credits`，并附上管理账单的链接。
+</Info>
+
+<div id="installation">
+  ## 安装
+</div>
+
+<Steps>
+  <Step title="第 1 步：安装服务器">
+    将 Computer MCP 服务器添加到你的客户端。
+
+    <Tabs>
+      <Tab title="Claude Code">
+        ```bash theme={null}
+        claude mcp add perplexity-computer --transport http https://www.perplexity.ai/rest/computer/mcp
+        ```
+      </Tab>
+
+      <Tab title="Codex">
+        ```bash theme={null}
+        codex mcp add perplexity-computer --url https://www.perplexity.ai/rest/computer/mcp
+        ```
+      </Tab>
+
+      <Tab title="Cursor">
+        添加到 `mcp.json`：
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="VS Code">
+        添加到 `.vscode/mcp.json`：
+
+        ```json theme={null}
+        {
+          "servers": {
+            "perplexity-computer": {
+              "type": "http",
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Windsurf">
+        添加到 `~/.codeium/windsurf/mcp_config.json`：
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "serverUrl": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Claude Desktop">
+        添加到 `claude_desktop_config.json`：
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="其他客户端">
+        任何支持 HTTP 传输的 MCP 客户端都可以使用以下服务器 URL 进行连接：
+
+        ```
+        https://www.perplexity.ai/rest/computer/mcp
+        ```
+
+        具体配置格式请参阅所用客户端的文档。
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="第 2 步：通过 Perplexity Computer 完成身份验证">
+    安装完成后，系统会要求你使用 Perplexity 账户进行身份验证，并跳转到浏览器窗口完成 OAuth 流程。
+
+    <img src="https://mintcdn.com/perplexity/ar3swoyOvYqPFvZd/docs/assets/images/computer_mcp/oauth.png?fit=max&auto=format&n=ar3swoyOvYqPFvZd&q=85&s=33f1ecbab4a6fbadd97840e3b0aec64c" alt="Perplexity OAuth screen for Computer MCP" />
+  </Step>
+
+  <Step title="第 3 步：开始使用 Computer MCP">
+    完成身份验证后，你就可以通过 MCP 客户端把任务交给 Perplexity Computer 了。
+
+    运行一个简短的流程测试连接，直观感受 Computer 的实际效果：
+
+    ```text theme={null}
+    Summarize the top 5 stories on Hacker News right now.
+    ```
+
+    然后在同一对话中继续追问：
+
+    ```text theme={null}
+    Turn that into a PDF report.
+    ```
+  </Step>
+</Steps>
+
+<div id="conversation-threading">
+  ## 会话线程
+</div>
+
+Computer 会记住第一条消息中的上下文，并在此基础上继续。若要让后续提示保持在同一工作流中，你的 MCP 客户端必须传入上一次响应返回的 `thread_id`。
+
+首次调用会创建一个新线程并返回 `thread_id`。在后续调用中复用该 `thread_id`，即可延续同一会话。
+
+```
+1. call_perplexity_computer(message: "Summarize the top 5 stories on Hacker News right now")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174000", event: "complete", text: "Here are today's top stories..." }
+
+2. call_perplexity_computer(message: "Turn that into a PDF report", thread_id: "123e4567-e89b-12d3-a456-426614174000")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174000", event: "complete", text: "Here's the report.\n\n[report.pdf](https://...)" }
+```
+
+这同样适用于交互式事件。如果 Computer 在任务执行过程中需要连接某项服务，它会返回一个 `auth_required` 事件；完成认证后，对话会在同一线程上继续：
+
+```
+1. call_perplexity_computer(message: "Email me a summary of my unread Slack messages")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174001", event: "auth_required", interactive: { type: "auth_required", connector: "slack", auth_url: "https://..." } }
+
+2. notify_connected(thread_id: "123e4567-e89b-12d3-a456-426614174001", message: "Slack connected")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174001", event: "complete", text: "Done! Sent the summary to your email." }
+```
+
+<div id="status-and-progress-updates">
+  ## 状态与进度更新
+</div>
+
+当任务涉及网页浏览、连接器认证、代码执行或文件生成时，Computer 任务可能需要数分钟才能完成。MCP 工具调用会一直保持打开，直到 Computer 进入最终状态或到达某个需要处理的检查点。
+
+请将每个响应中的 `event` 字段视为该任务的当前状态。同一响应中还包含后续调用所需的 `thread_id`：
+
+```
+{
+  "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+  "event": "complete",
+  "text": "Finished the report."
+}
+```
+
+当 Computer 需要输入才能继续时，响应中会包含一个可操作事件和一个 `interactive` 对象：
+
+```
+{
+  "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+  "event": "ask_user_question",
+  "text": "Which format should I use?\n1. PDF\n2. DOCX",
+  "interactive": {
+    "type": "ask_user_question",
+    "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+    "respond_with_tool": "answer_question"
+  }
+}
+```
+
+处理这些检查点的方式是：使用相同的 `thread_id` 调用对应的后续工具：
+
+| 事件                  | 后续操作                                                   |
+| ------------------- | ------------------------------------------------------ |
+| `ask_user_question` | 调用 `answer_question`，并传入用户的回答。                         |
+| `confirm_action`    | 调用 `confirm_action_approve` 或 `confirm_action_deny`。   |
+| `auth_required`     | 打开 OAuth 链接，然后调用 `notify_connected`。                   |
+| `sleep` 或 `waiting` | 需要继续时，使用相同的 `thread_id` 调用 `call_perplexity_computer`。 |
+
+<Info>
+  任务运行期间，Computer MCP 服务器会以 MCP 进度通知的形式发送状态更新。客户端必须携带进度令牌并支持进度通知，才能显示这些更新。这些更新只是任务状态，并非逐 token 的响应流式输出。
+</Info>
+
+如果该工具返回 `timeout`，说明 MCP 服务器在等待窗口到期前未收到检查点，但任务可能仍在运行。请保留该 `thread_id`，并使用同一个 `thread_id` 再次调用 `call_perplexity_computer`，以继续执行或查询最新状态。
+
+<div id="file-uploads">
+  ## 文件上传
+</div>
+
+Computer 可以处理你提供的文件。要为任务附加文件，请先通过 `create_attachment_upload` 请求一个预签名的 S3 上传信封，将文件字节直接上传到 S3，然后在下一次工具调用的 `attachment_urls` 中传入返回的 URL。MCP 服务器全程不会接触文件内容，因此即使是大体积二进制文件也无需经过 worker，可轻松扩展。
+
+每个附件的文件大小上限为 **200 MB**。
+
+<Steps>
+  <Step title="第 1 步：请求上传信封">
+    调用 `create_attachment_upload`，并传入文件的 `filename`、`mime_type` 和 `size_bytes`。服务器会返回一个预签名的 S3 POST，可在接下来几分钟内使用。
+
+    ```
+    create_attachment_upload(
+      filename: "report.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 482190,
+    )
+    -> {
+      attachment_url: "https://bucket.s3.amazonaws.com/uploads/<uuid>/report.pdf",
+      upload_url: "https://bucket.s3.amazonaws.com",
+      upload_fields: { "key": "uploads/<uuid>/report.pdf", "policy": "...", ... },
+    }
+    ```
+  </Step>
+
+  <Step title="第 2 步：将文件字节 POST 到 S3">
+    向 `upload_url` 发送一个无需身份验证的 `multipart/form-data` POST 请求。把 `upload_fields` 中的每个键都作为表单字段带上，再将文件放在 `file` 部分中。
+
+    ```bash theme={null}
+    curl -X POST "$UPLOAD_URL" \
+      -F "key=$KEY" \
+      -F "policy=$POLICY" \
+      -F "x-amz-signature=$SIGNATURE" \
+      -F "file=@./report.pdf"
+    ```
+
+    上传成功时 S3 返回 `204 No Content`。此时即可通过 `attachment_url` 访问该文件。
+  </Step>
+
+  <Step title="第 3 步：在任务中引用该文件">
+    通过 `attachment_urls` 数组将 `attachment_url` 传给任意任务工具。你既可以为新任务附加文件，也可以在已有线程的后续追问中附加文件。
+
+    ```
+    call_perplexity_computer(
+      message: "Summarize this report and pull out the key risks.",
+      attachment_urls: ["https://bucket.s3.amazonaws.com/uploads/<uuid>/report.pdf"],
+    )
+    ```
+  </Step>
+</Steps>
+
+<div id="create_attachment_upload">
+  ### `create_attachment_upload`
+</div>
+
+为单个文件请求预签名的 S3 POST。返回一个封装对象，客户端可用它将文件字节直接上传到 S3。
+
+| 参数           | 类型      | 必填 | 描述                                           |
+| ------------ | ------- | -- | -------------------------------------------- |
+| `filename`   | string  | 是  | 包含扩展名的文件名 (例如 `report.pdf`) 。                |
+| `mime_type`  | string  | 是  | 文件的内容类型 (例如 `application/pdf`、`image/png`) 。 |
+| `size_bytes` | integer | 是  | 文件大小 (字节) 。不得超过 200 MB。                      |
+
+返回：
+
+| 字段               | 类型     | 描述                                      |
+| ---------------- | ------ | --------------------------------------- |
+| `attachment_url` | string | 在后续工具调用中通过 `attachment_urls` 传回该值。      |
+| `upload_url`     | string | 用于 POST 上传文件的 S3 端点。                    |
+| `upload_fields`  | object | 在 multipart POST 中与 `file` 部分一同提交的表单字段。 |
+
+<div id="capabilities">
+  ## 功能特性
+</div>
+
+<div id="browser-control">
+  ### 浏览器控制
+</div>
+
+Computer 内置完整的云端浏览器，可处理搜索之外的任务。当任务需要与网站交互、填写表单或访问需登录的内容时，Computer 会自动启动浏览器会话。
+
+| 能力            | 描述                                                  |
+| ------------- | --------------------------------------------------- |
+| 导航            | 打开任意 URL、点击元素、填写表单并提取结构化数据。                         |
+| 身份验证          | 处理多步登录流程和已登录的会话。                                    |
+| 截图            | 对任意网页进行高保真截图。                                       |
+| 批量处理          | 在数十个 URL 上并行运行浏览器任务，并将结果汇总为结构化输出。                   |
+| JavaScript 渲染 | 访问动态页面及重度依赖 JavaScript 的页面内容，这些内容无法通过简单的 HTTP 请求获取。 |
+
+<div id="code-execution">
+  ### 代码执行
+</div>
+
+Computer 在带有持久化文件工作区的 sandbox Linux 虚拟机中运行代码。Python、Node.js、ffmpeg 及标准 Unix 工具均已预装，还可随时按需安装其他软件包。
+
+| 能力       | 说明                                  |
+| -------- | ----------------------------------- |
+| 交互式执行    | 实时编写并执行 Python 或 Node 脚本，并根据结果反复迭代。 |
+| 数据处理     | 处理 CSV、JSON、Excel、PDF、图像、音频和视频文件。   |
+| Shell 命令 | 运行 shell 命令，完成系统操作、数据处理和自动化任务。      |
+| 可视化      | 生成图表、绘图和数据分析结果。                     |
+| 文件工作区    | 持久化目录，可在整个会话期间创建、读取和管理文件。           |
+
+<div id="connected-services">
+  ### 已连接服务
+</div>
+
+Computer 通过托管式连接器框架接入 **400+ 外部服务**。用户只需通过 OAuth 授权一次，Computer 即可安全地使用 token 读取数据、执行操作并跨服务搜索。
+
+| 类别      | 服务                                                               |
+| ------- | ---------------------------------------------------------------- |
+| 通信      | Slack、Gmail、Outlook、Microsoft Teams                              |
+| 日历      | Google Calendar、Outlook Calendar                                 |
+| 文档      | Notion、Google Docs、Google Sheets、Dropbox、OneDrive、SharePoint、Box |
+| 项目管理    | Linear、Jira、Asana、Confluence、Trello                              |
+| CRM 与销售 | HubSpot、Salesforce                                               |
+| 开发      | GitHub、GitLab、Vercel、Supabase                                    |
+| 数据与分析   | Snowflake、Databricks、Airtable、Google Sheets                      |
+| 财务      | Stripe、Ramp、Plaid                                                |
+| 研究      | CB Insights、PitchBook、Statista、SEC EDGAR                         |
+| 更多      | 各类别下另有数百个连接器                                                     |
+
+当任务所需的服务尚未连接时，Computer 会提供一个 OAuth 链接。在浏览器中完成授权后，该连接器即刻可用。
+
+<div id="available-tools">
+  ## 可用工具
+</div>
+
+<CardGroup cols={2}>
+  <Card
+    title="call_perplexity_computer"
+    icon={
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+<path d="M10.2 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M13.8 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M3 19.2H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17.4 4.8H6.6C5.606 4.8 4.8 5.606 4.8 6.6V13.8C4.8 14.794 5.606 15.6 6.6 15.6H17.4C18.394 15.6 19.2 14.794 19.2 13.8V6.6C19.2 5.606 18.394 4.8 17.4 4.8Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+}
+  >
+    向 Perplexity Computer 发送消息，以启动或继续任意任务。这是所有交互中最主要的工具。
+
+    **适用场景：** 启动新任务、发送后续指令，以及恢复已暂停的会话。
+  </Card>
+
+  <Card title="answer_question" icon="message">
+    当 Computer 需要补充信息时，用于转达答案。支持 MCP elicitation (交互式征询)  的客户端可在当前调用中直接处理。
+
+    **触发事件：** `ask_user_question`。
+  </Card>
+
+  <Card title="confirm_action_approve / deny" icon="shield-check">
+    批准或拒绝敏感操作，例如发送邮件或部署代码。支持 MCP elicitation (交互式征询)  的客户端可在当前调用中直接处理。
+
+    **触发事件：** `confirm_action`。
+  </Card>
+
+  <Card title="notify_connected" icon="plug">
+    在你完成第三方服务的 OAuth 流程后恢复任务。
+
+    **触发事件：** `auth_required`。
+  </Card>
+
+  <Card title="create_attachment_upload" icon="paperclip">
+    为希望 Computer 使用的文件创建预签名 S3 上传信封。
+
+    **适用场景：** 附加文件时无需让文件字节流经 MCP 服务器。
+  </Card>
+</CardGroup>
+
+<div id="call_perplexity_computer">
+  ### `call_perplexity_computer`
+</div>
+
+核心工具。发送消息以启动新任务或继续已有对话。
+
+| 参数                | 类型       | 必填 | 说明                                             |
+| ----------------- | -------- | -- | ---------------------------------------------- |
+| `message`         | string   | 否  | 任务描述或后续消息。                                     |
+| `thread_id`       | string   | 否  | 用于继续已有对话的线程 ID。省略则开启新对话。                       |
+| `attachment_urls` | string[] | 否  | 来自 `create_attachment_upload` 的 URL，用于在本轮附加文件。 |
+
+<Info>
+  支持 MCP elicitation (交互式征询) 的客户端可以在当前工具调用内处理 `ask_user_question` 和 `confirm_action`。否则，请使用以下工具在交互事件结束后恢复任务。
+</Info>
+
+<div id="answer_question">
+  ### `answer_question`
+</div>
+
+当 Computer 返回 `ask_user_question` 事件时，用于回传答案。
+
+| 参数                | 类型       | 是否必需 | 说明                                               |
+| ----------------- | -------- | ---- | ------------------------------------------------ |
+| `thread_id`       | string   | 是    | 当前活跃会话的线程 ID。                                    |
+| `answers`         | object   | 是    | 键值对，将每个问题映射到相应的答案。                               |
+| `attachment_urls` | string[] | 否    | 来自 `create_attachment_upload` 的 URL，用于将文件附加到此答案。 |
+
+<div id="confirm_action_approve">
+  ### `confirm_action_approve`
+</div>
+
+批准 `confirm_action` 事件中的待处理操作。
+
+| 参数                | 类型       | 必填 | 说明                                                 |
+| ----------------- | -------- | -- | -------------------------------------------------- |
+| `thread_id`       | string   | 是  | 当前活跃会话的线程 ID。                                      |
+| `result`          | string   | 是  | 批准的原因或说明信息。                                        |
+| `attachment_urls` | string[] | 否  | 由 `create_attachment_upload` 返回的 URL，用于将文件附加到此次批准。 |
+
+<div id="confirm_action_deny">
+  ### `confirm_action_deny`
+</div>
+
+拒绝 `confirm_action` 事件中的待处理操作。
+
+| 参数                | 类型       | 必填 | 说明                                                    |
+| ----------------- | -------- | -- | ----------------------------------------------------- |
+| `thread_id`       | string   | 是  | 当前会话的线程 ID。                                           |
+| `result`          | string   | 是  | 拒绝该操作的原因。                                             |
+| `attachment_urls` | string[] | 否  | 由 `create_attachment_upload` 返回的 URL，对应要随此次拒绝一并附加的文件。 |
+
+<div id="notify_connected">
+  ### `notify_connected`
+</div>
+
+在你完成由 `auth_required` 事件触发的 OAuth 流程后恢复任务。
+
+| 参数                | 类型       | 是否必填 | 说明                                                 |
+| ----------------- | -------- | ---- | -------------------------------------------------- |
+| `thread_id`       | string   | 是    | 当前活跃会话的线程 ID。                                      |
+| `message`         | string   | 是    | 说明连接已完成的消息。                                        |
+| `attachment_urls` | string[] | 否    | 由 `create_attachment_upload` 返回的 URL，用于在恢复任务时附加文件。 |
+
+<div id="response-format">
+  ## 响应格式
+</div>
+
+任务工具返回一个包含以下字段的 JSON 对象。`create_attachment_upload` 则返回[文件上传](#file-uploads)中描述的上传信封结构。
+
+| 字段            | 类型     | 描述                                           |
+| ------------- | ------ | -------------------------------------------- |
+| `thread_id`   | string | 会话 UUID。回传该值即可继续同一会话。若请求在会话创建前就已失败，则不会返回该字段。 |
+| `event`       | string | 事件类型，用于标识发生了什么。参见[事件](#events)。              |
+| `text`        | string | Markdown 格式的响应文本。                            |
+| `interactive` | object | 仅在需要后续操作的交互式事件中出现。                           |
+
+<div id="events">
+  ## 事件
+</div>
+
+每个响应都包含一个 `event` 字段，用于描述结果：
+
+| 事件                     | 描述                     | 需要采取的操作                                                |
+| ---------------------- | ---------------------- | ------------------------------------------------------ |
+| `complete`             | 任务成功完成。                | 无。                                                     |
+| `error`                | 任务失败。                  | 查看错误信息。                                                |
+| `cancelled`            | 任务在完成前被取消。             | 启动新任务，或使用新指令继续该线程。                                     |
+| `sleep`                | 智能体在任务中途暂停。            | 使用相同的 `thread_id` 调用 `call_perplexity_computer` 以恢复执行。 |
+| `waiting`              | 智能体正在等待外部条件满足或等待更长时间。  | 保留 `thread_id`，就绪后继续该线程。                               |
+| `ask_user_question`    | 智能体需要更多信息。             | 调用 `answer_question` 并提供你的回答。                          |
+| `confirm_action`       | 智能体准备执行敏感操作。           | 调用 `confirm_action_approve` 或 `confirm_action_deny`。   |
+| `auth_required`        | 某个第三方服务需要身份验证。         | 在浏览器中打开返回的 `auth_url`，然后调用 `notify_connected`。         |
+| `two_factor_required`  | 某个连接器或站点要求双重身份验证。      | 按照 `text` 中的说明操作，然后使用相同的 `thread_id` 继续。               |
+| `insufficient_credits` | 账户额度不足。                | 充值额度或调整支出上限。                                           |
+| `access_denied`        | 该账户无法使用 Computer。      | 如果你属于某个组织，请联系其管理员启用 Computer 访问权限。                     |
+| `timeout`              | MCP 服务器在等待窗口到期前未收到检查点。 | 使用相同的 `thread_id` 重试以继续，或查询当前状态。                       |
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card
+    title="Perplexity Computer"
+    icon={
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+<path d="M10.2 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M13.8 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M3 19.2H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17.4 4.8H6.6C5.606 4.8 4.8 5.606 4.8 6.6V13.8C4.8 14.794 5.606 15.6 6.6 15.6H17.4C18.394 15.6 19.2 14.794 19.2 13.8V6.6C19.2 5.606 18.394 4.8 17.4 4.8Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+}
+    href="https://www.perplexity.ai"
+  >
+    了解 Perplexity Computer——能代你完成各类任务的数字员工。
+  </Card>
+
+  <Card title="Perplexity API MCP Server" icon="search" href="/zh/docs/getting-started/integrations/mcp-server">
+    借助 Perplexity API 为你的智能体赋予实时信息检索与生成能力。
+  </Card>
+</CardGroup>

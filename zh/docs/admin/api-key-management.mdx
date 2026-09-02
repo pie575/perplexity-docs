@@ -1,0 +1,574 @@
+---
+title: "API key 管理"
+description: "了解如何生成、吊销和轮换 API key，确保访问安全"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+API key 是向 Perplexity API 发起请求时进行身份验证的必备凭据。本指南介绍如何通过认证令牌管理端点创建、管理和轮换 API key。
+
+<Warning>
+  **API key 仅显示一次。** 无论通过控制台还是以编程方式创建 API key，完整的 token 只在创建时返回一次，**此后无法再次获取**。请在关闭页面或响应前立即将其保存到安全位置。
+</Warning>
+
+<Info>
+  API key 应被视为敏感凭据。请妥善存储，切勿在客户端代码或公开仓库中泄露。
+</Info>
+
+<div id="getting-started-create-your-project-first">
+  ## 快速开始：先创建项目
+</div>
+
+<Warning>
+  **重要前提**：在生成任何 API key 之前，你必须先通过 Perplexity 网页界面创建一个项目。
+</Warning>
+
+<Steps>
+  <Step title="创建项目">
+    前往 Projects 页面，创建你的第一个项目：
+
+    **[打开项目设置 →](https://console.perplexity.ai/project/settings)**
+
+    项目可以帮助你整理密钥，并在不同团队或环境之间管理访问权限。
+
+    <Tip>
+      为项目取一个含义明确的名称 (例如 &quot;Production&quot; 或 &quot;Development&quot;) ，便于管理。
+    </Tip>
+  </Step>
+
+  <Step title="生成 API key">
+    创建项目后，前往 API Keys 页面生成第一个密钥：
+
+    **[生成 API key →](https://console.perplexity.ai/project/keys)**
+
+    你可以在每个项目中创建多个密钥，分别用于不同的用途或环境。完整的密钥值只在创建时显示一次——请在离开页面前复制保存。
+  </Step>
+</Steps>
+
+<Note>
+  通过网页界面创建第一个 API key 后，你就可以使用下面的编程接口来生成和管理更多密钥。
+</Note>
+
+<div id="key-management-endpoints">
+  ## 密钥管理端点
+</div>
+
+Perplexity 提供两个端点，用于以编程方式管理 API key：
+
+* **`/generate_auth_token`** —— 创建新的 API key
+* **`/revoke_auth_token`** —— 吊销现有的 API key
+
+<Warning>
+  API key 一经吊销即无法恢复。请务必在吊销旧密钥之前，先将应用程序更新为使用新密钥。
+</Warning>
+
+<div id="generating-api-keys">
+  ## 生成 API key
+</div>
+
+以编程方式创建新的 API key。请务必提供具有描述性的 `token_name`：密钥一经创建，该名称便是日后识别它的主要方式，因为完整的 token 值将不再可见。
+
+<div id="request">
+  ### 请求
+</div>
+
+<CodeGroup>
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/generate_auth_token \
+    --header "Authorization: Bearer YOUR_EXISTING_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "token_name": "Production API Key"
+    }'
+  ```
+
+  ```python Python theme={null}
+  import requests
+
+  url = "https://api.perplexity.ai/generate_auth_token"
+  headers = {
+      "Authorization": "Bearer YOUR_EXISTING_API_KEY",
+      "Content-Type": "application/json"
+  }
+  payload = {
+      "token_name": "Production API Key"  # 可选
+  }
+
+  response = requests.post(url, headers=headers, json=payload)
+  data = response.json()
+  print(f"New API Key: {data['auth_token']}")
+  print(f"Created at: {data['created_at_epoch_seconds']}")
+  ```
+
+  ```typescript Typescript theme={null}
+  const response = await fetch("https://api.perplexity.ai/generate_auth_token", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer YOUR_EXISTING_API_KEY",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      token_name: "Production API Key"  // 可选
+    })
+  });
+
+  const data = await response.json();
+  console.log(`New API Key: ${data.auth_token}`);
+  console.log(`Created at: ${data.created_at_epoch_seconds}`);
+  ```
+</CodeGroup>
+
+<div id="response">
+  ### 响应
+</div>
+
+```json theme={null}
+{
+  "auth_token": "pplx-1234567890abcdef",
+  "created_at_epoch_seconds": 1735689600,
+  "token_name": "Production API Key"
+}
+```
+
+<Warning>
+  请立即妥善保存 `auth_token`。这是**唯一**一次返回完整 token 值的机会——之后无法通过任何端点或控制台重新获取。
+</Warning>
+
+<div id="revoking-api-keys">
+  ## 吊销 API key
+</div>
+
+对于不再需要或可能已泄露的 API key，应及时吊销。
+
+<div id="request-2">
+  ### 请求
+</div>
+
+<CodeGroup>
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/revoke_auth_token \
+    --header "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "auth_token": "pplx-1234567890abcdef"
+    }'
+  ```
+
+  ```python Python theme={null}
+  import os
+  import requests
+
+  url = "https://api.perplexity.ai/revoke_auth_token"
+  headers = {
+      "Authorization": f"Bearer {os.environ.get('PERPLEXITY_API_KEY')}",
+      "Content-Type": "application/json"
+  }
+  payload = {
+      "auth_token": "pplx-1234567890abcdef"
+  }
+
+  response = requests.post(url, headers=headers, json=payload)
+  if response.status_code == 200:
+      print("API key successfully revoked")
+  ```
+
+  ```typescript Typescript theme={null}
+  const response = await fetch("https://api.perplexity.ai/revoke_auth_token", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      auth_token: "pplx-1234567890abcdef"
+    })
+  });
+
+  if (response.status === 200) {
+    console.log("API key successfully revoked");
+  }
+  ```
+</CodeGroup>
+
+<div id="response-2">
+  ### 响应
+</div>
+
+撤销成功时返回 `200 OK` 状态码。
+
+<div id="api-key-rotation">
+  ## API key 轮换
+</div>
+
+定期轮换密钥是一项安全最佳实践，可最大限度降低密钥泄露带来的影响。下面介绍如何实现零停机的密钥轮换：
+
+<div id="rotation-strategy">
+  ### 轮换策略
+</div>
+
+<Steps>
+  <Step title="生成新密钥">
+    在当前密钥仍然有效的情况下，创建一个新的 API key：
+
+    ```python theme={null}
+    # 生成新密钥
+    new_key_response = requests.post(
+        "https://api.perplexity.ai/generate_auth_token",
+        headers={"Authorization": f"Bearer {current_key}"},
+        json={"token_name": f"Rotated Key - {datetime.now().isoformat()}"}
+    )
+    new_key = new_key_response.json()["auth_token"]
+    ```
+  </Step>
+
+  <Step title="更新应用">
+    将新密钥部署到你的应用中：
+
+    ```python theme={null}
+    # 更新环境变量或密钥管理系统
+    os.environ["PERPLEXITY_API_KEY"] = new_key
+
+    # 验证新密钥是否可用
+    test_response = requests.post(
+        "https://api.perplexity.ai/v1/agent",
+        headers={"Authorization": f"Bearer {new_key}"},
+        json={
+            "preset": "low",
+            "input": "Test"
+        }
+    )
+    assert test_response.status_code == 200
+    ```
+  </Step>
+
+  <Step title="监控过渡">
+    继续下一步前，确认所有服务均已切换到新密钥：
+
+    ```python theme={null}
+    # 监控应用日志，确认
+    # 所有实例都已使用新密钥
+    time.sleep(300)  # 等待配置生效
+    ```
+  </Step>
+
+  <Step title="吊销旧密钥">
+    确认无误后，吊销旧密钥：
+
+    ```python theme={null}
+    # 吊销旧密钥
+    revoke_response = requests.post(
+        "https://api.perplexity.ai/revoke_auth_token",
+        headers={"Authorization": f"Bearer {new_key}"},
+        json={"auth_token": current_key}
+    )
+    assert revoke_response.status_code == 200
+    print("Key rotation completed successfully")
+    ```
+  </Step>
+</Steps>
+
+<div id="automated-rotation-example">
+  ### 自动轮换示例
+</div>
+
+以下是一个完整的密钥自动轮换脚本示例：
+
+<CodeGroup>
+  ```python Python theme={null}
+  import requests
+  import os
+  import time
+  from datetime import datetime
+  import logging
+
+  logging.basicConfig(level=logging.INFO)
+  logger = logging.getLogger(__name__)
+
+  class PerplexityKeyRotator:
+      def __init__(self, current_key):
+          self.base_url = "https://api.perplexity.ai"
+          self.current_key = current_key
+
+      def generate_new_key(self, name=None):
+          """Generate a new API key"""
+          url = f"{self.base_url}/generate_auth_token"
+          headers = {"Authorization": f"Bearer {self.current_key}"}
+          payload = {}
+          if name:
+              payload["token_name"] = name
+
+          response = requests.post(url, headers=headers, json=payload)
+          response.raise_for_status()
+          return response.json()
+
+      def test_key(self, key):
+          """Test if a key is valid"""
+          url = f"{self.base_url}/v1/agent"
+          headers = {"Authorization": f"Bearer {key}"}
+          payload = {
+              "preset": "low",
+              "input": "Test",
+              "max_output_tokens": 1
+          }
+
+          try:
+              response = requests.post(url, headers=headers, json=payload)
+              return response.status_code == 200
+          except:
+              return False
+
+      def revoke_key(self, key_to_revoke):
+          """Revoke an API key"""
+          url = f"{self.base_url}/revoke_auth_token"
+          headers = {"Authorization": f"Bearer {self.current_key}"}
+          payload = {"auth_token": key_to_revoke}
+
+          response = requests.post(url, headers=headers, json=payload)
+          return response.status_code == 200
+
+      def rotate_key(self, update_callback=None):
+          """Perform complete key rotation"""
+          logger.info("Starting key rotation...")
+
+          # 第 1 步：生成新密钥
+          new_key_data = self.generate_new_key(
+              name=f"Rotated-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+          )
+          new_key = new_key_data["auth_token"]
+          logger.info(f"New key generated: {new_key[:10]}...")
+
+          # 第 2 步：测试新密钥
+          if not self.test_key(new_key):
+              raise Exception("New key validation failed")
+          logger.info("New key validated successfully")
+
+          # 第 3 步：更新应用程序（回调）
+          if update_callback:
+              update_callback(new_key)
+              logger.info("Application updated with new key")
+
+          # 第 4 步：等待生效传播
+          logger.info("Waiting for propagation...")
+          time.sleep(30)
+
+          # 第 5 步：吊销旧密钥
+          old_key = self.current_key
+          self.current_key = new_key  # 使用新密钥执行吊销操作
+
+          if self.revoke_key(old_key):
+              logger.info("Old key revoked successfully")
+          else:
+              logger.warning("Failed to revoke old key")
+
+          logger.info("Key rotation completed")
+          return new_key
+
+  # 用法示例
+  def update_environment(new_key):
+      """Update your environment with the new key"""
+      os.environ["PERPLEXITY_API_KEY"] = new_key
+      # 在此处更新你的密钥管理系统
+      # update_aws_secrets_manager(new_key)
+      # update_kubernetes_secret(new_key)
+
+  # 执行轮换
+  rotator = PerplexityKeyRotator(os.environ["PERPLEXITY_API_KEY"])
+  new_key = rotator.rotate_key(update_callback=update_environment)
+  print(f"Rotation complete. New key: {new_key[:10]}...")
+  ```
+
+  ```typescript Typescript theme={null}
+  import fetch from 'node-fetch';
+
+  class PerplexityKeyRotator {
+    private baseUrl = 'https://api.perplexity.ai';
+    private currentKey: string;
+
+    constructor(currentKey: string) {
+      this.currentKey = currentKey;
+    }
+
+    async generateNewKey(name?: string): Promise<{
+      auth_token: string;
+      created_at_epoch_seconds: number;
+      token_name?: string;
+    }> {
+      const response = await fetch(`${this.baseUrl}/generate_auth_token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.currentKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(name ? { token_name: name } : {})
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate key: ${response.statusText}`);
+      }
+
+      return response.json();
+    }
+
+    async testKey(key: string): Promise<boolean> {
+      try {
+        const response = await fetch(`${this.baseUrl}/v1/agent`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            preset: 'low',
+            input: 'Test',
+            max_output_tokens: 1
+          })
+        });
+
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    async revokeKey(keyToRevoke: string): Promise<boolean> {
+      const response = await fetch(`${this.baseUrl}/revoke_auth_token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.currentKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ auth_token: keyToRevoke })
+      });
+
+      return response.ok;
+    }
+
+    async rotateKey(updateCallback?: (newKey: string) => Promise<void>): Promise<string> {
+      console.log('Starting key rotation...');
+
+      // 第 1 步：生成新密钥
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const newKeyData = await this.generateNewKey(`Rotated-${timestamp}`);
+      const newKey = newKeyData.auth_token;
+      console.log(`New key generated: ${newKey.substring(0, 10)}...`);
+
+      // 第 2 步：测试新密钥
+      if (!(await this.testKey(newKey))) {
+        throw new Error('New key validation failed');
+      }
+      console.log('New key validated successfully');
+
+      // 第 3 步：更新应用
+      if (updateCallback) {
+        await updateCallback(newKey);
+        console.log('Application updated with new key');
+      }
+
+      // 第 4 步：等待生效
+      console.log('Waiting for propagation...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
+
+      // 第 5 步：吊销旧密钥
+      const oldKey = this.currentKey;
+      this.currentKey = newKey;
+
+      if (await this.revokeKey(oldKey)) {
+        console.log('Old key revoked successfully');
+      } else {
+        console.warn('Failed to revoke old key');
+      }
+
+      console.log('Key rotation completed');
+      return newKey;
+    }
+  }
+
+  // 使用示例
+  async function updateEnvironment(newKey: string): Promise<void> {
+    process.env.PERPLEXITY_API_KEY = newKey;
+    // 在此处更新你的密钥管理系统
+    // await updateAwsSecretsManager(newKey);
+    // await updateKubernetesSecret(newKey);
+  }
+
+  // 执行轮换
+  const rotator = new PerplexityKeyRotator(process.env.PERPLEXITY_API_KEY!);
+  const newKey = await rotator.rotateKey(updateEnvironment);
+  console.log(`Rotation complete. New key: ${newKey.substring(0, 10)}...`);
+  ```
+</CodeGroup>
+
+<div id="best-practices">
+  ## 最佳实践
+</div>
+
+<CardGroup cols={2}>
+  <Card title="使用环境变量">
+    切勿将 API key 硬编码在源代码中，应将其存放在环境变量或安全的密钥管理系统中。
+
+    **推荐**：`os.environ["PERPLEXITY_API_KEY"]`
+
+    **不推荐**：`api_key = "pplx-1234567890abcdef"`
+  </Card>
+
+  <Card title="实施密钥轮换">
+    定期轮换 API key (例如每 90 天一次) ，以降低密钥泄露可能造成的影响。
+
+    可配置自动化轮换脚本，确保轮换过程零停机。
+  </Card>
+
+  <Card title="使用具有描述性的名称">
+    生成密钥时务必设置 `token_name`。创建完成后，完整的 token 值不再可见，名称便成为识别密钥的主要依据。
+
+    示例：&quot;Production-Main&quot;、&quot;Development-Testing&quot;、&quot;CI/CD-Pipeline&quot;
+  </Card>
+
+  <Card title="监控密钥使用情况">
+    掌握应用中正在使用哪些密钥，并及时吊销闲置密钥。
+
+    维护一份有效密钥及其用途的清单。
+  </Card>
+</CardGroup>
+
+<div id="security-considerations">
+  ## 安全注意事项
+</div>
+
+<Warning>
+  **切勿在以下位置泄露 API key：**
+
+  * 客户端 JavaScript 代码
+  * 移动应用
+  * 公开仓库
+  * 日志文件或错误信息
+  * URL 或查询参数
+</Warning>
+
+<div id="if-a-key-is-compromised">
+  ### 密钥泄露时的处理
+</div>
+
+1. **立即生成新密钥**：使用 `/generate_auth_token`
+2. **更新所有应用**：改用新密钥
+3. **吊销已泄露的密钥**：使用 `/revoke_auth_token`
+4. **检查访问日志**：排查是否存在未经授权的使用
+5. **实施额外的安全措施**：例如 IP 允许列表 (如可用)
+
+<div id="troubleshooting">
+  ## 故障排查
+</div>
+
+| 问题            | 解决方案                    |
+| ------------- | ----------------------- |
+| 轮换后出现“身份验证失败” | 确认新密钥已同步到所有服务实例         |
+| 无法吊销密钥        | 确认使用的是具备相应权限的有效 API key |
+| 密钥生成失败        | 检查账户状态和 API 层级限制        |
+| 服务仍在使用旧密钥     | 在部署流水线中实施规范的密钥轮换机制      |
+
+<Info>
+  如需 API key 管理方面的更多支持，请访问 API 控制台中的 [API Keys 页面](https://console.perplexity.ai/project/keys)，或联系我们的支持团队。
+</Info>

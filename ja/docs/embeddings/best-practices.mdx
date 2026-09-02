@@ -1,0 +1,466 @@
+---
+title: "ベストプラクティス"
+description: "バッチ処理、キャッシュ、RAG パターン、パフォーマンス向上のヒントを活用して、埋め込みのワークフローを最適化します。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+このガイドでは、次元削減、バッチ処理、RAG パターン、エラーハンドリングなど、Perplexity の Embeddings API を最大限に活用するためのベストプラクティスを解説します。
+
+<div id="matryoshka-dimension-reduction">
+  ## Matryoshka による次元削減
+</div>
+
+Perplexity の埋め込みは Matryoshka 表現学習に対応しており、品質を保ちながら埋め込みの次元数を削減できます。これにより、類似度検索の高速化とストレージコストの削減が実現します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 全次元（4b モデルでは 2560）
+  full_response = client.embeddings.create(
+      input=["Your text here"],
+      model="pplx-embed-v1-4b"
+  )
+  print(f"Full: {full_response.data[0].embedding}")  # 2560 次元の base64 文字列
+
+  # 次元を削減 - 検索が高速化し、ストレージも小さくなる
+  reduced_response = client.embeddings.create(
+      input=["Your text here"],
+      model="pplx-embed-v1-4b",
+      dimensions=512
+  )
+  print(f"Reduced: {reduced_response.data[0].embedding}")  # 512 次元の base64 文字列
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // 全次元（4b モデルでは 2560）
+  const fullResponse = await client.embeddings.create({
+      input: ["Your text here"],
+      model: "pplx-embed-v1-4b"
+  });
+  console.log(`Full: ${fullResponse.data![0].embedding}`);
+
+  // 次元を削減 - 検索が高速化し、ストレージも小さくなる
+  const reducedResponse = await client.embeddings.create({
+      input: ["Your text here"],
+      model: "pplx-embed-v1-4b",
+      dimensions: 512
+  });
+  console.log(`Reduced: ${reducedResponse.data![0].embedding}`);
+  ```
+</CodeGroup>
+
+<Note>
+  **トレードオフ:** 次元数を下げると検索が高速になりストレージも節約できますが、品質はわずかに低下します。まずは全次元で試し、必要に応じて削減してください。
+</Note>
+
+<div id="encoding-formats">
+  ## エンコーディング形式
+</div>
+
+埋め込み出力の精度とサイズを制御します。
+
+| 形式              | 説明                                           |  デコード後のサイズ  |  類似度指標  | ユースケース               |
+| --------------- | -------------------------------------------- | :---------: | :-----: | -------------------- |
+| `base64_int8`   | Base64 エンコードされた符号付き int8 (-128〜127)          |    次元数バイト   | コサイン類似度 | デフォルト。品質とサイズのバランスが良い |
+| `base64_binary` | Base64 エンコードされたパックビット (1 次元あたり 1 ビット、LSB 順)  | 次元数 / 8 バイト |  ハミング距離 | 大規模検索向けの最大圧縮         |
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+
+  # base64_int8 をデコード（デフォルト）
+  response = client.embeddings.create(
+      input=["Your text"],
+      model="pplx-embed-v1-4b"
+  )
+  int8_embedding = np.frombuffer(
+      base64.b64decode(response.data[0].embedding), dtype=np.int8
+  )
+
+  # 大規模検索システム向けのバイナリ埋め込み
+  response = client.embeddings.create(
+      input=["Your text"],
+      model="pplx-embed-v1-4b",
+      encoding_format="base64_binary"
+  )
+  binary_bytes = np.frombuffer(
+      base64.b64decode(response.data[0].embedding), dtype=np.uint8
+  )
+  # ビットを展開: 1 バイトに 8 次元が含まれる（LSB 順）
+  binary_embedding = np.unpackbits(binary_bytes, bitorder="little")
+  ```
+
+  ```typescript TypeScript theme={null}
+  // base64_int8 をデコード（デフォルト）
+  const response = await client.embeddings.create({
+      input: ["Your text"],
+      model: "pplx-embed-v1-4b"
+  });
+  const buffer = Buffer.from(response.data![0].embedding, 'base64');
+  const int8Embedding = new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+
+  // 大規模検索システム向けのバイナリ埋め込み
+  const binaryResponse = await client.embeddings.create({
+      input: ["Your text"],
+      model: "pplx-embed-v1-4b",
+      encoding_format: "base64_binary"
+  });
+  const binaryBuffer = Buffer.from(binaryResponse.data![0].embedding, 'base64');
+  // 1 バイトに 8 次元がパックビットとして格納される（LSB 順）
+  ```
+</CodeGroup>
+
+<Tip>
+  `base64_int8` は bfloat16 と同等の品質を、大幅に少ないストレージで実現します。大規模システムで極限まで圧縮したい場合は `base64_binary` を使用してください。
+</Tip>
+
+<div id="similarity-metrics">
+  ## 類似度指標
+</div>
+
+Perplexity の埋め込みモデルは **正規化されていない** 埋め込みを生成します。正確な検索を行うには、適切な類似度指標を選択することが不可欠です。
+
+<Warning>
+  `pplx-embed-v1` と `pplx-embed-context-v1` は、正規化されていない int8 量子化埋め込みをネイティブに生成します。これらはコサイン類似度で比較する**必要があります**。内積や L2 距離をそのまま使用すると、誤った結果になります。これは、多くの埋め込みモデルが事前に正規化されている一方で、Perplexity の埋め込みは正規化されていないためです。
+</Warning>
+
+<div id="int8-embeddings-base64_int8">
+  ### int8 埋め込み (`base64_int8`)
+</div>
+
+比較には**コサイン類似度**を使用します。ベクトルデータベースがコサイン類似度をネイティブにサポートしていない場合は、保存前に埋め込みを float32 に変換し、L2 正規化してください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+
+  def decode_and_normalize(b64_string):
+      """内積のみをサポートするベクトルDB向けにデコードしてL2正規化する。"""
+      embedding = np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+      norm = np.linalg.norm(embedding)
+      if norm > 0:
+          embedding = embedding / norm
+      return embedding
+
+  # 正規化後は、コサイン類似度 == 内積 となる
+  ```
+
+  ```typescript TypeScript theme={null}
+  function decodeAndNormalize(b64String: string): Float32Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      const int8 = new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+      const float32 = new Float32Array(int8.length);
+
+      // float32 に変換する
+      let norm = 0;
+      for (let i = 0; i < int8.length; i++) {
+          float32[i] = int8[i];
+          norm += float32[i] * float32[i];
+      }
+
+      // 内積 == コサイン類似度 となるように L2 正規化する
+      norm = Math.sqrt(norm);
+      if (norm > 0) {
+          for (let i = 0; i < float32.length; i++) {
+              float32[i] /= norm;
+          }
+      }
+      return float32;
+  }
+  ```
+</CodeGroup>
+
+<div id="binary-embeddings-base64_binary">
+  ### バイナリ埋め込み (`base64_binary`)
+</div>
+
+比較には**ハミング距離**を使用します。バイナリ埋め込みは各次元を1ビットで符号化するため、自然な距離指標は2つのベクトル間で異なるビット数となります。
+
+```python theme={null}
+import numpy as np
+
+def hamming_distance(a: np.ndarray, b: np.ndarray) -> int:
+    """Hamming distance between two binary vectors (as uint8 packed bits)."""
+    return np.unpackbits(np.bitwise_xor(a, b)).sum()
+```
+
+<Note>
+  主要なベクトルデータベース (Pinecone、Weaviate、Qdrant、Milvus) の多くは、距離指標としてコサイン類似度をサポートしています。埋め込みをインデックスする前に、使用するデータベースの設定を確認してください。
+</Note>
+
+<div id="rag-pattern">
+  ## RAG パターン
+</div>
+
+埋め込みと Perplexity の Agentic Research API を組み合わせて、検索拡張生成 (RAG) を実現します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string):
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a, b):
+      return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+  # 1. ナレッジベース（一度だけ埋め込みを生成し、ベクトル DB に保存する）
+  knowledge_base = [
+      "Perplexity API provides web-grounded AI responses",
+      "The Embeddings API supports Matryoshka dimension reduction",
+      "Contextualized embeddings share context across document chunks"
+  ]
+
+  kb_response = client.embeddings.create(input=knowledge_base, model="pplx-embed-v1-4b")
+  kb_embeddings = [decode_embedding(emb.embedding) for emb in kb_response.data]
+
+  # 2. ユーザーのクエリ
+  user_query = "How do I reduce embedding dimensions?"
+
+  # 3. 関連するコンテキストを探す
+  query_response = client.embeddings.create(input=[user_query], model="pplx-embed-v1-4b")
+  query_embedding = decode_embedding(query_response.data[0].embedding)
+
+  scores = [(i, cosine_similarity(query_embedding, emb)) for i, emb in enumerate(kb_embeddings)]
+  top_docs = sorted(scores, key=lambda x: x[1], reverse=True)[:2]
+  context = "\n".join([knowledge_base[i] for i, _ in top_docs])
+
+  # 4. コンテキストを使って回答を生成する
+  response = client.responses.create(
+      model="openai/gpt-5.5",
+      input=f"Answer using this context:\n\n{context}\n\nQuestion: {user_query}"
+  )
+
+  print(response.output[0].content[0].text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dotProduct = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dotProduct += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // 1. ナレッジベース
+  const knowledgeBase = [
+      "Perplexity API provides web-grounded AI responses",
+      "The Embeddings API supports Matryoshka dimension reduction",
+      "Contextualized embeddings share context across document chunks"
+  ];
+
+  const kbResponse = await client.embeddings.create({
+      input: knowledgeBase,
+      model: "pplx-embed-v1-4b"
+  });
+  const kbEmbeddings = kbResponse.data!.map(emb => decodeEmbedding(emb.embedding!));
+
+  // 2. ユーザーのクエリ
+  const userQuery = "How do I reduce embedding dimensions?";
+
+  // 3. 関連するコンテキストを探す
+  const queryResponse = await client.embeddings.create({
+      input: [userQuery],
+      model: "pplx-embed-v1-4b"
+  });
+  const queryEmbedding = decodeEmbedding(queryResponse.data![0].embedding!);
+
+  const scores = kbEmbeddings.map((emb, i) => ({
+      index: i,
+      score: cosineSimilarity(queryEmbedding, emb)
+  }));
+  const topDocs = scores.sort((a, b) => b.score - a.score).slice(0, 2);
+  const context = topDocs.map(d => knowledgeBase[d.index]).join("\n");
+
+  // 4. コンテキストを使って回答を生成する
+  const response = await client.responses.create({
+      model: "openai/gpt-5.5",
+      input: `Answer using this context:\n\n${context}\n\nQuestion: ${userQuery}`
+  });
+
+  console.log((response.output[0] as any).content[0].text);
+  ```
+</CodeGroup>
+
+<div id="batch-processing">
+  ## バッチ処理
+</div>
+
+非同期バッチ処理により、大規模なデータセットを効率的に処理できます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  from perplexity import AsyncPerplexity
+
+  async def batch_embed(texts: list[str], batch_size: int = 100):
+      async with AsyncPerplexity() as client:
+          results = []
+          for i in range(0, len(texts), batch_size):
+              batch = texts[i:i + batch_size]
+              response = await client.embeddings.create(
+                  input=batch,
+                  model="pplx-embed-v1-4b"
+              )
+              results.extend(response.data)
+              print(f"Processed {min(i + batch_size, len(texts))}/{len(texts)}")
+          return results
+
+  # 使用例
+  texts = ["Document " + str(i) for i in range(1000)]
+  embeddings = asyncio.run(batch_embed(texts))
+  print(f"Generated {len(embeddings)} embeddings")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  async function batchEmbed(texts: string[], batchSize: number = 100) {
+      const client = new Perplexity();
+      const results: any[] = [];
+
+      for (let i = 0; i < texts.length; i += batchSize) {
+          const batch = texts.slice(i, i + batchSize);
+          const response = await client.embeddings.create({
+              input: batch,
+              model: "pplx-embed-v1-4b"
+          });
+          results.push(...(response.data ?? []));
+          console.log(`Processed ${Math.min(i + batchSize, texts.length)}/${texts.length}`);
+      }
+
+      return results;
+  }
+
+  // 使用例
+  const texts = Array.from({ length: 1000 }, (_, i) => `Document ${i}`);
+  const embeddings = await batchEmbed(texts);
+  console.log(`Generated ${embeddings.length} embeddings`);
+  ```
+</CodeGroup>
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import perplexity
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  try:
+      response = client.embeddings.create(
+          input=["Your text"],
+          model="pplx-embed-v1-4b"
+      )
+  except perplexity.BadRequestError as e:
+      print(f"Invalid request: {e}")
+  except perplexity.RateLimitError:
+      print("Rate limited, please retry later")
+  except perplexity.APIStatusError as e:
+      print(f"API error: {e.status_code}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  try {
+      const response = await client.embeddings.create({
+          input: ["Your text"],
+          model: "pplx-embed-v1-4b"
+      });
+  } catch (error) {
+      if (error instanceof Perplexity.BadRequestError) {
+          console.error("Invalid request:", error.message);
+      } else if (error instanceof Perplexity.RateLimitError) {
+          console.error("Rate limited, please retry later");
+      } else if (error instanceof Perplexity.APIError) {
+          console.error(`API error: ${error.status}`);
+      }
+  }
+  ```
+</CodeGroup>
+
+<div id="tips">
+  ## ヒント
+</div>
+
+<Steps>
+  <Step title="リクエストをバッチ化する">
+    1リクエストあたり最大512件のテキストを送信することで、スループットを最大化しAPI呼び出し回数を削減できます。
+  </Step>
+
+  <Step title="モデルを揃える">
+    類似度スコアの一貫性を保つため、クエリとドキュメントの両方で必ず同じ埋め込みモデルを使用してください。
+  </Step>
+
+  <Step title="コサイン類似度を使う">
+    Perplexityの埋め込みは正規化されていません。`base64_int8` では必ずコサイン類似度を、`base64_binary` ではハミング距離を使用してください。ベクトルDBが内積のみに対応している場合は、保存前に埋め込みをL2正規化してください。
+  </Step>
+
+  <Step title="埋め込みをキャッシュする">
+    計算済みの埋め込みはベクトルデータベースに保存してください。同じテキストの埋め込みを再計算しないようにしましょう。
+  </Step>
+
+  <Step title="Matryoshkaを賢く使う">
+    品質を優先するなら、まずは全次元から始めてください。検索の高速化やストレージの削減が必要な場合にのみ、次元数を下げます。
+  </Step>
+
+  <Step title="大規模用途にはバイナリを">
+    ストレージと速度が重要となる大規模な検索システムでは、`base64_binary` エンコーディング形式を使用してください。
+  </Step>
+</Steps>
+
+<div id="related-resources">
+  ## 関連リソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="クイックスタート" icon="rocket" href="/ja/docs/embeddings/quickstart">
+    埋め込みの基本的な使い方を学びます。
+  </Card>
+
+  <Card title="コンテキスト付き埋め込み" icon="file-lines" href="/ja/docs/embeddings/contextualized-embeddings">
+    共通のコンテキストを持つチャンク向けの、ドキュメント全体を考慮した埋め込み。
+  </Card>
+
+  <Card title="APIリファレンス" icon="book" href="/ja/api-reference/embeddings-post">
+    Embeddings APIの完全なドキュメント。
+  </Card>
+
+  <Card title="SDKガイド" icon="code" href="/ja/docs/sdk/overview">
+    Perplexity SDKの機能とベストプラクティス。
+  </Card>
+</CardGroup>

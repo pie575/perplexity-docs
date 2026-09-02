@@ -1,0 +1,707 @@
+---
+title: "流式引用解析"
+description: "处理 Agent API 的流式响应，在数据块到达时实时提取、校验并展示引用"
+---
+
+本指南介绍如何处理 Agent API 的流式响应：在引用到达时逐条提取、校验来源 URL，并构建带完整引用的输出。对于响应式界面和长时间运行的搜索来说，流式传输必不可少——你可以逐步展示文本和来源，而不必等待完整响应返回。
+
+<Info>
+  `fast` preset 针对快速、引用丰富的回答做了优化。模型会在文本中插入形如 `[1]`、`[2]` 的编号引用，对应的来源 URL 则通过 `search_results` 输出项返回。所有可用的 preset 请参阅 [Agent API Presets](/zh/docs/agent-api/presets) 文档。
+</Info>
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+安装 SDK：
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai openai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai openai
+  ```
+</CodeGroup>
+
+如果你还没有 API key：
+
+<Card title="获取你的 Perplexity API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="点击这里" href="https://perplexity.ai/account/api">
+  在 API Portal 中打开 **API Keys** 标签页，生成一个新的 key。
+</Card>
+
+然后将 API key 导出为环境变量：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-streaming-citations-work">
+  ## 流式引用的工作原理
+</div>
+
+当你以启用搜索的 preset 流式获取 Agent API 响应时，API 会发送一系列服务器推送事件 (SSE) 。流程如下：
+
+1. **搜索结果**通过 `response.reasoning.search_results` 事件返回——模型每执行一次搜索就对应一个事件——其中包含每个来源的 URL、标题和摘要片段。
+2. **内容块**在模型生成文本的过程中，通过 `response.output_text.delta` 事件逐步返回。
+3. **引用标记**以 `[1]`、`[2]` 这样的编号形式出现在文本中，对应搜索结果的 `id` 字段。
+
+你的客户端需要累积文本、收集搜索结果，再借助 `id` 字段将这些编号标记映射到来源 URL。
+
+<Warning>
+  **一次响应可能包含多批搜索结果。**像 `fast` 这样的单步 preset 通常只搜索一次，而多步 preset (例如深度研究) 会执行多次搜索——每次搜索对应一个 `search_results` 事件 (流式) 或一个输出项 (非流式) ，它们共享同一个引用 `id` 空间。请务必收集**每一个**事件或输出项中的结果。如果只保留第一批，文本中大多数 `[N]` 标记都将无法解析，引用看上去就像是模型幻觉。
+</Warning>
+
+<div id="basic-streaming-with-citations">
+  ## 带引用的基础流式输出
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  from openai import OpenAI
+
+  # OpenAI SDK 通过 /v1/responses 别名支持 Agent API 流式输出
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+  stream = client.responses.create(
+      input="What are the latest breakthroughs in quantum computing?",
+      stream=True,
+      extra_body={"preset": "fast"},
+  )
+
+  full_content = ""
+  search_results = []
+
+  for event in stream:
+      event_type = event.type
+
+      # 收集搜索结果（每次搜索对应一个事件——应累加，切勿覆盖）
+      if event_type == "response.reasoning.search_results":
+          search_results.extend(event.results or [])
+
+      # 累加每个 delta 中的内容
+      if event_type == "response.output_text.delta":
+          full_content += event.delta
+          print(event.delta, end="", flush=True)
+
+  print("\n\n--- Citations ---")
+  for result in search_results:
+      print(f"[{result['id']}] {result['title']} — {result['url']}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import OpenAI from "openai";
+
+  // OpenAI SDK 通过 /v1/responses 别名支持 Agent API 流式输出
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/v1",
+  });
+
+  const stream = await client.responses.create({
+      input: "What are the latest breakthroughs in quantum computing?",
+      stream: true,
+      preset: "fast",
+  } as any);
+
+  let fullContent = "";
+  let searchResults: Array<{ id: number; title: string; url: string }> = [];
+
+  for await (const event of stream) {
+      // 收集搜索结果（每次搜索对应一个事件——应累加，切勿覆盖）
+      if (event.type === "response.reasoning.search_results") {
+          searchResults.push(...((event as any).results ?? []));
+      }
+
+      // 累加每个 delta 中的内容
+      if (event.type === "response.output_text.delta") {
+          fullContent += event.delta;
+          process.stdout.write(event.delta);
+      }
+  }
+
+  console.log("\n\n--- Citations ---");
+  searchResults.forEach((result) => {
+      console.log(`[${result.id}] ${result.title} — ${result.url}`);
+  });
+  ```
+
+  ```bash curl theme={null}
+  curl -N "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "fast",
+      "input": "What are the latest breakthroughs in quantum computing?",
+      "stream": true
+    }'
+  ```
+</CodeGroup>
+
+<div id="parsing-citation-references-from-text">
+  ## 从文本中解析引用标记
+</div>
+
+模型会在生成的文本中插入 `[1]`、`[2]` 这样的编号引用。若要构建带可点击链接的富文本输出，可以解析这些引用标记，并借助搜索结果将其映射到来源 URL。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import re
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def extract_citation_refs(text: str) -> list[int]:
+      """从文本中提取所有引用编号，例如 [1]、[2]。"""
+      return sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", text)))
+
+
+  def build_cited_output(content: str, search_results: list) -> str:
+      """将 [N] 引用替换为 markdown 链接，并追加参考资料部分。"""
+      cited_content = content
+
+      # 构建 id 到 URL 的映射
+      url_map = {r.id: r.url for r in search_results}
+      title_map = {r.id: r.title for r in search_results}
+
+      # 将行内引用替换为 markdown 链接
+      for ref_id, url in url_map.items():
+          cited_content = cited_content.replace(
+              f"[{ref_id}]",
+              f"[[{ref_id}]]({url})"
+          )
+
+      # 追加包含所有被引用来源的参考资料部分
+      used_refs = extract_citation_refs(content)
+      if used_refs:
+          cited_content += "\n\n---\n**References:**\n"
+          for ref in used_refs:
+              if ref in url_map:
+                  cited_content += f"- [{ref}] {title_map[ref]} — {url_map[ref]}\n"
+
+      return cited_content
+
+
+  # 使用非流式请求获取正文内容与搜索结果
+  response = client.responses.create(
+      preset="fast",
+      input="What is CRISPR gene editing and how does it work?",
+  )
+
+  # 从响应输出中提取搜索结果。
+  # 多步骤 preset 会为每个研究步骤返回一个 search_results 项，
+  # 它们共享同一个 id 空间——需要收集每一项中的结果。
+  content = response.output_text
+  search_results = []
+  for item in response.output:
+      if item.type == "search_results":
+          search_results.extend(item.results or [])
+
+  # 构建带链接引用的最终输出
+  output = build_cited_output(content, search_results)
+  print(output)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const client = new Perplexity();
+
+  function extractCitationRefs(text: string): number[] {
+      const refs = new Set<number>();
+      for (const match of text.matchAll(/\[(\d+)\]/g)) {
+          refs.add(parseInt(match[1]));
+      }
+      return [...refs].sort((a, b) => a - b);
+  }
+
+  function buildCitedOutput(
+      content: string,
+      searchResults: Array<{ id: number; url: string; title: string }>
+  ): string {
+      let cited = content;
+
+      // 构建 id 到 URL 和标题的映射
+      const urlMap = new Map(searchResults.map((r) => [r.id, r.url]));
+      const titleMap = new Map(searchResults.map((r) => [r.id, r.title]));
+
+      // 将行内引用替换为 markdown 链接
+      for (const [id, url] of urlMap) {
+          cited = cited.replaceAll(`[${id}]`, `[[${id}]](${url})`);
+      }
+
+      // 追加参考资料部分
+      const usedRefs = extractCitationRefs(content);
+      if (usedRefs.length > 0) {
+          cited += "\n\n---\n**References:**\n";
+          for (const ref of usedRefs) {
+              if (urlMap.has(ref)) {
+                  cited += `- [${ref}] ${titleMap.get(ref)} — ${urlMap.get(ref)}\n`;
+              }
+          }
+      }
+
+      return cited;
+  }
+
+  // 使用非流式请求获取正文内容与搜索结果
+  const response = await client.responses.create({
+      preset: "fast",
+      input: "What is CRISPR gene editing and how does it work?",
+  });
+
+  // 从响应输出中提取搜索结果。
+  // 多步骤 preset 会为每个研究步骤返回一个 search_results 项，
+  // 它们共享同一个 id 空间——需要收集每一项中的结果。
+  const content = response.output_text;
+  const searchResults: Array<{ id: number; url: string; title: string }> = [];
+  for (const item of response.output) {
+      if (item.type === "search_results") {
+          searchResults.push(...((item as any).results ?? []));
+      }
+  }
+
+  const output = buildCitedOutput(content, searchResults);
+  console.log(output);
+  ```
+</CodeGroup>
+
+<div id="validating-citation-urls">
+  ## 验证引用 URL
+</div>
+
+在生产系统中，向用户展示引用 URL 之前，应先验证这些 URL 格式规范且可访问，以避免出现失效链接，并提升输出结果的可信度。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import aiohttp
+  from urllib.parse import urlparse
+
+
+  def is_valid_url(url: str) -> bool:
+      """检查 URL 结构是否有效。"""
+      try:
+          result = urlparse(url)
+          return all([result.scheme in ("http", "https"), result.netloc])
+      except Exception:
+          return False
+
+
+  async def check_url_reachable(url: str, timeout: float = 5.0) -> dict:
+      """对 URL 发起 HEAD 请求，检查其是否可访问。"""
+      if not is_valid_url(url):
+          return {"url": url, "valid": False, "reason": "malformed URL"}
+
+      try:
+          async with aiohttp.ClientSession() as session:
+              async with session.head(url, timeout=aiohttp.ClientTimeout(total=timeout), allow_redirects=True) as resp:
+                  return {
+                      "url": url,
+                      "valid": resp.status < 400,
+                      "status": resp.status,
+                  }
+      except asyncio.TimeoutError:
+          return {"url": url, "valid": False, "reason": "timeout"}
+      except Exception as e:
+          return {"url": url, "valid": False, "reason": str(e)}
+
+
+  async def validate_citations(search_results: list) -> list[dict]:
+      """并发验证搜索结果中的所有引用 URL。"""
+      tasks = [check_url_reachable(r.url) for r in search_results]
+      return await asyncio.gather(*tasks)
+
+
+  # 获取响应后的用法：
+  # results = asyncio.run(validate_citations(search_results))
+  # for r in results:
+  #     status = "OK" if r["valid"] else f"FAILED ({r.get('reason', r.get('status'))})"
+  #     print(f"  {r['url']}: {status}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  function isValidUrl(url: string): boolean {
+      try {
+          const parsed = new URL(url);
+          return parsed.protocol === "http:" || parsed.protocol === "https:";
+      } catch {
+          return false;
+      }
+  }
+
+  async function checkUrlReachable(url: string, timeoutMs = 5000): Promise<{ url: string; valid: boolean; reason?: string; status?: number }> {
+      if (!isValidUrl(url)) {
+          return { url, valid: false, reason: "malformed URL" };
+      }
+
+      try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          const resp = await fetch(url, { method: "HEAD", signal: controller.signal, redirect: "follow" });
+          clearTimeout(timer);
+          return { url, valid: resp.status < 400, status: resp.status };
+      } catch (e: any) {
+          return { url, valid: false, reason: e.message };
+      }
+  }
+
+  async function validateCitations(searchResults: Array<{ url: string }>): Promise<Array<{ url: string; valid: boolean; reason?: string }>> {
+      return Promise.all(searchResults.map(r => checkUrlReachable(r.url)));
+  }
+
+  // 获取响应后的用法：
+  // const results = await validateCitations(searchResults);
+  // results.forEach(r => {
+  //     const status = r.valid ? "OK" : `FAILED (${r.reason ?? r.status})`;
+  //     console.log(`  ${r.url}: ${status}`);
+  // });
+  ```
+</CodeGroup>
+
+<Warning>
+  **切勿让 model 自行生成来源 URL。** 请始终使用 API 响应中的 `search_results` 输出。model 生成的 URL 可能属于幻觉内容，而搜索结果中包含的是来自真实网页搜索的已验证 URL。
+</Warning>
+
+<div id="progressive-display-with-live-citation-count">
+  ## 带实时引用计数的渐进式显示
+</div>
+
+在聊天界面中，一边流式输出文本一边显示实时引用计数，并在流结束后渲染完整的引用列表，是很实用的做法。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import re
+  import sys
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+
+  def stream_with_progress(query: str):
+      """流式获取响应，并显示实时引用计数。"""
+      stream = client.responses.create(
+          input=query,
+          stream=True,
+          extra_body={"preset": "fast"},
+      )
+
+      full_content = ""
+      search_results = []
+      seen_refs = set()
+
+      for event in stream:
+          if event.type == "response.reasoning.search_results":
+              search_results.extend(event.results or [])
+
+          if event.type == "response.output_text.delta":
+              full_content += event.delta
+              sys.stdout.write(event.delta)
+              sys.stdout.flush()
+
+              # 基于累积文本跟踪新出现的引用编号
+              # （单个增量可能会把 [N] 拆分到多个分块中）
+              current_refs = set(int(m) for m in re.findall(r"\[(\d+)\]", full_content))
+              if current_refs - seen_refs:
+                  seen_refs = current_refs
+                  sys.stdout.write(f" [📚 {len(seen_refs)} sources]")
+                  sys.stdout.flush()
+
+      # 最终汇总
+      print(f"\n\n{'='*60}")
+      print(f"Response complete: {len(search_results)} sources found, {len(seen_refs)} cited")
+      print(f"{'='*60}")
+
+      # 根据搜索结果构建 URL 映射
+      url_map = {r["id"]: r for r in search_results}
+      for ref_id in sorted(seen_refs):
+          if ref_id in url_map:
+              r = url_map[ref_id]
+              print(f"  ✓ [{ref_id}] {r['title']} — {r['url']}")
+
+      return full_content, search_results
+
+
+  content, results = stream_with_progress(
+      "What are the environmental impacts of lithium mining?"
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import OpenAI from "openai";
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/v1",
+  });
+
+  async function streamWithProgress(query: string) {
+      const stream = await client.responses.create({
+          input: query,
+          stream: true,
+          preset: "fast",
+      } as any);
+
+      let fullContent = "";
+      let searchResults: Array<{ id: number; title: string; url: string }> = [];
+      const seenRefs = new Set<number>();
+
+      for await (const event of stream) {
+          if (event.type === "response.reasoning.search_results") {
+              searchResults.push(...((event as any).results ?? []));
+          }
+
+          if (event.type === "response.output_text.delta") {
+              fullContent += event.delta;
+              process.stdout.write(event.delta);
+
+              // 基于累积文本跟踪新出现的引用编号
+              // （单个增量可能会把 [N] 拆分到多个分块中）
+              const prevSize = seenRefs.size;
+              for (const match of fullContent.matchAll(/\[(\d+)\]/g)) {
+                  seenRefs.add(parseInt(match[1]));
+              }
+              if (seenRefs.size > prevSize) {
+                  process.stdout.write(` [📚 ${seenRefs.size} sources]`);
+              }
+          }
+      }
+
+      console.log(`\n\n${"=".repeat(60)}`);
+      console.log(`Response complete: ${searchResults.length} sources found, ${seenRefs.size} cited`);
+      console.log("=".repeat(60));
+
+      const urlMap = new Map(searchResults.map((r) => [r.id, r]));
+      for (const refId of [...seenRefs].sort((a, b) => a - b)) {
+          const r = urlMap.get(refId);
+          if (r) {
+              console.log(`  ✓ [${refId}] ${r.title} — ${r.url}`);
+          }
+      }
+
+      return { fullContent, searchResults };
+  }
+
+  await streamWithProgress("What are the environmental impacts of lithium mining?");
+  ```
+</CodeGroup>
+
+<div id="handling-search-results">
+  ## 处理搜索结果
+</div>
+
+Agent API 会返回一个或多个 `search_results` 输出项，为每个来源提供丰富的元数据 (id、标题、摘要片段、URL、日期) ——模型每执行一次搜索就对应一个输出项。相比扁平的 URL 列表，它包含的信息要丰富得多，可用于构建来源卡片、侧边栏或详细的参考来源区块。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 非流式请求，用于展示完整的响应结构
+  response = client.responses.create(
+      preset="fast",
+      input="What is the current state of fusion energy research?",
+  )
+
+  content = response.output_text
+
+  # 从输出中的每个 search_results 项提取搜索结果
+  search_results = []
+  for item in response.output:
+      if item.type == "search_results":
+          search_results.extend(item.results or [])
+
+  print("--- Answer ---")
+  print(content)
+
+  print("\n--- Search Results (rich metadata) ---")
+  for result in search_results:
+      print(f"  [{result.id}] {result.title}")
+      print(f"      URL:  {result.url}")
+      print(f"      Date: {result.date}")
+      print(f"      Snippet: {result.snippet[:100]}...")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      preset: "fast",
+      input: "What is the current state of fusion energy research?",
+  });
+
+  const content = response.output_text;
+
+  // 从输出中的每个 search_results 项提取搜索结果
+  const searchResults: any[] = [];
+  for (const item of response.output) {
+      if (item.type === "search_results") {
+          searchResults.push(...((item as any).results ?? []));
+      }
+  }
+
+  console.log("--- Answer ---");
+  console.log(content);
+
+  console.log("\n--- Search Results (rich metadata) ---");
+  for (const result of searchResults) {
+      console.log(`  [${result.id}] ${result.title}`);
+      console.log(`      URL:  ${result.url}`);
+      console.log(`      Date: ${result.date}`);
+      console.log(`      Snippet: ${result.snippet?.slice(0, 100)}...`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<Tip>
+  每条搜索结果都包含 `id`、`title`、`url`、`snippet` 和 `date`。其中 `id` 与正文中的 `[N]` 引用一一对应，可据此在界面中构建信息丰富的来源卡片。
+</Tip>
+
+<div id="complete-example-streaming-research-assistant">
+  ## 完整示例：流式研究助手
+</div>
+
+一个独立脚本，可流式接收 Agent API 响应、提取引用、校验 URL，并生成格式化的 markdown 输出。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import re
+  from urllib.parse import urlparse
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+
+  def is_valid_url(url: str) -> bool:
+      try:
+          result = urlparse(url)
+          return all([result.scheme in ("http", "https"), result.netloc])
+      except Exception:
+          return False
+
+
+  def stream_and_collect(query: str) -> tuple[str, list[dict]]:
+      """流式接收 Agent API 响应，并返回完整内容与搜索结果。"""
+      stream = client.responses.create(
+          input=query,
+          stream=True,
+          extra_body={"preset": "fast"},
+      )
+
+      content = ""
+      search_results = []
+
+      for event in stream:
+          if event.type == "response.reasoning.search_results":
+              search_results.extend(event.results or [])
+
+          if event.type == "response.output_text.delta":
+              content += event.delta
+              print(event.delta, end="", flush=True)
+
+      print()  # 流式输出结束后换行
+      return content, search_results
+
+
+  def format_markdown_report(query: str, content: str, search_results: list[dict]) -> str:
+      """构建带内联引用链接的 markdown 报告。"""
+      # 从搜索结果构建 URL 映射
+      url_map = {r["id"]: r["url"] for r in search_results}
+      title_map = {r["id"]: r["title"] for r in search_results}
+
+      # 将 [N] 替换为 markdown 链接
+      formatted = content
+      for ref_id, url in url_map.items():
+          if is_valid_url(url):
+              formatted = formatted.replace(f"[{ref_id}]", f"[\\[{ref_id}\\]]({url})")
+
+      # 构建报告
+      report = f"# {query}\n\n{formatted}\n\n"
+
+      # 追加来源
+      used_refs = sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", content)))
+      if search_results:
+          report += "## Sources\n\n"
+          for result in search_results:
+              marker = "→" if result["id"] in used_refs else " "
+              report += f"{marker} **[{result['id']}]** {result['title']} — {result['url']}\n\n"
+
+      return report
+
+
+  if __name__ == "__main__":
+      query = "What are the most promising approaches to carbon capture technology?"
+
+      print(f"Researching: {query}\n")
+      print("-" * 60)
+
+      content, search_results = stream_and_collect(query)
+
+      print(f"\n{'=' * 60}")
+      print(f"Collected {len(search_results)} sources\n")
+
+      # 过滤掉格式有误的 URL
+      valid_results = [r for r in search_results if is_valid_url(r["url"])]
+      invalid_count = len(search_results) - len(valid_results)
+      if invalid_count:
+          print(f"Warning: {invalid_count} sources had malformed URLs and were excluded.\n")
+
+      report = format_markdown_report(query, content, valid_results)
+      print(report)
+  ```
+</CodeGroup>
+
+<div id="tips-and-best-practices">
+  ## 提示与最佳实践
+</div>
+
+1. **使用支持搜索的 preset**，例如 `fast` 或 `low`，以获得引用丰富的响应。不同 preset 采用不同的引用格式——`fast` 使用 `[1]`，`low` 则使用 `[web:1]`。
+
+2. **累积每个事件或条目中的搜索结果。** 模型每执行一次搜索，响应中就会包含一个 `search_results` 事件 (流式) 或输出条目 (非流式) ——多步骤 preset 会执行多次搜索。请把每一批结果都追加到同一个列表中；若在每个事件上覆盖写入，或只读取第一个条目，大部分来源就会被悄然丢弃。
+
+3. **使用 `id` 字段映射引用。** 每条搜索结果都有一个数字 `id`，与文本中的 `[N]` 引用一一对应。
+
+4. **展示 URL 前先校验。** 使用带超时的 HEAD 请求过滤掉无法访问的来源。
+
+5. **切勿自行生成 URL。** 只使用 API 响应中的 `search_results`。模型生成的 URL 可能是幻觉产物。
+
+6. **妥善处理缺失的引用。** 如果文本中的某个 `[N]` 引用在已收集的搜索结果中找不到匹配的 `id`，应只显示引用编号而不附加链接，而不是让程序崩溃。
+
+7. **考虑对 URL 校验做限流。** 如果响应包含大量来源，请在校验时设置并发上限，以免对目标服务器造成过大压力。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 预设" icon="bolt" href="/zh/docs/agent-api/presets">
+    了解全部预设及其引用格式。
+  </Card>
+
+  <Card title="Agent API 快速开始" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    开始使用 Agent API，接入多家模型提供方与各类工具。
+  </Card>
+
+  <Card title="Agent API 流式输出" icon="stream" href="/zh/docs/agent-api/output-control">
+    Agent API 的流式处理模式与事件类型。
+  </Card>
+</CardGroup>

@@ -1,0 +1,156 @@
+---
+title: "SuperPlane で Perplexity を使う"
+description: "SuperPlane のワークフロー内で Perplexity エージェントを実行 — Web 検索、URL 取得、引用元を備えた調査・統合・分析のステップを構築できます。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[SuperPlane](https://superplane.com) は、長時間稼働するイベント駆動型ワークフローのためのオープンソースの DevOps コントロールプレーンです。Perplexity はキャンバス上のネイティブな**コンポーネント**として利用でき、任意のワークフローに Perplexity ノードを配置するだけで、Web 検索と URL 取得に対応した Perplexity エージェントが実行され、その応答と引用元が後続のノード向けのペイロードとして出力されます。
+
+<Info>
+  **SuperPlane** はワークフローをイベント駆動型のキャンバスとしてモデル化します。ノードがペイロードを出力し、後続のノードがそれを購読し、ランタイムがすべての実行を完全な可観測性のもとで追跡します。詳しくは [superplane.com](https://superplane.com) をご覧ください。
+</Info>
+
+<div id="component-perplexity">
+  ## コンポーネント: Perplexity
+</div>
+
+Perplexity コンポーネントは、ワークフローのステップとして Perplexity AI エージェントを実行します。リアルタイムのウェブ情報に基づく調査、情報の統合、自動分析、コンテンツ生成にご利用ください。
+
+<div id="action">
+  ### アクション
+</div>
+
+| アクション         | 説明                                                |
+| ------------- | ------------------------------------------------- |
+| **Run Agent** | Web 検索と URL 取得の機能を備えた Perplexity AI エージェントを実行します。 |
+
+<div id="configuration">
+  ### 設定
+</div>
+
+| パラメータ            | 説明                                                                                                                                                                            |
+| ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Preset**       | 使用するエージェントの preset: `fast-search`、`pro-search`、`deep-research`、`advanced-deep-research`。これらは Agent API のティア `fast` / `low` / `medium` / `high` に対応します。指定した場合、`Model` は無視されます。 |
+| **Model**        | preset を指定しない場合に使用する Agent API の model 識別子 (例: `perplexity/sonar`) 。                                                                                                          |
+| **Input**        | エージェントに与えるプロンプトまたは質問。SuperPlane の[式](https://docs.superplane.com/concepts/expressions)を使用できます。                                                                                |
+| **Instructions** | エージェントに対するシステムレベルの指示 (任意) 。                                                                                                                                                   |
+| **Web Search**   | `web_search` ツールを有効にします (デフォルト: `true`) 。                                                                                                                                     |
+| **Fetch URL**    | `fetch_url` ツールを有効にします (デフォルト: `true`) 。                                                                                                                                      |
+
+<div id="output-payload">
+  ### 出力ペイロード
+</div>
+
+このコンポーネントは以下のフィールドを持つペイロードを出力します。後続のノードからは式を使ってアクセスできます。
+
+| フィールド       | 説明                |
+| ----------- | ----------------- |
+| `text`      | 生成されたテキスト応答。      |
+| `citations` | Web検索結果からの引用元。    |
+| `model`     | この実行で使用されたmodel。  |
+| `usage`     | tokenおよびコストの使用状況。 |
+
+<div id="api-key-setup">
+  ## API key の設定
+</div>
+
+SuperPlane の Perplexity 連携を API key で設定します。キャンバスの **Integrations** 設定を開き、Perplexity 連携を追加して、キーを貼り付けてください。
+
+<Card title="API key を取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  API ポータルで Perplexity の API key を生成します。
+</Card>
+
+<div id="quick-start">
+  ## クイックスタート
+</div>
+
+手動実行がトリガーされるたびに Perplexity に質問する、最小構成のワークフローです。
+
+<Steps>
+  <Step title="Manual Run トリガーを追加する">
+    **Manual Run** ノードをキャンバスに配置します。これがワークフローのエントリーポイントになります。
+  </Step>
+
+  <Step title="Perplexity ノードを追加する">
+    **+ Components** をクリックして **Perplexity → Run Agent** を選び、キャンバスにドラッグします。**Manual Run → Perplexity** の順に接続します。
+  </Step>
+
+  <Step title="エージェントを設定する">
+    Perplexity ノードで次のように設定します。
+
+    * **Preset**: `pro-search`
+    * **Input**: `What is the latest news on nuclear fusion?`
+    * **Web Search**: 有効
+    * **Fetch URL**: 有効
+  </Step>
+
+  <Step title="実行する">
+    Manual Run ノードで **Run** をクリックします。Perplexity ノードから `text`、`citations`、`model`、`usage` を含むペイロードが出力されます。
+  </Step>
+</Steps>
+
+<div id="reading-the-response-downstream">
+  ## 後続ノードでのレスポンスの読み取り
+</div>
+
+SuperPlane の式を使って、Perplexity の出力を次のノード (Slack メッセージの送信やデータベースへの書き込みなど) に渡します。
+
+```
+Research result: {{ $['Perplexity'].data.text }}
+
+Sources:
+{{ $['Perplexity'].data.citations }}
+```
+
+条件フィールド (If / Filter) では、`{{ }}` を付けずに式を記述します。
+
+```
+$['Perplexity'].data.usage.total_tokens > 1000
+```
+
+<div id="use-cases">
+  ## ユースケース
+</div>
+
+* **インシデントのトリアージ** — アラートが発生したら、オンコール担当を呼び出す前に Perplexity のリサーチステップを実行し、ベンダー、ライブラリ、CVE に関する背景情報を収集します。
+* **リリースノートの生成** — GitHub の生のコミット差分から、出典付きの顧客向けリリースノートを作成します。
+* **競合モニタリング** — Perplexity に業界ニュースを問い合わせ、その要約を Slack チャンネルに投稿する日次キャンバスをスケジュールします。
+* **ドキュメントのグラウンディング** — Perplexity の実行結果を、Notion ページやナレッジベースを更新する後続のコンポーネントに渡します。
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="SuperPlane Perplexity コンポーネント" icon="book" href="https://docs.superplane.com/components/perplexity">
+    公式コンポーネントのドキュメント。
+  </Card>
+
+  <Card title="SuperPlane ドキュメント" icon="globe" href="https://docs.superplane.com">
+    SuperPlane の完全なドキュメント。
+  </Card>
+
+  <Card title="Perplexity Agent API" icon="robot" href="/ja/docs/agent-api/quickstart">
+    Perplexity のエージェント層の仕組み。
+  </Card>
+
+  <Card title="Agent API のモデル" icon="sparkles" href="/ja/docs/agent-api/models">
+    利用可能なモデルと料金。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+連携でお困りですか?
+
+* [SuperPlane のドキュメント](https://docs.superplane.com)を参照する
+* [FAQ](/ja/docs/resources/faq) を確認する

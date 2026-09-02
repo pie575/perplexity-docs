@@ -1,0 +1,201 @@
+---
+title: "Perfiles"
+description: "Ejecuta una solicitud a la Agent API con una configuración reutilizable y versionada que tú mismo guardas y gestionas."
+---
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+Un perfil es una configuración reutilizable y versionada que guardas y administras.
+Agrupa bajo un único ID los ajustes que determinan una ejecución: el modelo o la cadena de reserva de modelos, las instrucciones del sistema, el esfuerzo de razonamiento, las herramientas y el presupuesto de pasos del bucle del agente.
+Selecciona un perfil por ID en lugar de repetir toda la configuración en cada solicitud.
+
+Un perfil es el equivalente de un [preset](/es/docs/agent-api/presets), pero bajo tu control.
+Un preset es una configuración que Perplexity mantiene y ajusta.
+Un perfil es una configuración que tú defines y versionas.
+
+|                   | Preset                                                                                              | Perfil                                                   |
+| ----------------- | --------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| Propietario       | Perplexity                                                                                          | Tú                                                       |
+| Se referencia por | Nombre, por ejemplo `preset="low"`                                                                  | ID, por ejemplo `profile_8Qw3x7tJm2N6pR4`                |
+| Versionado        | Sin versiones; el nombre siempre apunta a la configuración más reciente recomendada por Perplexity. | Con versiones; fija una versión o sigue la más reciente. |
+| Ideal para        | Valores predeterminados optimizados por Perplexity para un caso de uso.                             | Una configuración que estandarizas y controlas.          |
+
+<Note>
+  Si ya usas un [preset](/es/docs/agent-api/presets), un perfil es la forma de guardar y versionar esa configuración.
+  Parte de los [valores actuales](/es/docs/agent-api/presets#current-preset-values) de un preset y luego adminístralos como un perfil para que cada solicitud haga referencia a un único ID.
+  Una solicitud usa un preset o un perfil, pero no ambos.
+</Note>
+
+<div id="add-a-profile">
+  ## Añadir un perfil
+</div>
+
+1. Abre [Profiles en el API Portal](https://console.perplexity.ai/project/profiles).
+2. Selecciona **Create profile**.
+3. Define el modelo, las instrucciones y las herramientas que usará el perfil y guárdalo.
+4. Copia el ID del perfil.
+5. Añade una entrada `profile` a la solicitud de la Agent API. Establece `type` en `"custom"` e `id` en el ID del perfil, y no definas `preset` en esa misma solicitud.
+
+La ejecución utiliza el modelo, las instrucciones, las herramientas y demás ajustes del perfil, así que no hace falta repetirlos.
+La siguiente solicitud ejecuta un perfil.
+Sustituye `profile_YOUR_PROFILE_ID` por el ID que copiaste.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      profile={
+          "type": "custom",
+          "id": "profile_YOUR_PROFILE_ID",
+      },
+      input="Summarize this week's most important AI research.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    profile: {
+      type: 'custom',
+      id: 'profile_YOUR_PROFILE_ID',
+    },
+    input: "Summarize this week's most important AI research.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "profile": {
+        "type": "custom",
+        "id": "profile_YOUR_PROFILE_ID"
+      },
+      "input": "Summarize this weeks most important AI research."
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="override-profile-settings">
+  ## Anular la configuración del perfil
+</div>
+
+Un perfil aporta los valores predeterminados de una ejecución.
+Cualquier parámetro que definas en la solicitud anula el valor del perfil para ese campo, de modo que puedes reutilizar un mismo perfil y ajustar un único valor en cada solicitud.
+Por ejemplo, pasa `model` para ejecutar la configuración del perfil con un modelo distinto, conservando sus instrucciones, herramientas y demás ajustes.
+
+`tools` es la excepción: se combinan herramienta por herramienta en lugar de reemplazar todo el conjunto.
+Indicar una herramienta anula únicamente las opciones de esa herramienta y deja habilitadas las demás herramientas del perfil.
+
+<div id="profile-parameters">
+  ## Parámetros del perfil
+</div>
+
+| Campo     | Tipo   | Obligatorio | Descripción                                                                                |
+| --------- | ------ | ----------- | ------------------------------------------------------------------------------------------ |
+| `type`    | string | Sí          | Debe ser `"custom"`.                                                                       |
+| `id`      | string | Sí          | El ID del perfil. De 1 a 128 caracteres.                                                   |
+| `version` | string | No          | La versión a la que vincularse, o `"latest"`. Omítelo para vincularte a la última versión. |
+
+<div id="versioning">
+  ## Versionado
+</div>
+
+Cada versión de un perfil es inmutable: al editar un perfil se crea una nueva versión en lugar de modificar la existente.
+Una solicitud fijada a una versión específica siempre ejecuta exactamente la misma configuración, por lo que solo `"latest"` adopta las nuevas versiones.
+La versión se resuelve al admitirse la solicitud, de modo que un cambio realizado mientras una solicitud está en curso no afecta a esa ejecución.
+
+Fija el tráfico de producción a una versión específica:
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      profile={
+          "type": "custom",
+          "id": "profile_YOUR_PROFILE_ID",
+          "version": "3",
+      },
+      input="Summarize this week's most important AI research.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    profile: {
+      type: 'custom',
+      id: 'profile_YOUR_PROFILE_ID',
+      version: '3',
+    },
+    input: "Summarize this week's most important AI research.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "profile": {
+        "type": "custom",
+        "id": "profile_YOUR_PROFILE_ID",
+        "version": "3"
+      },
+      "input": "Summarize this weeks most important AI research."
+    }' | jq
+  ```
+</CodeGroup>
+
+Con `"latest"`, una versión subida por cualquier Admin cambia de inmediato lo que ejecutan tus solicitudes de producción.
+Consulta el historial de versiones y descarga cualquier versión en el [API Portal](https://console.perplexity.ai/project/profiles).
+
+<div id="error-handling">
+  ## Manejo de errores
+</div>
+
+Un problema con el perfil hace que la solicitud falle con un estado `4xx` antes de que comience la ejecución, así que trátalo como cualquier otro error de solicitud.
+Estos son los casos que puedes encontrar:
+
+* **El perfil especifica un modelo que no puedes usar.** La solicitud falla con `model "<model>" is not supported`. Edita el perfil para usar un modelo compatible.
+* **El ID del perfil es incorrecto o no tienes acceso a él.** La solicitud falla con `The requested profile does not exist or is not accessible.` Comprueba el ID.
+* **La `version` no es válida.** Usa una versión que exista o `"latest"`.
+
+Administra tus perfiles en [Profiles en el API Portal](https://console.perplexity.ai/project/profiles). Si el problema persiste, escribe a [api@perplexity.ai](mailto:api@perplexity.ai).
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Presets" icon="sliders" href="/es/docs/agent-api/presets">
+    Usa una configuración gestionada por Perplexity indicando su nombre.
+  </Card>
+
+  <Card title="Modelo de reserva" icon="arrow-right-arrow-left" href="/es/docs/agent-api/model-fallback">
+    Define una cadena de reserva para que una ejecución continúe cuando un modelo no esté disponible.
+  </Card>
+</CardGroup>

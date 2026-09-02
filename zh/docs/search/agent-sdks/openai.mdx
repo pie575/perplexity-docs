@@ -1,0 +1,377 @@
+---
+title: "在 OpenAI SDK 中使用 Search API"
+sidebarTitle: "OpenAI"
+description: "将 Perplexity 的 Search API 注册为 OpenAI Responses API 中的函数工具，并配合 GPT 模型运行标准的工具调用循环。"
+---
+
+<div id="overview">
+  ## 概览
+</div>
+
+本指南介绍如何将 Perplexity 的 [Search API](/zh/docs/search/quickstart) 作为函数工具暴露给 OpenAI model。Responses API 采用手动的工具调用循环：model 输出一个带 `call_id` 的 `function_call` 项，你执行相应工具 (本例中即调用 `client.search.create`) ，再将结果以 `function_call_output` 项的形式、通过 `call_id` 配对回传。循环会一直持续，直到响应中不再包含待处理的函数调用。
+
+<Info>
+  本页使用 **Responses API** (`client.responses.create`) ，即较新的 OpenAI 接口。其工具结构是扁平的 (`{type: "function", name, description, parameters, strict}`) ——不同于旧版 `chat.completions` 函数调用结构中嵌套在 `function: {…}` 下的写法。
+</Info>
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install openai perplexityai
+  export OPENAI_API_KEY="your_openai_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+
+  ```bash Typescript theme={null}
+  npm install openai @perplexity-ai/perplexity_ai
+  export OPENAI_API_KEY="your_openai_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+</CodeGroup>
+
+<div id="tool-definition">
+  ## 工具定义
+</div>
+
+Responses API 接受一个扁平的工具对象：`type`、`name`、`description`、`parameters` (JSON Schema) ，以及可选的 `strict`。下面的描述已针对 Perplexity 的 Search API 做过调优，请原样保留——正是这样的措辞才能产出优质、简短、关键词式的查询。
+
+<CodeGroup>
+  ```python Python theme={null}
+  WEB_SEARCH_TOOL_DESCRIPTION = """\
+  Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline."""
+
+  QUERIES_PARAM_DESCRIPTION = (
+      "An array of keyword-based search queries. Each query should be short, "
+      "as longer queries may reduce performance. Do not provide more than three "
+      "queries to maintain efficiency."
+  )
+
+  WEB_SEARCH_TOOL = {
+      "type": "function",
+      "name": "web_search",
+      "description": WEB_SEARCH_TOOL_DESCRIPTION,
+      "strict": True,
+      "parameters": {
+          "type": "object",
+          "additionalProperties": False,
+          "properties": {
+              "queries": {
+                  "type": "array",
+                  "description": QUERIES_PARAM_DESCRIPTION,
+                  "items": {"type": "string"},
+              },
+          },
+          "required": ["queries"],
+      },
+  }
+  ```
+
+  ```typescript Typescript theme={null}
+  const WEB_SEARCH_TOOL_DESCRIPTION = `Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline.`;
+
+  const QUERIES_PARAM_DESCRIPTION =
+    "An array of keyword-based search queries. Each query should be short, " +
+    "as longer queries may reduce performance. Do not provide more than three " +
+    "queries to maintain efficiency.";
+
+  const WEB_SEARCH_TOOL = {
+    type: "function" as const,
+    name: "web_search",
+    description: WEB_SEARCH_TOOL_DESCRIPTION,
+    strict: true,
+    parameters: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        queries: {
+          type: "array" as const,
+          description: QUERIES_PARAM_DESCRIPTION,
+          items: { type: "string" as const },
+        },
+      },
+      required: ["queries"],
+    },
+  };
+  ```
+</CodeGroup>
+
+<Warning>
+  **严格模式的约束。** 当 `strict: true` 时，JSON Schema 必须设置 `additionalProperties: false`，并在 `required` 中列出所有属性。OpenAI 在严格模式下会拒绝 `maxItems`/`minItems` 之类的约束——请通过描述来传达“最多三条查询”的要求，并在处理函数中做防御性截断。
+</Warning>
+
+<div id="tool-handler">
+  ## 工具处理函数
+</div>
+
+该处理器只是对 `client.search.create` 的一层轻量封装。Search API 原生支持传入查询数组，因此模型生成的数组可以直接透传。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  perplexity = Perplexity()
+
+  def run_web_search(queries: list[str]) -> str:
+      """调用 Perplexity Search，并将结果格式化后返回给模型。"""
+      # 防御性截断——描述中要求 ≤3，但不要轻信任何输入。
+      queries = queries[:3]
+
+      response = perplexity.search.create(query=queries, max_results=5)
+
+      lines = []
+      for result in response.results:
+          snippet = (result.snippet or "").strip().replace("\n", " ")
+          if len(snippet) > 400:
+              snippet = snippet[:400] + "…"
+          lines.append(f"- {result.title}\n  {result.url}\n  {snippet}")
+      return "\n\n".join(lines) if lines else "No results."
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const perplexity = new Perplexity();
+
+  async function runWebSearch(queries: string[]): Promise<string> {
+    const capped = queries.slice(0, 3);
+
+    const response = await perplexity.search.create({
+      query: capped,
+      max_results: 5,
+    });
+
+    const lines = response.results.map((r) => {
+      const snippet = (r.snippet ?? "").trim().replace(/\n/g, " ");
+      const trimmed = snippet.length > 400 ? `${snippet.slice(0, 400)}…` : snippet;
+      return `- ${r.title}\n  ${r.url}\n  ${trimmed}`;
+    });
+    return lines.length ? lines.join("\n\n") : "No results.";
+  }
+  ```
+</CodeGroup>
+
+<div id="tool-call-loop">
+  ## 工具调用循环
+</div>
+
+Responses API 会以扁平列表的形式返回 `response.output`。遍历该列表，找出 `type` 为 `"function_call"` 的项，逐一执行调用，并把配对的 `function_call_output` 项追加到当前的 `input` 数组中。重复调用 `responses.create`，直到响应中不再出现函数调用为止。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from openai import OpenAI
+
+  openai_client = OpenAI()
+
+  def chat_with_search(user_prompt: str, model: str = "gpt-5.5") -> str:
+      # Responses API 的 `input` 是一个有序的项列表；随着循环推进，
+      # 我们会向其中追加 function_call_output 项。
+      input_items: list[dict] = [{"role": "user", "content": user_prompt}]
+
+      while True:
+          response = openai_client.responses.create(
+              model=model,
+              input=input_items,
+              tools=[WEB_SEARCH_TOOL],
+          )
+
+          function_calls = [
+              item for item in response.output if item.type == "function_call"
+          ]
+
+          if not function_calls:
+              return response.output_text
+
+          # 将助手的 function_call 项保留在对话中。
+          for item in response.output:
+              input_items.append(item.model_dump())
+
+          # 执行每个函数调用，并追加配对的 function_call_output。
+          for call in function_calls:
+              args = json.loads(call.arguments)
+              if call.name == "web_search":
+                  output = run_web_search(args["queries"])
+              else:
+                  output = json.dumps({"error": f"unknown tool: {call.name}"})
+              input_items.append({
+                  "type": "function_call_output",
+                  "call_id": call.call_id,
+                  "output": output,
+              })
+
+
+  if __name__ == "__main__":
+      answer = chat_with_search(
+          "What were the major AI infrastructure announcements this week?"
+      )
+      print(answer)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from "openai";
+
+  const openaiClient = new OpenAI();
+
+  async function chatWithSearch(
+    userPrompt: string,
+    model = "gpt-5.5",
+  ): Promise<string> {
+    const inputItems: OpenAI.Responses.ResponseInputItem[] = [
+      { role: "user", content: userPrompt },
+    ];
+
+    while (true) {
+      const response = await openaiClient.responses.create({
+        model,
+        input: inputItems,
+        tools: [WEB_SEARCH_TOOL],
+      });
+
+      const functionCalls = response.output.filter(
+        (item): item is OpenAI.Responses.ResponseFunctionToolCall =>
+          item.type === "function_call",
+      );
+
+      if (functionCalls.length === 0) {
+        return response.output_text;
+      }
+
+      // 将助手的 function_call 项保留在对话中。
+      inputItems.push(...response.output);
+
+      for (const call of functionCalls) {
+        const args = JSON.parse(call.arguments) as { queries: string[] };
+        let output: string;
+        if (call.name === "web_search") {
+          output = await runWebSearch(args.queries);
+        } else {
+          output = JSON.stringify({ error: `unknown tool: ${call.name}` });
+        }
+        inputItems.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output,
+        });
+      }
+    }
+  }
+
+  (async () => {
+    const answer = await chatWithSearch(
+      "What were the major AI infrastructure announcements this week?",
+    );
+    console.log(answer);
+  })();
+  ```
+</CodeGroup>
+
+<div id="streaming">
+  ## 流式输出
+</div>
+
+流式输出请使用 `client.responses.stream(...)`。SDK 会发出带类型的事件：`function_call` 项开始时发出 `response.output_item.added`，参数 JSON 的每个分块发出 `response.function_call_arguments.delta`，参数字符串接收完毕后发出 `response.function_call_arguments.done`。除此之外，循环结构与非流式版本完全相同。
+
+<CodeGroup>
+  ```python Python theme={null}
+  with openai_client.responses.stream(
+      model="gpt-5.5",
+      input=input_items,
+      tools=[WEB_SEARCH_TOOL],
+  ) as stream:
+      for event in stream:
+          if event.type == "response.output_text.delta":
+              print(event.delta, end="", flush=True)
+      final = stream.get_final_response()
+
+  # 检查 final.output 中的 function_call 项，然后以与非流式版本
+  # 相同的方式继续循环。
+  ```
+
+  ```typescript Typescript theme={null}
+  const stream = openaiClient.responses.stream({
+    model: "gpt-5.5",
+    input: inputItems,
+    tools: [WEB_SEARCH_TOOL],
+  });
+
+  for await (const event of stream) {
+    if (event.type === "response.output_text.delta") {
+      process.stdout.write(event.delta);
+    }
+  }
+  const final = await stream.finalResponse();
+  // 与非流式版本一样，检查 final.output 中的 function_call 项。
+  ```
+</CodeGroup>
+
+<div id="notes">
+  ## 说明
+</div>
+
+* **`call_id` 用于将请求与结果配对。** 每个 `function_call_output` 项都必须带上对应调用的 `call_id`。同一助手回合中的多个并行函数调用,各自都有与之配对的输出。
+* **服务端状态。** 你不必每轮都重新发送完整的 `input` 数组,而是可以传入 `previous_response_id=<id>`,只追加新的条目。这在较长的智能体循环中很有用。
+* **`output_text` 快捷方式。** `response.output_text` 会自动将助手的文本内容扁平化。如果需要更细粒度的访问(注释、分段),可遍历 `response.output`,从消息项中取出 `output_text` 块。
+* **域名与日期。** 如果希望设定固定的检索约束,可在 `run_web_search` 内传入 `search_domain_filter`、`country` 及其他 Search API 参数。完整参数列表参见 [Search API 快速入门](/zh/docs/search/quickstart)。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="配合 Anthropic SDK 使用" icon="code" href="/zh/docs/search/agent-sdks/anthropic">
+    将 Search API 接入 Anthropic Messages API。
+  </Card>
+
+  <Card title="配合 Gemini SDK 使用" icon="code" href="/zh/docs/search/agent-sdks/gemini">
+    将 Search API 接入 Google 的 `google-genai` SDK。
+  </Card>
+
+  <Card title="Search API 快速入门" icon="rocket" href="/zh/docs/search/quickstart">
+    完整的 Search API 参数参考。
+  </Card>
+
+  <Card title="搜索最佳实践" icon="lightbulb" href="/zh/docs/search/best-practices">
+    适用于生产环境搜索负载的实践模式。
+  </Card>
+</CardGroup>

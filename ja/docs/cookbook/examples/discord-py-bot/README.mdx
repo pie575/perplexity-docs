@@ -1,0 +1,185 @@
+---
+title: "Perplexity Discord ボット"
+description: "PerplexityのSonar APIを組み込み、DiscordサーバーでAIによる回答を利用できるシンプルなdiscord.pyボットです。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+[Perplexity の Sonar API](https://docs.perplexity.ai/) を Discord サーバーに統合する、シンプルな `discord.py` ボットです。スラッシュコマンドまたはボットへのメンションで質問すれば、Web 検索に基づく AI の回答が得られます。
+
+<img src="https://mintcdn.com/perplexity/y2ljsQXTUHXyDIEa/docs/cookbook/static/img/discord-py-bot-demo.png?fit=max&auto=format&n=y2ljsQXTUHXyDIEa&q=85&s=af7e57165646fd8bff36ad04c0d22635" alt="Discord Bot Demo" />
+
+<div id="features">
+  ## ✨ 機能
+</div>
+
+* **🌐 Web接続型AI**: PerplexityのSonar APIで最新情報を取得
+* **⚡ スラッシュコマンド**: 質問はシンプルな `/ask` コマンドで
+* **💬 メンション対応**: ボットにメンションして質問可能
+* **🔗 出典の引用**: 出典を自動で整形しリンク化
+* **🔒 セキュアな構成**: API keyを環境変数ベースで管理
+
+<div id="prerequisites">
+  ## 🛠️ 前提条件
+</div>
+
+<Steps>
+  <Step title="Python 環境">
+    システムに **Python 3.8 以上** がインストールされていること
+
+    ```bash theme={null}
+    python --version  # 3.8 以上である必要があります
+    ```
+  </Step>
+
+  <Step title="Perplexity API へのアクセス">
+    [Perplexity API Platform コンソール](https://console.perplexity.ai)で取得した **有効な Perplexity API key**
+
+    <Note>API を利用するには有料の Perplexity アカウントが必要です。最新の料金は[料金ページ](https://www.perplexity.ai/pricing)をご確認ください。</Note>
+  </Step>
+
+  <Step title="Discord ボットアプリケーション">
+    [Discord Developer Portal](https://discord.com/developers/applications)で取得した **Discord ボットトークン**
+  </Step>
+</Steps>
+
+<div id="quick-start">
+  ## 🚀 クイックスタート
+</div>
+
+<div id="1-repository-setup">
+  ### 1. リポジトリのセットアップ
+</div>
+
+リポジトリをクローンし、bot ディレクトリに移動します。
+
+```bash theme={null}
+git clone https://github.com/ppl-ai/api-cookbook.git
+cd api-cookbook/docs/examples/discord-py-bot/
+```
+
+<div id="2-install-dependencies">
+  ### 2. 依存関係のインストール
+</div>
+
+```bash theme={null}
+# 仮想環境を作成（推奨）
+python -m venv venv
+source venv/bin/activate  # Windows の場合: venv\Scripts\activate
+
+# 必要なパッケージをインストール
+pip install -r requirements.txt
+```
+
+<div id="3-configure-api-keys">
+  ### 3. API keyの設定
+</div>
+
+<Steps>
+  <Step title="Perplexity API keyを取得する">
+    1. [Perplexity API Platform コンソール](https://console.perplexity.ai)にアクセスします
+    2. 新しいAPI keyを生成します
+    3. キーを .env ファイルにコピーします
+
+    <Warning>API keyは厳重に管理してください。バージョン管理システムにコミットしたり、公開したりしないでください。</Warning>
+  </Step>
+
+  <Step title="Discord ボットアプリケーションを作成する">
+    1. [Discord Developer Portal](https://discord.com/developers/applications)にアクセスします
+    2. &#42;&#42;「New Application」&#42;&#42;をクリックし、内容がわかる名前を付けます
+    3. &#42;&#42;「Bot」&#42;&#42;セクションに移動します
+    4. **「Reset Token」** (初回の場合は「Add Bot」) をクリックします
+    5. Botトークンをコピーします
+  </Step>
+
+  <Step title="環境変数を設定する">
+    サンプルの環境ファイルをコピーして、キーを追加します。
+
+    ```bash theme={null}
+    cp env.example .env
+    ```
+
+    `.env` を編集して認証情報を記述します。
+
+    ```bash title=".env" theme={null}
+    DISCORD_TOKEN="your_discord_bot_token_here"
+    PERPLEXITY_API_KEY="your_perplexity_api_key_here"
+    ```
+  </Step>
+</Steps>
+
+<div id="usage-guide">
+  ## 🎯 使い方ガイド
+</div>
+
+<div id="bot-invitation-setup">
+  ### ボットの招待とセットアップ
+</div>
+
+<Steps>
+  <Step title="招待 URL を生成する">
+    Discord Developer Portal で以下を実行します。
+
+    1. **OAuth2** → **URL Generator** に移動します
+    2. スコープに `bot` と `applications.commands` を選択します
+    3. ボットの権限に `Send Messages`、`Use Slash Commands` を選択します
+    4. 生成された URL をコピーします
+  </Step>
+
+  <Step title="サーバーに招待する">
+    1. ブラウザに URL を貼り付けます
+    2. ボットを追加する Discord サーバーを選択します
+    3. 権限を承認します
+  </Step>
+
+  <Step title="ボットを起動する">
+    ```bash theme={null}
+    python bot.py
+    ```
+
+    ボットがオンラインになり、コマンドが同期されたことを示す出力が表示されます。
+  </Step>
+</Steps>
+
+<div id="how-to-use">
+  ### 使い方
+</div>
+
+**スラッシュコマンド:**
+
+```
+/ask [ここに質問を入力]
+```
+
+<img src="https://mintcdn.com/perplexity/y2ljsQXTUHXyDIEa/docs/cookbook/static/img/discord-py-bot-slash-command.png?fit=max&auto=format&n=y2ljsQXTUHXyDIEa&q=85&s=e3c8e1cf901c161d64d77c0bebd2dc98" alt="スラッシュコマンドのデモ" />
+
+**ボットにメンションする:**
+
+```
+@YourBot [your question here]
+```
+
+<img src="https://mintcdn.com/perplexity/y2ljsQXTUHXyDIEa/docs/cookbook/static/img/discord-py-bot-mention-command.png?fit=max&auto=format&n=y2ljsQXTUHXyDIEa&q=85&s=bd6b63a6c7d6fd7a9fe4d73cd70a9885" alt="メンションコマンドのデモ" />
+
+<div id="response-format">
+  ## 📊 レスポンス形式
+</div>
+
+ボットは、以下を含む見やすく読みやすいレスポンスを返します。
+
+* **AI回答**: PerplexityのSonar APIからの回答
+* **出典の引用**: 情報源へのクリック可能なリンク (利用可能な場合) 
+* **自動切り詰め**: Discordの文字数制限に収まるようレスポンスを短縮
+
+<div id="technical-details">
+  ## 🔧 技術的な詳細
+</div>
+
+このボットは以下を使用しています。
+
+* **モデル**: Perplexity の `sonar-pro` モデル
+* **レスポンス上限**: API からの 2000 トークン。Discord の制限に収まるよう切り詰め
+* **Temperature**: 0.2 (一貫性のある事実ベースの応答にするため) 
+* **権限設定なし**: サーバー内の誰でもボットを利用可能

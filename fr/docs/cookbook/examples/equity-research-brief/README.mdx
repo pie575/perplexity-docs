@@ -1,0 +1,239 @@
+---
+title: "Note de recherche actions"
+description: "Générez des notes de recherche actions de qualité institutionnelle à partir de n'importe quel ticker coté grâce à l'Agent API de Perplexity et à l'outil intégré finance_search."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="equity-research-brief">
+  # Note de recherche actions
+</div>
+
+Un outil en ligne de commande qui génère une note de recherche actions structurée pour n&#39;importe quel ticker coté, grâce à l&#39;[Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart) de Perplexity et à l&#39;outil intégré [`finance_search`](https://docs.perplexity.ai/docs/agent-api/tools/finance-search).
+
+`finance_search` renvoie des données de marché structurées — cours, états financiers, transcriptions de conférences de résultats, comparaisons avec les pairs, estimations d&#39;analystes — afin que le modèle puisse produire un rapport ancré dans les chiffres, et non dans le seul récit. L&#39;outil est conçu spécifiquement pour les workflows agentiques d&#39;investisseurs.
+
+<div id="features">
+  ## Fonctionnalités
+</div>
+
+* Une seule commande produit une note en 6 sections : aperçu, présentation de l&#39;activité, trajectoire financière, derniers résultats, comparaison avec les pairs, risques, conclusion
+* Utilise l&#39;outil `finance_search` de l&#39;Agent API pour obtenir des fondamentaux structurés, des cotations et des transcriptions de conférences de résultats
+* Trois configurations de presets correspondant aux recommandations officielles de `finance_search` :
+  * `quote` — cotation/prix en direct uniquement, l&#39;option la plus rapide et la moins coûteuse
+  * `single` — recherche historique sur une seule entreprise, avec contexte web
+  * `research` — note complète multi-étapes couvrant plusieurs entreprises (par défaut)
+* Affiche, en complément de la note, les URL des sources financières Perplexity prêtes à être citées
+* Indique le nombre d&#39;appels à `finance_search` et le coût total de la requête
+* L&#39;option `--json` renvoie la réponse brute de l&#39;Agent API pour les pipelines en aval
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+* Python 3.9+
+* Une clé API Perplexity avec accès à l&#39;Agent API. `finance_search` est actuellement en bêta — consultez la [documentation Finance Search](https://docs.perplexity.ai/docs/agent-api/tools/finance-search) pour en connaître la disponibilité.
+
+<div id="installation">
+  ## Installation
+</div>
+
+```bash theme={null}
+cd docs/examples/equity-research-brief
+pip install -r requirements.txt
+chmod +x equity_research_brief.py
+```
+
+<div id="api-key-setup">
+  ## Configuration de la clé API
+</div>
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key-here"
+```
+
+Vous pouvez également transmettre la clé via `--api-key`, ou la placer dans un fichier `.pplx_api_key` situé dans le répertoire de travail.
+
+<div id="quick-start">
+  ## Démarrage rapide
+</div>
+
+Générez une note de recherche complète sur NVIDIA :
+
+```bash theme={null}
+./equity_research_brief.py NVDA
+```
+
+<div id="usage">
+  ## Utilisation
+</div>
+
+```bash theme={null}
+./equity_research_brief.py TICKER [--config {quote,single,research}] [--json] [--api-key KEY]
+```
+
+<div id="just-a-live-quote-cheapest-1-tool-call">
+  ### Simplement un cours en temps réel (le moins coûteux, ~1 appel d&#39;outil)
+</div>
+
+```bash theme={null}
+./equity_research_brief.py AAPL --config quote
+```
+
+<div id="single-company-historical-lookup-with-web-context">
+  ### Consultation de l&#39;historique d&#39;une seule entreprise avec contexte web
+</div>
+
+```bash theme={null}
+./equity_research_brief.py MSFT --config single
+```
+
+<div id="full-multi-step-research-brief-default">
+  ### Note de recherche complète en plusieurs étapes (par défaut)
+</div>
+
+```bash theme={null}
+./equity_research_brief.py NVDA --config research
+```
+
+<div id="emit-raw-agent-api-json">
+  ### Émettre le JSON brut de l&#39;Agent API
+</div>
+
+```bash theme={null}
+./equity_research_brief.py TSLA --json | jq '.usage.cost'
+```
+
+<div id="configuration-reference">
+  ## Référence de configuration
+</div>
+
+| Config     | Modèle                      | Outils                                        | Étapes max | Idéal pour                                              |
+| ---------- | --------------------------- | --------------------------------------------- | ---------- | ------------------------------------------------------- |
+| `quote`    | `perplexity/sonar`          | `finance_search`                              | 1          | Cours en temps réel, cotations, voie la plus rapide     |
+| `single`   | `openai/gpt-5.5`            | `web_search` + `finance_search` + `fetch_url` | 5          | Fondamentaux historiques d&#39;une seule entreprise     |
+| `research` | `anthropic/claude-opus-4-7` | `web_search` + `finance_search` + `fetch_url` | 10         | Comparaisons entre plusieurs entreprises, note complète |
+
+Ces configurations sont directement tirées des [configurations recommandées pour `finance_search`](https://docs.perplexity.ai/docs/agent-api/tools/finance-search).
+
+<div id="example-output-truncated">
+  ## Exemple de sortie (tronqué)
+</div>
+
+```
+## 1. Aperçu
+
+- **Cours :** 200,23 $ (au 2026-05-01 14:10 UTC)
+- **Capitalisation boursière :** 4,87 T$
+- **PER (12 derniers mois) :** 40,86
+- **Fourchette sur 52 semaines :** 110,82 $ – 216,83 $
+
+## 2. Présentation de l'activité
+
+NVIDIA conçoit des plateformes de calcul accéléré — GPU, réseau et logiciels
+de bout en bout — utilisées pour l'entraînement et l'inférence en IA, le jeu vidéo,
+la visualisation professionnelle et l'automobile. Le centre de données constitue
+la principale source de revenus.
+
+## 3. Trajectoire financière
+| Ex.   | Revenus     | Marge opérationnelle | Résultat net |
+| ----- | ----------- | -------------------- | ------------ |
+| Ex.25 | 130,5 G$    | 62,4 %               | 72,9 G$      |
+...
+
+---
+finance_search : 4 invocation(s) réparties sur les catégories [earnings_history, financials, profile, quote]
+
+Sources financières :
+  - https://www.perplexity.ai/finance/NVDA
+  - https://www.perplexity.ai/finance/NVDA/earnings?eventId=409967
+  - ...
+
+Coût : 0,2817 USD
+```
+
+<div id="code-walkthrough">
+  ## Présentation du code
+</div>
+
+Le script effectue trois opérations :
+
+**1. Émettre un seul appel à l&#39;Agent API avec `finance_search` activé.**
+
+```python theme={null}
+from perplexity import Perplexity
+
+client = Perplexity()
+response = client.responses.create(
+    model="anthropic/claude-opus-4-7",
+    instructions=SYSTEM_PROMPT,
+    input=BRIEF_TEMPLATE.format(ticker="NVDA"),
+    tools=[
+        {"type": "web_search"},
+        {"type": "finance_search"},
+        {"type": "fetch_url"},
+    ],
+    max_output_tokens=4096,
+    max_steps=10,
+)
+```
+
+Le modèle détermine quelles catégories `finance_search` récupérer (quote, financials, transcript, etc.) en fonction du prompt. Vous n&#39;avez pas besoin de sélectionner les champs manuellement.
+
+**2. Parcourez `response.output` pour en extraire à la fois le texte de l&#39;assistant et les blocs structurés `finance_results`.**
+
+```python theme={null}
+for item in response.output:
+    if item.type == "finance_results":
+        for r in item.results:
+            print(r.category, r.tickers, r.sources)
+    elif item.type == "message":
+        for block in item.content:
+            if block.type == "output_text":
+                print(block.text)
+```
+
+**3. Affichez le coût et les URL des sources financières en regard du texte.** Les pages financières de Perplexity renvoyées dans `result.sources` sont des liens stables, prêts à être cités — utiles lorsque la note est lue par des humains ou exploitée par un pipeline RAG en aval.
+
+<div id="prompting-guidance">
+  ## Conseils de prompt
+</div>
+
+`finance_search` donne les meilleurs résultats lorsque le prompt demande un résultat métier plutôt qu&#39;une structure de données précise. Le system prompt demande au modèle de :
+
+* rester quantitatif et rattacher les chiffres à la bonne période (par ex. `FY2025`, `Q3 FY26`)
+* ne jamais inventer de chiffres — si `finance_search` ne renvoie pas un champ, le signaler explicitement
+* mettre en forme la sortie dans un Markdown propre
+
+Ce schéma est documenté dans les [conseils de prompt de finance&#95;search](https://docs.perplexity.ai/docs/agent-api/tools/finance-search#prompt-guidance).
+
+<div id="pricing">
+  ## Tarification
+</div>
+
+`finance_search` est facturé **5 $ pour 1 000 invocations**, séparément de la consommation de tokens du modèle. Chaque preset présente des caractéristiques de coût différentes :
+
+* `quote` : généralement 1 invocation, soit ~0,007 $ par note
+* `single` : 1 à 3 invocations + tokens GPT-5.5
+* `research` : 3 à 6 invocations + tokens Claude Opus
+
+Consultez la [tarification Perplexity](https://docs.perplexity.ai/docs/getting-started/pricing) pour connaître les tarifs en vigueur.
+
+<div id="limitations">
+  ## Limites
+</div>
+
+* `finance_search` est actuellement en bêta et n&#39;est pas nécessairement activé sur toutes les clés API
+* Les résultats dépendent de la couverture des données financières de Perplexity ; les tickers peu connus ou hors États-Unis peuvent renvoyer des données moins structurées
+* Ceci ne constitue pas un conseil en investissement. La section « Conclusion » est explicitement présentée comme une opinion analytique, et non comme une recommandation
+
+<div id="resources">
+  ## Ressources
+</div>
+
+* [Démarrage rapide de l&#39;Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart)
+* [Outil Finance Search](https://docs.perplexity.ai/docs/agent-api/tools/finance-search)
+* [Outil Web Search](https://docs.perplexity.ai/docs/agent-api/tools/web-search)
+* [SDK Python Perplexity](https://pypi.org/project/perplexityai/)

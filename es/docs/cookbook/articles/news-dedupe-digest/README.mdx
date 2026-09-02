@@ -1,0 +1,283 @@
+---
+title: "Resumen diario de noticias con deduplicación mediante LLM"
+description: "Crea un resumen diario de noticias que informe cada noticia una sola vez. Una única solicitud a la Agent API ejecuta código en el sandbox para obtener las noticias del día, agrupa la cobertura en noticias y entrega el resumen y un registro de noticias como archivos."
+---
+
+Un resumen diario basado en búsquedas tiene un problema de duplicados: la misma noticia aparece en decenas de sitios con titulares distintos, las consultas sobre temas relacionados devuelven resultados que se solapan y las noticias de ayer reaparecen hoy con una marca de tiempo nueva. Si cada copia acaba en el resumen, los lectores dejan de confiar en él.
+
+La solución habitual es medir la similitud de embeddings sobre el cuerpo del artículo, pero la similitud es la prueba equivocada. Dos artículos pueden leerse igual y cubrir hechos distintos: «Microsoft supera las expectativas gracias al crecimiento de Azure» sirve tanto para el primer trimestre como para el segundo, de modo que las noticias de resultados trimestrales se puntúan como duplicados. Y dos artículos pueden leerse de forma muy distinta y cubrir el mismo hecho: «Amazon construirá un campus de centros de datos de 3.000 millones de dólares en Misisipi» y «Vicksburg consigue la mayor inversión tecnológica de la historia del estado» son una misma noticia contada de dos maneras. Determinar si dos artículos informan sobre el mismo hecho subyacente es una cuestión de razonamiento, no una métrica de distancia.
+
+Este recetario construye el resumen con una sola solicitud a la Agent API. El modelo escribe código en el [sandbox](/es/docs/agent-api/tools/sandbox) que obtiene las noticias del día para cada tema, agrupa los resultados según su criterio y entrega el resumen junto con un registro de noticias como archivos descargables.
+
+<div id="prerequisites">
+  ## Requisitos previos
+</div>
+
+Instala uno de los SDK:
+
+* Python: `pip install perplexityai`
+* TypeScript: `npm install @perplexity-ai/perplexity_ai`
+
+Si aún no tienes una API key:
+
+<Card title="Obtén tu API key de Perplexity" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Haz clic aquí" href="https://perplexity.ai/account/api">
+  Ve a la pestaña **API Keys** del Portal de API y genera una nueva clave.
+</Card>
+
+Exporta tu API key:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-the-request-divides-the-work">
+  ## Cómo la solicitud reparte el trabajo
+</div>
+
+La solicitud consta de tres pasos:
+
+1. **El código obtiene los datos.** El contenedor del sandbox incluye el SDK de Perplexity preinstalado, así que el modelo escribe un script que ejecuta exactamente una búsqueda web por tema y guarda todos los resultados en `results.json`. El número de búsquedas y los límites de resultados están definidos en el código, por lo que la cobertura es idéntica en cada ejecución.
+2. **El modelo agrupa.** Decidir si dos artículos hablan del mismo suceso es una cuestión de criterio, y las instrucciones lo dicen de forma explícita: nada de coincidencia de cadenas ni de embeddings.
+3. **El código ensambla.** Un script final genera `digest.md` y un `stories.json` actualizado a partir de los resultados guardados, referenciándolos por número para que cada título y cada enlace se copien de forma exacta.
+
+Las reglas permanentes están en `instructions`, que el modelo vuelve a leer en cada paso del bucle del agente. La entrada solo incluye lo que cambia cada día: los temas y las noticias que el resumen ya ha cubierto.
+
+```text theme={null}
+Elaboras un resumen diario de noticias en el sandbox.
+
+Flujo de trabajo:
+1. En una sola ejecución del sandbox, escribe código que busque cada tema que te indique el usuario con el SDK de Perplexity, una búsqueda por tema, max_results 20, limitado al último día. Realiza exactamente una búsqueda por tema y ninguna otra. No descargues las páginas de los artículos. Guarda los resultados recopilados (título, url, fecha, fragmento) en results.json e imprime un resumen numerado y compacto de ellos.
+2. Lee el resumen impreso y agrupa tú mismo los resultados en noticias. Agrupar es una tarea de criterio, no de código: no agrupes con coincidencia de cadenas ni con embeddings.
+3. En una última ejecución del sandbox, escribe código que cargue results.json y construya a partir de él y de tu agrupación dos archivos, llamados exactamente digest.md y stories.json (refiérete a los resultados por su número para que el código copie los títulos y las urls con exactitud; nunca vuelvas a escribir una url a mano):
+   - digest.md: una sección por cada noticia nueva o actualizada. Termina el titular de una noticia actualizada con un único marcador (update). Incluye el titular, un resumen de una o dos frases, un enlace en markdown al artículo principal y una línea con los demás dominios que la cubrieron.
+   - stories.json: las noticias conocidas que te indique el usuario más todas las noticias de hoy, con el formato {"story_id": {"headline": ..., "last_seen": "YYYY-MM-DD"}}. Fija last_seen en la fecha de hoy solo para las noticias que aparezcan en los resultados de hoy; para el resto, conserva el last_seen anterior.
+   Después comparte ambos archivos con la herramienta share_file.
+
+Reglas de agrupación:
+- Dos artículos son la misma noticia si informan sobre el mismo hecho subyacente. La cobertura republicada, reescrita o parcial de un mismo hecho es una sola noticia.
+- Que el lenguaje sea parecido no basta. Los hechos recurrentes son noticias distintas: resultados financieros de trimestres diferentes, informes de meses diferentes, acuerdos entre empresas diferentes.
+- Ignora los resultados que no sean cobertura de un hecho concreto, como páginas de inicio, páginas de categorías y recopilaciones de enlaces.
+- El artículo principal es la fuente más completa u original del grupo. Prefiere la página de un artículo específico del medio original antes que agregadores y copias republicadas.
+- story_id es un nombre corto en minúsculas del hecho subyacente, con las palabras separadas por guiones, como aws-chile-region. Si el hecho coincide con una noticia conocida que indique el usuario, reutiliza ese story_id exactamente.
+- Una noticia es "new" si el hecho no está entre las noticias conocidas, "update" si coincide con una noticia conocida y aporta información nueva relevante, y "repeat" si coincide con una noticia conocida y no aporta nada. Deja las repeticiones fuera de digest.md, pero mantenlas en stories.json.
+```
+
+<div id="run-the-digest">
+  ## Ejecuta el resumen
+</div>
+
+Las ejecuciones de sandbox deben usar el [modo en segundo plano](/es/docs/agent-api/background-mode): envíalas con `background: true` y consulta el estado hasta que sea terminal.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import time
+  from datetime import date
+  from pathlib import Path
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  TOPICS = [
+      "data center construction and expansion news",
+      "renewable energy project financing news",
+      "commercial real estate transaction news",
+  ]
+
+  STATE_FILE = Path("stories.json")
+  known = json.loads(STATE_FILE.read_text()) if STATE_FILE.exists() else {}
+  known_list = "\n".join(
+      f"- {story_id}: {story['headline']} (last seen {story['last_seen']})"
+      for story_id, story in known.items()
+  ) or "(none)"
+  topic_list = "\n".join(f"- {topic}" for topic in TOPICS)
+
+  INSTRUCTIONS = """You build a daily news digest in the sandbox.
+
+  Workflow:
+  1. In one sandbox execution, write code that searches each topic the user gives you with the Perplexity SDK, one search per topic, max_results 20, restricted to the last day. Make exactly one search per topic and no other searches. Do not fetch article pages. Save the collected results (title, url, date, snippet) to results.json and print a compact numbered summary of them.
+  2. Read the printed summary and group the results into stories yourself. Grouping is judgment, not code: do not group with string matching or embeddings.
+  3. In one final sandbox execution, write code that loads results.json and builds two files from it and your grouping, named exactly digest.md and stories.json (refer to results by their numbers so code copies titles and urls exactly; never retype a url):
+     - digest.md: one section per story that is new or an update. End an update story's headline with a single (update) marker. Include the headline, a one or two sentence summary, a markdown link to the primary article, and a line listing the other domains that covered it.
+     - stories.json: the known stories the user gives you plus every story from today, as {"story_id": {"headline": ..., "last_seen": "YYYY-MM-DD"}}. Set last_seen to today only for stories that appeared in today's results; keep the previous last_seen for the rest.
+     Then share both files with the share_file tool.
+
+  Grouping rules:
+  - Two articles are the same story if they report the same underlying event. Republished, reworded, or partial coverage of one event is one story.
+  - Similar language is not enough. Recurring events are different stories: earnings for different quarters, reports for different months, deals involving different companies.
+  - Ignore results that are not coverage of a single event, such as homepages, category pages, and link roundups.
+  - The primary article is the most complete or most original source in the group. Prefer a dedicated article page from the original outlet over aggregators and republished copies.
+  - story_id is a short lowercase name for the underlying event, with words separated by hyphens, like aws-chile-region. If the event matches a known story the user lists, reuse that story_id exactly.
+  - A story is "new" if the event is not in the known stories, an "update" if it matches a known story and adds material new information, and a "repeat" if it matches a known story and adds nothing. Leave repeats out of digest.md but keep them in stories.json."""
+
+  response = client.responses.create(
+      model="anthropic/claude-haiku-4-5",
+      max_output_tokens=32000,
+      max_steps=50,
+      background=True,
+      tools=[{"type": "sandbox"}],
+      instructions=INSTRUCTIONS,
+      input=f"""Build the digest for {date.today():%Y-%m-%d}. Topics:
+  {topic_list}
+
+  Known stories from previous digests:
+  {known_list}""",
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(5)
+      response = client.responses.retrieve(response.id)
+
+  print(f"Final status: {response.status}")
+
+  files = client.responses.files.list(response.id)
+  for file in files.data:
+      content = client.responses.files.content(
+          file_id=file.id,
+          response_id=response.id,
+      )
+      content.write_to_file(file.filename)
+      print(f"Downloaded {file.filename} ({file.bytes} bytes)")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+  import { readFile, writeFile } from 'node:fs/promises';
+
+  const client = new Perplexity();
+
+  const TOPICS = [
+    'data center construction and expansion news',
+    'renewable energy project financing news',
+    'commercial real estate transaction news',
+  ];
+
+  let known: Record<string, { headline: string; last_seen: string }> = {};
+  try {
+    known = JSON.parse(await readFile('stories.json', 'utf8'));
+  } catch {}
+  const knownList =
+    Object.entries(known)
+      .map(([storyId, story]) => `- ${storyId}: ${story.headline} (last seen ${story.last_seen})`)
+      .join('\n') || '(none)';
+  const topicList = TOPICS.map((topic) => `- ${topic}`).join('\n');
+
+  const INSTRUCTIONS = `You build a daily news digest in the sandbox.
+
+  Workflow:
+  1. In one sandbox execution, write code that searches each topic the user gives you with the Perplexity SDK, one search per topic, max_results 20, restricted to the last day. Make exactly one search per topic and no other searches. Do not fetch article pages. Save the collected results (title, url, date, snippet) to results.json and print a compact numbered summary of them.
+  2. Read the printed summary and group the results into stories yourself. Grouping is judgment, not code: do not group with string matching or embeddings.
+  3. In one final sandbox execution, write code that loads results.json and builds two files from it and your grouping, named exactly digest.md and stories.json (refer to results by their numbers so code copies titles and urls exactly; never retype a url):
+     - digest.md: one section per story that is new or an update. End an update story's headline with a single (update) marker. Include the headline, a one or two sentence summary, a markdown link to the primary article, and a line listing the other domains that covered it.
+     - stories.json: the known stories the user gives you plus every story from today, as {"story_id": {"headline": ..., "last_seen": "YYYY-MM-DD"}}. Set last_seen to today only for stories that appeared in today's results; keep the previous last_seen for the rest.
+     Then share both files with the share_file tool.
+
+  Grouping rules:
+  - Two articles are the same story if they report the same underlying event. Republished, reworded, or partial coverage of one event is one story.
+  - Similar language is not enough. Recurring events are different stories: earnings for different quarters, reports for different months, deals involving different companies.
+  - Ignore results that are not coverage of a single event, such as homepages, category pages, and link roundups.
+  - The primary article is the most complete or most original source in the group. Prefer a dedicated article page from the original outlet over aggregators and republished copies.
+  - story_id is a short lowercase name for the underlying event, with words separated by hyphens, like aws-chile-region. If the event matches a known story the user lists, reuse that story_id exactly.
+  - A story is "new" if the event is not in the known stories, an "update" if it matches a known story and adds material new information, and a "repeat" if it matches a known story and adds nothing. Leave repeats out of digest.md but keep them in stories.json.`;
+
+  const today = new Date().toISOString().slice(0, 10);
+
+  let response = await client.responses.create({
+    model: 'anthropic/claude-haiku-4-5',
+    max_output_tokens: 32000,
+    max_steps: 50,
+    background: true,
+    tools: [{ type: 'sandbox' }],
+    instructions: INSTRUCTIONS,
+    input: `Build the digest for ${today}. Topics:
+  ${topicList}
+
+  Known stories from previous digests:
+  ${knownList}`,
+  });
+
+  while (response.status === 'queued' || response.status === 'in_progress') {
+    await new Promise((resolve) => setTimeout(resolve, 5000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(`Final status: ${response.status}`);
+
+  const files = await client.responses.files.list(response.id);
+  for (const file of files.data) {
+    const content = await client.responses.files.content(file.id, {
+      response_id: response.id,
+    });
+    await writeFile(file.filename, Buffer.from(await content.arrayBuffer()));
+    console.log(`Downloaded ${file.filename} (${file.bytes} bytes)`);
+  }
+  ```
+</CodeGroup>
+
+<div id="what-the-response-contains">
+  ## Qué contiene la respuesta
+</div>
+
+El campo `output` de la respuesta completada recorre toda la ejecución: un elemento `skill_loaded` para las skills de referencia del sandbox, un elemento `sandbox_results` por cada ejecución con el código exacto que corrió el model y su stdout, un elemento `share_file` por cada archivo entregado y un `message` de cierre. Vale la pena conservar los elementos `sandbox_results` en tus registros: muestran con precisión qué se ejecutó, de modo que un resumen defectuoso se puede depurar.
+
+Los dos archivos descargados son el resultado final. `digest.md` se ve así:
+
+```markdown theme={null}
+### Vantage Data Centers presenta Frontier, un megacampus de 25.000 millones de dólares en Texas
+
+Vantage Data Centers anunció su mayor inversión hasta la fecha: el megacampus
+Frontier, en Texas, valorado en 25.000 millones de dólares, para responder a una demanda de IA sin precedentes.
+
+[Leer más](https://vantage-dc.com/news/vantage-data-centers-unveils-plans-for-frontier-a-25b-mega-campus-in-texas-to-meet-unprecedented-ai-demand/)
+```
+
+Y `stories.json` es el registro que hace que la ejecución de mañana sea más inteligente:
+
+```json theme={null}
+{
+  "vantage-frontier-texas-campus": {
+    "headline": "Vantage Data Centers Unveils Plans for Frontier, a $25B Mega Campus in Texas",
+    "last_seen": "2026-07-21"
+  }
+}
+```
+
+<div id="story-memory-across-days">
+  ## Memoria de noticias entre días
+</div>
+
+El registro es lo que diferencia la deduplicación del agrupamiento. Cada ejecución recibe en su entrada las noticias conocidas y etiqueta cada noticia que encuentra: `new` si el evento no se había cubierto antes, `update` si coincide con una noticia conocida y aporta información nueva y sustancial, y `repeat` si coincide con una noticia conocida y no aporta nada. Las actualizaciones permanecen en el resumen, marcadas como tales; las repeticiones se descartan del resumen, pero se conservan en el registro. Como el model reutiliza cada `story_id` para los eventos coincidentes, el registro se mantiene estable de un día para otro.
+
+Elimina del registro las entradas cuyo `last_seen` sea anterior a tu ventana de deduplicación (30 días es más que suficiente) para que la entrada se mantenga pequeña.
+
+<div id="run-it-every-day">
+  ## Ejecútalo todos los días
+</div>
+
+Programa el script con la herramienta que ya uses para tus tareas programadas. El único estado que persiste entre ejecuciones es `stories.json`, y la propia ejecución se encarga de mantenerlo al día: la tarea de hoy descarga la copia actualizada y la de mañana la vuelve a tomar como entrada. Todo lo demás es sin estado.
+
+<div id="scaling-up">
+  ## Escalar
+</div>
+
+Un día con tres temas cuesta alrededor de siete centavos con `claude-haiku-4-5`: unos dos centavos en tokens, tres centavos por la sesión de sandbox y medio centavo por búsqueda. La ejecución tarda cerca de un minuto en modo de segundo plano.
+
+Para abarcar más terreno, agrega temas a la lista; el código hace exactamente una búsqueda por tema, así que el costo y la cobertura escalan de forma predecible. Para descartar duplicados frente a un archivo histórico grande, incluye en la solicitud un enlace que el sandbox pueda descargar, como una URL prefirmada de S3, y amplía las instrucciones para que el paso de obtención traiga ese archivo junto con los resultados del día; para trabajos más grandes, usa un modelo más potente y un `max_steps` más alto. Si tu renderizador de resúmenes espera datos en lugar de markdown, haz que el script final escriba un `digest.json` con los mismos campos.
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Sandbox" icon="terminal" href="/es/docs/agent-api/tools/sandbox">
+    Cómo funciona el contenedor, cómo llamar a otras herramientas desde el código, precios y límites.
+  </Card>
+
+  <Card title="Modo en segundo plano" icon="clock" href="/es/docs/agent-api/background-mode">
+    Envía, sondea, transmite y cancela ejecuciones de agentes de larga duración.
+  </Card>
+
+  <Card title="Trabajar con archivos" icon="file" href="/es/docs/agent-api/working-with-files">
+    Enumera y descarga los archivos que una respuesta de la Agent API generó en el sandbox.
+  </Card>
+</CardGroup>

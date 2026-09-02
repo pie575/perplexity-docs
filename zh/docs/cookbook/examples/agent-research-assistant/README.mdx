@@ -1,0 +1,366 @@
+---
+title: "Agent 研究助手"
+description: "一款命令行工具，借助 Perplexity Agent API 的 medium preset 开展多步网络研究并生成结构化报告"
+---
+
+<div id="agent-research-assistant">
+  # Agent 研究助手
+</div>
+
+这是一个命令行研究工具，基于 Perplexity 的 Agent API 并使用 `medium` preset，可针对任意主题开展深入的多步骤网络研究。该工具会生成结构化报告，包含章节、引用来源和置信度分数。
+
+<div id="features">
+  ## 功能特性
+</div>
+
+* 由 `medium` preset 驱动的多步骤网络研究
+* 使用 `response_format` 搭配 `json_schema`，输出包含章节、来源和置信度分数的结构化 JSON
+* model 可配置 (通过 medium preset 默认使用 `openai/gpt-5.2`)
+* 简洁的命令行界面：输入一个主题，输出格式化报告
+* 来源追踪，附带 URL 和相关性标注
+* 报告可导出为 JSON 或纯文本
+
+<div id="installation">
+  ## 安装
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai pydantic
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+<div id="api-key-setup">
+  ## API key 设置
+</div>
+
+将你的 Perplexity API key 设置为环境变量，SDK 会自动读取：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## 使用方式
+</div>
+
+```bash theme={null}
+# Python
+python research_assistant.py "Impact of microplastics on marine ecosystems"
+
+# TypeScript
+npx ts-node research_assistant.ts "Impact of microplastics on marine ecosystems"
+
+# 覆盖默认 model
+python research_assistant.py "Quantum computing breakthroughs" --model openai/gpt-5.4
+
+# 导出为 JSON
+python research_assistant.py "CRISPR gene therapy trials" --json > report.json
+```
+
+<div id="how-it-works">
+  ## 工作原理
+</div>
+
+1. CLI 接受一个研究主题作为输入。
+2. 使用 Pydantic (Python) 或 TypeScript 接口为报告格式定义结构化的 JSON schema。
+3. 该工具以 `preset="medium"` 调用 Agent API，由此配置 model (`openai/gpt-5.2`) 、启用 `web_search` 和 `fetch_url` 工具，并允许最多 10 个推理步骤。
+4. `response_format` 参数配合 `json_schema` 可强制输出符合报告 schema 的结构化结果。
+5. 解析响应，并以格式化的研究报告形式呈现。
+
+<Info>
+  `medium` preset 专为复杂、深入的分析而优化，使用 `openai/gpt-5.2`，最多 10K token 和 10 个推理步骤。你可以在 CLI 中传入 `--model` 来覆盖所用的 model。
+</Info>
+
+<div id="full-code">
+  ## 完整代码
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import argparse
+  from typing import List, Optional
+  from pydantic import BaseModel
+  from perplexity import Perplexity
+
+
+  class ReportSource(BaseModel):
+      title: str
+      url: str
+      relevance: str
+
+
+  class ReportSection(BaseModel):
+      heading: str
+      content: str
+      confidence: float
+      sources: List[ReportSource]
+
+
+  class ResearchReport(BaseModel):
+      title: str
+      summary: str
+      sections: List[ReportSection]
+      conclusion: str
+      overall_confidence: float
+      total_sources: int
+
+
+  def run_research(topic: str, model: Optional[str] = None) -> ResearchReport:
+      """Conduct deep research on a topic and return a structured report."""
+      client = Perplexity()
+
+      params = {
+          "preset": "medium",
+          "input": (
+              f"Conduct thorough research on the following topic and produce a "
+              f"detailed report with multiple sections, cited sources, and "
+              f"confidence scores for each section.\n\nTopic: {topic}"
+          ),
+          "response_format": {
+              "type": "json_schema",
+              "json_schema": {
+                  "name": "research_report",
+                  "schema": ResearchReport.model_json_schema(),
+              },
+          },
+      }
+
+      if model:
+          params["model"] = model
+
+      response = client.responses.create(**params)
+      return ResearchReport.model_validate_json(response.output_text)
+
+
+  def format_report(report: ResearchReport) -> str:
+      """Format a ResearchReport into human-readable text."""
+      lines = [f"{'=' * 60}", f"RESEARCH REPORT: {report.title}", f"{'=' * 60}", ""]
+      lines += [f"SUMMARY:", report.summary, ""]
+
+      for i, section in enumerate(report.sections, 1):
+          lines.append(f"--- Section {i}: {section.heading} ---")
+          lines.append(f"Confidence: {section.confidence:.0%}\n")
+          lines.append(section.content)
+          if section.sources:
+              lines.append("\nSources:")
+              for src in section.sources:
+                  lines.append(f"  - {src.title} ({src.relevance})")
+                  lines.append(f"    {src.url}")
+          lines.append("")
+
+      lines += [f"{'=' * 60}", "CONCLUSION:", report.conclusion, ""]
+      lines += [f"Overall Confidence: {report.overall_confidence:.0%}"]
+      lines += [f"Total Sources: {report.total_sources}", f"{'=' * 60}"]
+      return "\n".join(lines)
+
+
+  def main():
+      parser = argparse.ArgumentParser(description="Agent Research Assistant")
+      parser.add_argument("topic", help="The research topic")
+      parser.add_argument("--model", help="Override the default model", default=None)
+      parser.add_argument("--json", action="store_true", help="Output raw JSON")
+      args = parser.parse_args()
+
+      print(f"Researching: {args.topic}")
+      print("This may take a moment (deep research uses multi-step reasoning)...\n")
+
+      report = run_research(args.topic, model=args.model)
+
+      if args.json:
+          print(json.dumps(report.model_dump(), indent=2))
+      else:
+          print(format_report(report))
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  interface ReportSource {
+    title: string;
+    url: string;
+    relevance: string;
+  }
+
+  interface ReportSection {
+    heading: string;
+    content: string;
+    confidence: number;
+    sources: ReportSource[];
+  }
+
+  interface ResearchReport {
+    title: string;
+    summary: string;
+    sections: ReportSection[];
+    conclusion: string;
+    overall_confidence: number;
+    total_sources: number;
+  }
+
+  const reportSchema = {
+    type: "object" as const,
+    properties: {
+      title: { type: "string" },
+      summary: { type: "string" },
+      sections: {
+        type: "array",
+        items: {
+          type: "object",
+          properties: {
+            heading: { type: "string" },
+            content: { type: "string" },
+            confidence: { type: "number" },
+            sources: {
+              type: "array",
+              items: {
+                type: "object",
+                properties: {
+                  title: { type: "string" },
+                  url: { type: "string" },
+                  relevance: { type: "string" },
+                },
+                required: ["title", "url", "relevance"],
+              },
+            },
+          },
+          required: ["heading", "content", "confidence", "sources"],
+        },
+      },
+      conclusion: { type: "string" },
+      overall_confidence: { type: "number" },
+      total_sources: { type: "number" },
+    },
+    required: ["title", "summary", "sections", "conclusion", "overall_confidence", "total_sources"],
+  };
+
+  async function runResearch(topic: string, model?: string): Promise<ResearchReport> {
+    const client = new Perplexity();
+
+    const params: Record<string, unknown> = {
+      preset: "medium",
+      input:
+        `Conduct thorough research on the following topic and produce a ` +
+        `detailed report with multiple sections, cited sources, and ` +
+        `confidence scores for each section.\n\nTopic: ${topic}`,
+      response_format: {
+        type: "json_schema",
+        json_schema: { name: "research_report", schema: reportSchema },
+      },
+    };
+
+    if (model) params.model = model;
+
+    const response = await client.responses.create(params as any);
+    return JSON.parse(response.output_text) as ResearchReport;
+  }
+
+  async function main() {
+    const topic = process.argv[2];
+    if (!topic) {
+      console.error("Usage: ts-node research_assistant.ts <topic> [--model <model>] [--json]");
+      process.exit(1);
+    }
+
+    const modelIdx = process.argv.indexOf("--model");
+    const model = modelIdx !== -1 ? process.argv[modelIdx + 1] : undefined;
+    const outputJson = process.argv.includes("--json");
+
+    console.log(`Researching: ${topic}`);
+    console.log("This may take a moment (deep research uses multi-step reasoning)...\n");
+
+    const report = await runResearch(topic, model);
+
+    if (outputJson) {
+      console.log(JSON.stringify(report, null, 2));
+    } else {
+      console.log(`RESEARCH REPORT: ${report.title}\n`);
+      console.log(`SUMMARY: ${report.summary}\n`);
+      report.sections.forEach((s, i) => {
+        console.log(`--- Section ${i + 1}: ${s.heading} (${(s.confidence * 100).toFixed(0)}%) ---`);
+        console.log(s.content);
+        s.sources.forEach((src) => console.log(`  - ${src.title}: ${src.url}`));
+        console.log();
+      });
+      console.log(`CONCLUSION: ${report.conclusion}`);
+      console.log(`Overall Confidence: ${(report.overall_confidence * 100).toFixed(0)}%`);
+    }
+  }
+
+  main();
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## 输出示例
+</div>
+
+```bash theme={null}
+python research_assistant.py "Impact of microplastics on marine ecosystems"
+```
+
+```
+正在研究：微塑料对海洋生态系统的影响
+这可能需要一些时间（深度研究会使用多步推理）……
+
+============================================================
+研究报告：微塑料对海洋生态系统的影响
+============================================================
+
+摘要：
+微塑料已成为全球海洋环境中无处不在的污染物，
+影响着从浮游生物到大型海洋哺乳动物的各类生物。
+
+--- 第 1 节：来源与分布 ---
+置信度：92%
+
+微塑料来源于大块塑料碎片的降解、合成纺织品、
+工业生产过程以及化妆品……
+
+来源：
+  - NOAA Marine Debris Program（高）
+    https://marinedebris.noaa.gov/...
+
+--- 第 2 节：对海洋生物的生物学影响 ---
+置信度：88%
+
+研究表明，微塑料会在多个营养级上影响海洋生物……
+
+来源：
+  - Environmental Science & Technology（高）
+    https://pubs.acs.org/...
+
+============================================================
+结论：
+微塑料对海洋生态系统构成了重大且日益加剧的威胁。
+
+总体置信度：89%
+来源总数：12
+============================================================
+```
+
+<Tip>
+  如果研究任务较短、要求响应更快，可以考虑改用 `low` preset。它使用 `openai/gpt-5.4`，最多执行 3 个推理步骤，在速度与深度之间取得了良好平衡。
+</Tip>
+
+<Warning>
+  首次使用新的 JSON Schema 发起请求时，可能需要 10 到 30 秒进行准备。之后使用相同 schema 的请求不会出现此延迟。详见[结构化输出指南](/zh/docs/agent-api/output-control#structured-outputs)。
+</Warning>
+
+<div id="limitations">
+  ## 限制
+</div>
+
+* 由于涉及多步推理和工具调用，深度研究请求消耗的 token 更多，成本也高于标准请求。
+* 使用 JSON schema 的结构化输出要求 model 严格遵循该 schema，schema 过于复杂可能会降低输出质量。
+* 置信度分数是 model 生成的估算值，应视为相对参考指标，而非绝对度量。
+* 研究质量取决于相关主题下网络来源的可用性与质量。

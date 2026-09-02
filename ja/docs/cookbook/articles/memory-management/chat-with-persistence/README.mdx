@@ -1,0 +1,151 @@
+---
+title: "永続的なチャットメモリ"
+description: "LanceDB のベクトルストレージと Perplexity Sonar API を活用した長期的な会話メモリ"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="persistent-chat-memory-with-perplexity-sonar-api">
+  # Perplexity Sonar API による永続的なチャットメモリ
+</div>
+
+<div id="overview">
+  ## 概要
+</div>
+
+この実装では、LlamaIndex のベクトルストレージと Perplexity の Sonar API を利用して、長期的な会話メモリを保持する方法を紹介します。高度な検索と要約によって、複数の API 呼び出しをまたいでコンテキストを維持します。
+
+<div id="key-features">
+  ## 主な機能
+</div>
+
+* **マルチターンのコンテキスト保持**: 過去のクエリと応答を記憶します
+* **セマンティック検索**: ベクトル埋め込みにより関連する会話履歴を検索します
+* **Perplexity 連携**: sonar-pro モデルを活用して精度の高い応答を生成します
+* **LanceDB ストレージ**: 列指向ベクトルデータベースによる会話履歴の永続化
+
+<div id="implementation-details">
+  ## 実装の詳細
+</div>
+
+<div id="core-components">
+  ### 主要コンポーネント
+</div>
+
+```python theme={null}
+# メモリの初期化
+vector_store = LanceDBVectorStore(uri="./lancedb", table_name="chat_history")
+storage_context = StorageContext.from_defaults(vector_store=vector_store)
+index = VectorStoreIndex([], storage_context=storage_context)
+```
+
+<div id="conversation-flow">
+  ### 会話フロー
+</div>
+
+1. ユーザーのクエリをベクトル埋め込みとして保存
+2. 関連性の高い過去のやり取りを上位3件取得
+3. 文脈となる履歴を付与した Sonar API リクエストを生成
+4. 以降の会話に備えて応答を永続化
+
+<div id="api-integration">
+  ### API統合
+</div>
+
+```python theme={null}
+# 会話コンテキストを含めた Sonar API 呼び出し
+messages = [
+    {"role": "system", "content": f"Context: {context_nodes}"},
+    {"role": "user", "content": user_query}
+]
+response = sonar_client.chat.completions.create(
+    model="sonar-pro",
+    messages=messages
+)
+```
+
+<div id="setup">
+  ## セットアップ
+</div>
+
+<div id="requirements">
+  ### 要件
+</div>
+
+```bash theme={null}
+llama-index-core>=0.10.0
+llama-index-vector-stores-lancedb>=0.1.0
+lancedb>=0.4.0
+openai>=1.12.0
+python-dotenv>=0.19.0
+```
+
+<div id="configuration">
+  ### 設定
+</div>
+
+1. API key を設定します。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key-here"
+```
+
+<div id="usage">
+  ## 使い方
+</div>
+
+<div id="basic-conversation">
+  ### 基本的な会話
+</div>
+
+```python theme={null}
+from chat_with_persistence import initialize_chat_session, chat_with_persistence
+
+index = initialize_chat_session()
+print(chat_with_persistence("Current weather in London?", index))
+print(chat_with_persistence("How does this compare to yesterday?", index))
+```
+
+<div id="expected-output">
+  ### 期待される出力
+</div>
+
+```text theme={null}
+初回クエリ: ロンドンの詳細な天気レポート
+フォローアップ: 保存済みコンテキストを用いた比較分析
+```
+
+<div id="try-it-out-yourself">
+  ### **実際に試してみましょう！**
+</div>
+
+```bash theme={null}
+python3 scripts/example_usage.py
+```
+
+<div id="persistence-verification">
+  ## 永続化の検証
+</div>
+
+```
+import lancedb
+db = lancedb.connect("./lancedb")
+table = db.open_table("chat_history")
+print(table.to_pandas()[["text", "metadata"]])
+```
+
+この実装は、LLMとの対話における主要な課題を解決します。
+
+* 10ターン以上にわたり93%のコンテキスト精度を維持
+* コンテキストによるグラウンディングでハルシネーションを67%削減
+* 4096トークンのウィンドウ内で1時間規模の対話を実現
+
+<div id="learn-more">
+  ## 詳細情報
+</div>
+
+メモリ管理の各アプローチについて詳しくは、親ドキュメントの[メモリ管理ガイド](../README)を参照してください。
+
+詳細なドキュメントは、[LlamaIndex Memory Guide](https://docs.llamaindex.ai/en/stable/module_guides/deploying/agents/memory/) および [Perplexity API Docs](https://docs.perplexity.ai/) を参照してください。

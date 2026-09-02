@@ -1,0 +1,114 @@
+---
+title: "エージェントへのプロンプト"
+description: "常時適用されるルール（システムプロンプト）と、そのターンの質問（input）を切り分け、エージェントが適切な対象を検索して回答するよう実行を方向づけます。"
+---
+
+エージェントにはプロンプトの入り口が2つあり、両者を明確に区別することが重要です。`instructions` はエージェントの**システムプロンプト**であり、すべてのターンで適用され続けるルールです。`input` はそのターンで実行すべき具体的な内容です。検索ツールが有効な場合、`input` は、モデルが検索するかどうか、また何を検索するかを判断する材料にもなります。このページでは両者の違いを整理し、取得した根拠に基づいて実行を方向づける方法を説明します。
+
+<div id="instructions-vs-input">
+  ## `instructions` と `input`
+</div>
+
+| フィールド          | 記述する内容                                                                          |
+| -------------- | ------------------------------------------------------------------------------- |
+| `instructions` | システムプロンプト。役割、トーン、出力言語、引用や書式のルール、必ず守るべき事項と禁止事項。質問の内容にかかわらず、ループの各ターンで適用されます。  |
+| `input`        | このターンの質問またはタスク。ツールの選択を左右し、検索が有効な場合はモデルの検索対象となるため、`input` が具体的であるほど検索もより的確になります。 |
+
+判断の目安として、ユーザーがまったく別のことを尋ねた場合でも適用すべきルールは `instructions` (システムプロンプト) に、今回のリクエスト固有の内容は `input` に記述します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      instructions=(
+          "You are a financial analyst. Always cite sources by domain, "
+          "and never speculate beyond retrieved evidence."
+      ),
+      input="Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?",
+      tools=[{"type": "web_search"}],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    instructions:
+      'You are a financial analyst. Always cite sources by domain, and never speculate beyond retrieved evidence.',
+    input: 'Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?',
+    tools: [{ type: 'web_search' as const }],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "instructions": "You are a financial analyst. Always cite sources by domain, and never speculate beyond retrieved evidence.",
+      "input": "Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?",
+      "tools": [{ "type": "web_search" }]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Note>
+  `preset` を使用する場合、`instructions` は preset で調整済みの システムプロンプト に追記されるのではなく、それを置き換えます。preset のプロンプトをそのまま使うには `instructions` を省略してください。詳しくは[実行を定義する](/ja/docs/agent-api/building-agents/define-the-run#customize-the-system-prompt-instructions)を参照してください。
+</Note>
+
+<div id="ground-the-run">
+  ## 実行をグラウンディングする
+</div>
+
+グラウンディングにより、エージェントはモデル自身の事前知識ではなく、取得した根拠に基づいて回答するようになります。効果が大きいのは次の2点です。
+
+* 具体的な `input`。検索ツールが有効な場合、モデルは `input` を手がかりに検索します。「Apple FY2025 10-K revenue by operating segment」は「how is Apple doing」よりも的を絞った結果が得られます。エンティティ、期間、回答の単位を明示しましょう。
+* 検索ツール。`web_search` と関連ツールを有効にして、エージェントが最新のエビデンスを取得できるようにします。[ツールを与える](/ja/docs/agent-api/building-agents/give-it-tools)を参照してください。
+
+許可ドメイン、日付範囲、地域といった厳格な制約は、文章で指示するのではなくリクエストパラメータで指定してください。パラメータは単なる要望ではなく、確実に適用されます。
+
+```python theme={null}
+tools=[{
+    "type": "web_search",
+    "filters": {
+        "search_domain_filter": ["sec.gov"],
+        "search_after_date_filter": "01/01/2026",
+    },
+}]
+```
+
+<Tip>
+  `web_search` や `fetch_url` などの組み込みツールは、プロンプト側で細かく指示しなくてもおおむね正しく動作します。指示文を書き足す前に、まずは `web_search` のフィルターや `response_format` の活用を検討してください。これらのパラメーターは直接適用されるため、システムプロンプトの token のようにループの各ステップで再処理されることはありません。
+</Tip>
+
+<div id="read-the-sources-back">
+  ## ソースを読み返す
+</div>
+
+根拠に基づく回答には、その裏付けとなる情報が付随します。検索ツールは取得結果をレスポンスの `output` 配列に追加する (例えば `message` と並んで `search_results` 項目が含まれる) ため、引用を表示したり内容を検証したりできます。正確なレスポンス構造については、[Web Search → レスポンス構造](/ja/docs/agent-api/tools/web-search#response-shape) をはじめとする各ツールのリファレンスページを参照してください。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="ツールを持たせる" icon="tool" href="/ja/docs/agent-api/building-agents/give-it-tools">
+    組み込みツールと独自のカスタムツールを有効化し、その結果を読み取る方法を解説します。
+  </Card>
+
+  <Card title="プロンプトガイド" icon="bulb" href="/ja/docs/agent-api/prompt-guide">
+    プロンプト設計のパターンとベストプラクティスを網羅しています。
+  </Card>
+</CardGroup>

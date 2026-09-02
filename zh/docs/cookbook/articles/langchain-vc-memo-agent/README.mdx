@@ -1,0 +1,405 @@
+---
+title: "基于 LangGraph 的风险投资备忘录 智能体"
+description: "使用 LangGraph 与 Perplexity Agent API 构建可审计、有引用支撑的风险投资研究 智能体，并借助 LangSmith 评估框架选出最佳搜索提供方。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+本指南将构建一个智能体：输入公司名称，输出一份有引用支撑的风投投资备忘录，包含七个部分——概况、团队、财务、产品、市场、风险，以及以一句话推荐收尾的投资论点。**每一条论断都可追溯到一手来源。**
+
+该智能体基于 [Perplexity Agent API](/zh/docs/agent-api/quickstart) 及其内置的 `web_search` 和 `finance_search` 工具，由 [LangGraph](https://langchain-ai.github.io/langgraph/) 编排，并在 [LangSmith](https://docs.langchain.com/langsmith/home) 中进行评估。整个流程约需九十秒，每份备忘录成本约 $0.40。
+
+这里的设计思路并不局限于金融领域：**把搜索与综合拆开，是从结构上提升研究型智能体可靠性的有效办法。** 四个研究节点并行展开，各自调用 Agent API 并使用各自的工具。最终的综合节点不配备任何工具，只能引用研究节点已经收集到的证据，因此备忘录不可能凭空捏造信源。
+
+<img src="https://mintcdn.com/perplexity/PUYTpeKNbln7dn87/docs/cookbook/static/img/langchain-vc-memo-architecture.png?fit=max&auto=format&n=PUYTpeKNbln7dn87&q=85&s=7d8be1fd753996f5128676f5a3e18b2f" alt="公司名称流入 START，扇出到四个并行的研究节点（团队、财务、产品、市场），它们共同汇入单个综合节点，在 END 处生成备忘录。" />
+
+<div id="features">
+  ## 功能特性
+</div>
+
+* **并行调研扇出。** 四个各有侧重的调研节点 (团队、财务、产品、市场) 并发运行，各自配备独立的工具和搜索预算。
+* **无工具的综合节点。** 最终备忘录仅根据上游证据撰写，从结构上杜绝编造引用。
+* **内置 Agent API 工具。** `web_search` 和 `finance_search` 开箱即用，核心智能体无需自建客户端搜索链路。
+* **可在 LangSmith 中审计。** 每个节点的工具调用和输出都会被记录，任何论断都能追溯到产生它的那条搜索结果。
+* **提供方评估框架。** 基于 LangSmith 的对比方案，从一手来源占比、财务概念覆盖度、延迟和成本等维度为各搜索提供方打分。
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+* Python 3.10+
+* 一个 [Perplexity API key](/zh/docs/admin/api-key-management) (`PPLX_API_KEY`)
+* 一个用于追踪与评估的 [LangSmith API key](https://docs.smith.langchain.com/)
+* (仅供应商对比场景需要) [Parallel](https://platform.parallel.ai/) 和 [Exa](https://dashboard.exa.ai/) 的 API key
+
+<div id="setup">
+  ## 设置
+</div>
+
+```bash theme={null}
+pip install "langchain-perplexity>=1.4.0" langgraph langsmith
+```
+
+```bash theme={null}
+# ChatPerplexity 会读取 PPLX_API_KEY。
+export PPLX_API_KEY="pplx-..."
+export LANGSMITH_API_KEY="ls__..."
+export LANGSMITH_TRACING="true"   # 端到端捕获每个节点的工具调用
+```
+
+<div id="build-the-agent">
+  ## 构建智能体
+</div>
+
+本节的所有内容都写在同一个文件里。按顺序将各代码块粘贴到 `memo.py` 中，即可得到完整的智能体。
+
+<div id="graph-state">
+  ### 图状态
+</div>
+
+每个研究节点从共享状态中读取 `company`，并将查询结果写入 `research_output`；并行写入由一个 reducer 负责合并。
+
+```python theme={null}
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Annotated, Any, TypedDict
+
+from langchain_core.messages import AIMessage
+from langchain_perplexity import ChatPerplexity
+from langgraph.graph import END, START, StateGraph
+
+
+def merge_research_output(left: dict[str, str], right: dict[str, str]) -> dict[str, str]:
+    """Each research node returns {"<section>": "..."}; merge into one dict."""
+    return {**(left or {}), **(right or {})}
+
+
+class MemoState(TypedDict):
+    company: str
+    research_output: Annotated[dict[str, str], merge_research_output]
+    memo: str
+```
+
+<div id="models-and-tools">
+  ### 模型与工具
+</div>
+
+Agent API 直接开放了 Perplexity 的内置工具。财务节点会额外使用 `finance_search`，其余节点使用 `web_search`。`max_steps` 用于限制每个节点内部搜索循环的次数，即单个节点的搜索预算。
+
+```python theme={null}
+SUBNODE_MODEL_NAME = "openai/gpt-5.5"
+SYNTHESIZER_MODEL_NAME = "openai/gpt-5.5"
+
+
+def _agent_model(model: str) -> ChatPerplexity:
+    """Build a ChatPerplexity client wired to the Responses API."""
+    # Responses（Agent）API 会忽略 temperature 等采样参数，因此这里不传。
+    return ChatPerplexity(model=model, use_responses_api=True)
+
+
+SUBNODE_MODEL = _agent_model(SUBNODE_MODEL_NAME)
+SYNTHESIZER_MODEL = _agent_model(SYNTHESIZER_MODEL_NAME)
+
+
+# 各研究节点的工具配置。
+TEAM_TOOLS = [{
+    "type": "web_search",
+    "filters": {"search_recency_filter": "year"},
+}]
+
+PRODUCT_TOOLS = [{"type": "web_search"}]
+
+MARKET_TOOLS = [{"type": "web_search"}]
+
+FINANCIALS_TOOLS = [{"type": "finance_search"}, {"type": "web_search"}]
+
+
+# 各研究节点的 max_steps 用于限制 Perplexity Agent API 内部搜索循环的次数。
+RESEARCH_MAX_STEPS = {
+    "team": 2, "financials": 5, "product": 2, "market": 2,
+}
+```
+
+<div id="research-prompts">
+  ### 研究提示词
+</div>
+
+一个提示词模板即可服务全部四个节点；各章节的专属指引则决定每个节点重点挖掘哪些内容、优先采用哪些来源。
+
+```python theme={null}
+RESEARCH_PROMPT = """You are a VC analyst writing the {section} section of the research output for {company}.
+
+{guidance}
+
+Return a markdown section, then end the document with a "### Citations" header \
+followed by a markdown list of:
+
+  - <url> — one-sentence evidence quoted from the source
+
+Cite only URLs that came back from your tool calls; never fabricate URLs. \
+Keep the section focused — 250-400 words is appropriate for the body."""
+
+
+GUIDANCE = {
+    "team": (
+        "Search for the founders, CEO, and other named executives. Capture each "
+        "leader's prior roles and education. Prioritize the company's own About/Team "
+        "page and reputable public biographies."
+    ),
+    "financials": (
+        "If the company is public, use finance_search for revenue, margins, and analyst "
+        "estimates. If private, use web_search for funding rounds, valuation, and "
+        "disclosed revenue. Cross-check structured data against recent news."
+    ),
+    "product": (
+        "Describe the company's flagship product, recent launches, and technical "
+        "differentiators. Cite the company's own product or engineering pages where "
+        "possible, plus tech-press coverage for context."
+    ),
+    "market": (
+        "Map the competitive landscape, name direct competitors, and surface market "
+        "sizing. Your web_search is scoped to analyst and trade-press sources."
+    ),
+}
+```
+
+<div id="research-nodes">
+  ### 研究节点
+</div>
+
+这四个节点共用同一个 runner：发起一次 Agent API 调用，并传入该节点对应的工具和搜索预算。搜索循环由 API 在服务端完成，因此这里无需编写任何客户端的工具衔接代码。
+
+```python theme={null}
+def _run_research(
+    state: MemoState,
+    *,
+    section: str,
+    tools: list[dict[str, Any]],
+    max_steps: int,
+) -> dict[str, dict[str, str]]:
+    """Run one research section with the given tools and return its output."""
+    msg: AIMessage = SUBNODE_MODEL.invoke(
+        [
+            {"role": "system", "content": RESEARCH_PROMPT.format(
+                section=section, company=state["company"], guidance=GUIDANCE[section],
+            )},
+            {"role": "user", "content": f"Research the {section} of {state['company']}."},
+        ],
+        tools=tools,
+        extra_body={"max_steps": max_steps},
+    )
+    return {"research_output": {section: msg.content}}
+
+
+def team_node(state):
+    """Research the founders and leadership team."""
+    return _run_research(state, section="team",
+        tools=TEAM_TOOLS, max_steps=RESEARCH_MAX_STEPS["team"])
+
+def financials_node(state):
+    """Research revenue, funding, and financial metrics."""
+    return _run_research(state, section="financials",
+        tools=FINANCIALS_TOOLS, max_steps=RESEARCH_MAX_STEPS["financials"])
+
+def product_node(state):
+    """Research the product, launches, and technical differentiators."""
+    return _run_research(state, section="product",
+        tools=PRODUCT_TOOLS, max_steps=RESEARCH_MAX_STEPS["product"])
+
+def market_node(state):
+    """Research the competitive landscape and market sizing."""
+    return _run_research(state, section="market",
+        tools=MARKET_TOOLS, max_steps=RESEARCH_MAX_STEPS["market"])
+```
+
+<div id="the-synthesizer">
+  ### 综合节点
+</div>
+
+综合节点不配备任何工具。它根据四个节点的研究输出撰写备忘录的全部七个章节，因此每一条带引用的论断都有某个节点实际完成的研究作为依据。第 1–6 节末尾均附有一个 `### Citations` 列表，将每个来源 URL 与其支撑的证据一一对应。论点 (Thesis) 是唯一的纯分析章节，不含引用。
+
+```python theme={null}
+SYNTH_PROMPT = """你是一位资深风险投资合伙人，正在为 {company} 撰写最终投资备忘录。
+
+你只能引用下方研究输出中出现的证据。你没有任何\
+工具；不要浏览网页或捏造来源。
+
+请生成一份 markdown 备忘录，按顺序包含以下七个部分：
+
+  1. 概览 — 公司是做什么的、成立时间、估值、市场定位（3-4 句话）
+  2. 团队 — 创始人、管理层、近期高管加入情况
+  3. 财务 — 收入、增长、融资历史、可比公司
+  4. 产品 — 销售什么、技术、分销渠道
+  5. 市场 — TAM、直接竞争对手、品类动态
+  6. 风险 — 前 3-5 项风险及简要理由
+  7. 论点 — 1-2 段分析，以单独一行结尾：
+     "Recommendation: <PASS | TRACK | ADVANCE | LEAD>"
+
+每个部分的 H2 标题必须严格为 `## <N> · <Section Name>` \
+（例如 `## 1 · Snapshot`），使用中间点分隔符 — 评估器依赖\
+这一格式。
+
+第 1-6 部分每部分都必须以 `### Citations` 子章节结尾，列出取自研究输出的 \
+<url> — <evidence> 配对。第 7 部分（论点）\
+不需要自己的引用。
+
+如果某项研究输出缺乏支撑某部分的证据，请在该部分正文中写 "Insufficient evidence in \
+research outputs."，而不要猜测。"""
+
+
+def synthesizer_node(state: MemoState) -> dict[str, str]:
+    """Combine all research outputs into the final memo. No tools attached."""
+    research_output_block = "\n\n".join(
+        f"## Research output: {name}\n\n{body}"
+        for name, body in sorted(state["research_output"].items())
+    )
+    msg: AIMessage = SYNTHESIZER_MODEL.invoke([
+        {"role": "system", "content": SYNTH_PROMPT.format(company=state["company"])},
+        {"role": "user", "content": (
+            f"Company: {state['company']}\n"
+            f"As-of: {datetime.now(timezone.utc).isoformat(timespec='seconds')}\n\n"
+            f"Research outputs:\n\n{research_output_block}"
+        )},
+    ])
+    return {"memo": msg.content}
+```
+
+<div id="wiring-the-graph">
+  ### 连接图结构
+</div>
+
+四个研究节点从 `START` 并行分发，最终汇聚到综合节点。连接代码很简短：
+
+```python theme={null}
+def build_graph():
+    """Wire the four research nodes in parallel from START into the synthesizer, then END."""
+    g = StateGraph(MemoState)
+    g.add_node("team", team_node)
+    g.add_node("financials", financials_node)
+    g.add_node("product", product_node)
+    g.add_node("market", market_node)
+    g.add_node("synthesizer", synthesizer_node)
+
+    for section in ("team", "financials", "product", "market"):
+        g.add_edge(START, section)
+        g.add_edge(section, "synthesizer")
+
+    g.add_edge("synthesizer", END)
+    return g.compile()
+```
+
+<div id="running-it">
+  ### 运行
+</div>
+
+```python theme={null}
+import argparse
+import asyncio
+
+
+async def run_memo(company: str) -> str:
+    """Run the full memo agent for one company and return the final markdown memo."""
+    graph = build_graph()
+    final = await graph.ainvoke({"company": company, "research_output": {}, "memo": ""})
+    return final["memo"]
+
+
+def main() -> None:
+    """CLI entrypoint: parse `--company` and print the generated memo."""
+    parser = argparse.ArgumentParser(description="VC investment memo agent.")
+    parser.add_argument("--company", required=True)
+    args = parser.parse_args()
+    print(asyncio.run(run_memo(args.company)))
+
+
+if __name__ == "__main__":
+    main()
+```
+
+```bash theme={null}
+python memo.py --company "Anthropic"
+```
+
+生成一份备忘录大约需要九十秒，成本约为 0.40 美元。设置 `LANGSMITH_TRACING="true"` 后，完整的运行过程会显示在 LangSmith 中，包含每个节点的工具调用。可以查看这份[某次运行的公开追踪记录](https://smith.langchain.com/public/cd9926c8-edc1-4d52-9bfa-b9642ebd267f/r)。
+
+<img src="https://mintcdn.com/perplexity/X5JcIOX7i0z8S6ii/docs/cookbook/static/img/langchain-vc-memo-trace.png?fit=max&auto=format&n=X5JcIOX7i0z8S6ii&q=85&s=fde491b6a54994eff85e10272e32a436" alt="一次备忘录运行的 LangSmith 追踪记录：四个并行研究节点将结果汇入综合节点，备忘录输出中的引用部分列出了一手来源的 URL。" />
+
+<div id="choosing-a-search-provider">
+  ## 选择搜索提供方
+</div>
+
+应该用哪个搜索提供方来支撑这个智能体？`memo/profiles.py` 用三种可互换的客户端搜索工具 (`PerplexitySearchResults`、`ParallelSearchTool`、`ExaSearchResults`) 运行同一张图，`memo/compare.py` 则在 LangSmith 中为它们打分，从而让每种方案都适用同一套指标。
+
+除 LangSmith 内置的延迟和成本指标外，还有两个自定义评估器用于衡量备忘录质量：
+
+* `primary_source_rate`：引用中来自一手来源 (投资者关系页面、SEC、官方新闻稿) 而非聚合站点的比例。
+* `financial_concept_coverage`：财务部分是否覆盖估值、收入、融资和运营指标。
+
+这套测评框架是一个小型软件包，而非单个文件，因此它存放在 [api-cookbook 仓库](https://github.com/ppl-ai/api-cookbook/tree/main/docs/articles/langchain-vc-memo-agent)中：
+
+```bash theme={null}
+git clone https://github.com/ppl-ai/api-cookbook.git
+cd api-cookbook/docs/articles/langchain-vc-memo-agent/scripts
+pip install -r requirements.txt
+python -m memo.compare
+```
+
+<div id="results">
+  ### 结果
+</div>
+
+在 `openai/gpt-5.5` 上对十家上市与非上市公司进行评分：
+
+<img src="https://mintcdn.com/perplexity/X5JcIOX7i0z8S6ii/docs/cookbook/static/img/langchain-vc-memo-comparison.png?fit=max&auto=format&n=X5JcIOX7i0z8S6ii&q=85&s=90501ceb255597e6f32938b56903d2f8" alt="LangSmith 对 Perplexity、Parallel 和 Exa 三组实验在反馈评分、延迟和成本方面的对比。" />
+
+| 指标               | Perplexity | Parallel | Exa   |
+| ---------------- | ---------- | -------- | ----- |
+| 一手来源比例           | **1.00**   | 0.82     | 0.85  |
+| 财务概念覆盖度          | **0.70**   | 0.70     | 0.50  |
+| 延迟 p50 (秒/份备忘录)  | **91**     | 192      | 143   |
+| 成本 (美元/份备忘录)     | **$0.38**  | $0.60    | $0.67 |
+
+本次运行中，Perplexity 的一手来源比例达到满分，备忘录生成最快，单次运行成本最低，财务概念覆盖度也并列第一。建议在你自己的数据集上重新评分，看看各家提供方在你的使用场景下表现如何。
+
+<div id="directory-structure">
+  ## 目录结构
+</div>
+
+在 api-cookbook 的 [`docs/articles/langchain-vc-memo-agent/`](https://github.com/ppl-ai/api-cookbook/tree/main/docs/articles/langchain-vc-memo-agent) 目录下：
+
+```
+scripts/
+├── requirements.txt
+├── .env.example
+└── memo/
+    ├── graph.py          # 类型化状态、并行研究节点、无工具的综合节点、build_graph()
+    ├── main.py           # CLI 入口（python -m memo --company "..."）
+    ├── profiles.py       # 三种可互换的提供方配置
+    ├── evaluators.py     # LangSmith 评估器
+    ├── eval_dataset.py   # 作为评估输入的公司
+    └── compare.py        # 运行 LangSmith 对比
+```
+
+<div id="links">
+  ## 链接
+</div>
+
+* [Perplexity Agent API 工具](/zh/docs/agent-api/tools)
+* [Finance Search](/zh/docs/agent-api/tools/finance-search)
+* [LangChain Perplexity 提供方](https://docs.langchain.com/oss/python/integrations/providers/perplexity)
+* [LangGraph](https://langchain-ai.github.io/langgraph/)
+* [LangSmith 评估](https://docs.langchain.com/langsmith/evaluation)
+
+<div id="limitations">
+  ## 局限性
+</div>
+
+* **了解它的短板。** 智能体的能力上限取决于它能找到的一手来源：对于信息披露充分的公司表现稳健，而对于公开资料稀少的私营初创公司则不太可靠。
+* **章节模板只是一种约定。** 这七个章节以及 PASS / TRACK / ADVANCE / LEAD 评级只是我们选用的格式，你完全可以换成团队自己的那一套。

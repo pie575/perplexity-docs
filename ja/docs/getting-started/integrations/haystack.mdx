@@ -1,0 +1,184 @@
+---
+title: "Haystack で Perplexity を使う"
+description: "Perplexity の Agent API、Embeddings API、およびグラウンディングされた Search API を Haystack のパイプラインで活用します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+`perplexity-haystack` パッケージは、Perplexity の Agent API、Embeddings API、およびグラウンディングされた Search API 向けの Haystack コンポーネントを提供します。これにより、チャット、埋め込み、リアルタイムのウェブ検索を組み合わせた検索拡張型・エージェント型のパイプラインを構築できます。
+
+<Info>
+  **Haystack** は、[deepset](https://deepset.ai) が開発したオープンソースの Python フレームワークで、RAG パイプラインやエージェント型ワークフローなど、本番運用に耐える LLM アプリケーションを構築できます。詳細は [haystack.deepset.ai](https://haystack.deepset.ai) をご覧ください。
+</Info>
+
+この統合には次のコンポーネントが含まれます。
+
+* **PerplexityChatGenerator** — [Agent API](/ja/docs/agent-api/quickstart) によるチャット生成。
+* **PerplexityTextEmbedder** および **PerplexityDocumentEmbedder** — [Embeddings API](/ja/docs/embeddings/quickstart) による埋め込み生成。
+* **PerplexityWebSearch** — [Search API](/ja/docs/search/quickstart) による、ランク付けされたグラウンディング済みのウェブ検索結果。
+
+<div id="installation">
+  ## インストール
+</div>
+
+<Tabs>
+  <Tab title="pip">
+    ```bash theme={null}
+    pip install perplexity-haystack
+    ```
+  </Tab>
+
+  <Tab title="uv">
+    ```bash theme={null}
+    uv add perplexity-haystack
+    ```
+  </Tab>
+</Tabs>
+
+<div id="api-key-setup">
+  ## API キーの設定
+</div>
+
+Perplexity API キーを環境変数に設定します。
+
+```python theme={null}
+import os
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+```
+
+<Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  Perplexity のダッシュボードから API キーを発行します。
+</Card>
+
+<div id="quick-start-chat-agent-api">
+  ## クイックスタート: チャット (Agent API)
+</div>
+
+`PerplexityChatGenerator` は Perplexity の Agent API を基盤としており、デフォルトでは `openai/gpt-5.4` を使用します。
+
+```python theme={null}
+import os
+
+from haystack.dataclasses import ChatMessage
+from haystack_integrations.components.generators.perplexity import PerplexityChatGenerator
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+client = PerplexityChatGenerator()
+response = client.run(
+    messages=[ChatMessage.from_user("What are Agentic Pipelines? Be brief.")]
+)
+
+print(response["replies"])
+```
+
+<div id="selecting-a-model">
+  ### モデルの選択
+</div>
+
+`model` パラメータで、Agent API がサポートするモデルのいずれかを指定できます。
+
+```python theme={null}
+client = PerplexityChatGenerator(model="anthropic/claude-sonnet-4-6")
+```
+
+サポートされているモデルには `openai/gpt-5.4` (デフォルト) 、`openai/gpt-5.5`、`anthropic/claude-sonnet-4-6`、`xai/grok-4.5`、`google/gemini-3-flash-preview` などがあります。すべてのモデルの一覧は [Agent API のモデルページ](/ja/docs/agent-api/models)を参照してください。
+
+<div id="quick-start-embeddings">
+  ## クイックスタート: 埋め込み
+</div>
+
+`PerplexityTextEmbedder` で単一のクエリを埋め込みます。
+
+```python theme={null}
+import os
+
+from haystack_integrations.components.embedders.perplexity import PerplexityTextEmbedder
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+embedder = PerplexityTextEmbedder()
+response = embedder.run(text="What is Haystack by deepset?")
+
+print(response["embedding"])
+```
+
+`PerplexityDocumentEmbedder` を使って、ドキュメントのリストを埋め込みます。
+
+```python theme={null}
+from haystack import Document
+from haystack_integrations.components.embedders.perplexity import PerplexityDocumentEmbedder
+
+docs = [Document(content="What is Haystack by deepset?")]
+result = PerplexityDocumentEmbedder().run(documents=docs)
+
+print(result["documents"][0].embedding)
+```
+
+どちらのエンベッダーも、デフォルトでは `pplx-embed-v1-0.6b` を使用します。より大規模な `pplx-embed-v1-4b` モデルも利用可能で、`model` パラメータで指定できます。
+
+<div id="quick-start-web-search-search-api">
+  ## クイックスタート: ウェブ検索 (Search API)
+</div>
+
+Haystack パイプライン内でランク付けされたグラウンディングされたウェブ検索結果を取得するには、`PerplexityWebSearch` を使用します。
+
+```python theme={null}
+import os
+
+from haystack.utils import Secret
+from haystack_integrations.components.websearch.perplexity import PerplexityWebSearch
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+websearch = PerplexityWebSearch(
+    api_key=Secret.from_env_var("PERPLEXITY_API_KEY"),
+    top_k=5,
+)
+result = websearch.run(query="What is Haystack by deepset?")
+
+documents = result["documents"]
+links = result["links"]
+
+print(documents)
+print(links)
+```
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Haystack インテグレーション" icon="book" href="https://haystack.deepset.ai/integrations/perplexity">
+    haystack.deepset.ai のカタログ掲載ページ
+  </Card>
+
+  <Card title="ソースコード" icon="github" href="https://github.com/deepset-ai/haystack-core-integrations/tree/main/integrations/perplexity">
+    GitHub 上の perplexity-haystack
+  </Card>
+
+  <Card title="PyPI パッケージ" icon="brand-python" href="https://pypi.org/project/perplexity-haystack">
+    PyPI で見る
+  </Card>
+
+  <Card title="Haystack ドキュメント" icon="book-open" href="https://docs.haystack.deepset.ai">
+    Haystack の完全なドキュメント
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+統合について help が必要ですか？
+
+* [Haystack ドキュメント](https://docs.haystack.deepset.ai)を確認する
+* [haystack-core-integrations](https://github.com/deepset-ai/haystack-core-integrations/issues) で issue を作成する
+* [FAQ](/ja/docs/resources/faq) を参照する

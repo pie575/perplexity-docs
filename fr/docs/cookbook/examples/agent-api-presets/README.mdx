@@ -1,0 +1,257 @@
+---
+title: "Personnaliser les presets"
+---
+
+Les modèles, les outils et les capacités évoluent rapidement. Maintenir le code de votre agent à jour avec la configuration idéale pour votre cas d&#39;usage peut vite devenir un travail à plein temps. C&#39;est justement le problème que les presets Perplexity viennent résoudre.
+
+<div id="start-from-a-preset">
+  ## Partir d&#39;un preset
+</div>
+
+Un preset est un ensemble de paramètres de l&#39;Agent API maintenu par Perplexity, qui regroupe un modèle, une configuration de recherche, des étapes de raisonnement, un prompt système et les outils disponibles. Perplexity met à jour les configurations sous-jacentes au fil des progrès des évaluations, et vos appels bénéficient automatiquement de ces mises à jour, sans aucune modification de votre code.
+
+Et si le preset choisi ne répondait pas tout à fait à l&#39;ensemble de vos besoins ? Imaginez, par exemple, avoir trouvé une configuration de preset qui vous convient presque parfaitement, à l&#39;exception d&#39;un ou deux champs que vous souhaiteriez ajuster. Vous pouvez indiquer votre preset par son nom, puis ne modifier que les champs concernés. Tous les autres champs du preset conserveront leurs valeurs par défaut.
+
+<div id="check-the-prerequisites">
+  ## Vérifier les prérequis
+</div>
+
+Vous avez besoin de Python 3.10 ou plus récent, de la bibliothèque `perplexityai` installée et d&#39;une API key exportée dans la variable `PERPLEXITY_API_KEY`. Créez la clé sur [console.perplexity.ai/group/keys](https://console.perplexity.ai/group/keys). Si vous n&#39;avez encore jamais appelé l&#39;API, suivez d&#39;abord le [démarrage rapide de la Perplexity API](https://docs.perplexity.ai/docs/getting-started/quickstart).
+
+```bash theme={null}
+pip install perplexityai
+export PERPLEXITY_API_KEY="pplx-..."
+```
+
+<div id="run-a-basic-example">
+  ## Exécuter un exemple de base
+</div>
+
+Sauf mention contraire, tous les exemples de ce tutoriel utilisent le preset `low`. Commencez par l&#39;appeler avec un simple prompt, sans rien d&#39;autre.
+
+```python theme={null}
+from perplexity import Perplexity
+
+client = Perplexity()
+
+response = client.responses.create(
+    preset="low",
+    input="Summarize the current Perplexity Agent API pricing page.",
+)
+
+print("model:", response.model)
+print(response.output_text)
+```
+
+Le preset `low` fournit le modèle, la configuration de recherche, les étapes de raisonnement, le prompt système et les outils disponibles. Votre requête n&#39;ajoute que l&#39;entrée.
+
+<div id="customize-a-preset-in-two-moves">
+  ## Personnaliser un preset en deux étapes
+</div>
+
+Deux techniques couvrent presque tous les cas de personnalisation concrets : surcharger un champ de premier niveau et ajuster les options d&#39;un outil. La dernière section montre comment inspecter ce qui a réellement été exécuté.
+
+<div id="1-override-one-parameter">
+  ### 1. Surcharger un paramètre
+</div>
+
+Surchargez un paramètre lorsque le preset convient presque, mais qu&#39;un champ doit être modifié. Transmettez ce champ dans la requête ; tous les autres champs conservent leur valeur par défaut.
+
+`low` définit une valeur par défaut faible pour `max_steps` (consultez la documentation des presets pour connaître la valeur actuelle). Relevez ce plafond lorsqu&#39;une tâche nécessite davantage d&#39;itérations de raisonnement ou d&#39;utilisation d&#39;outils :
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input="Summarize this week's Agent API changelog.",
+    max_steps=8,
+)
+
+print("model:", response.model)
+print("status:", response.status)
+print("tool invocations:", response.usage.tool_calls_details)
+```
+
+<div id="2-adjust-options-for-one-tool">
+  ### 2. Ajuster les options d&#39;un seul outil
+</div>
+
+Ajustez les options d&#39;un outil lorsque l&#39;ensemble d&#39;outils du preset convient à la tâche, mais qu&#39;un outil demande un réglage. Transmettez une entrée partielle pour cet outil : les autres outils du preset restent actifs.
+
+`low` invoque `fetch_url` par défaut lorsqu&#39;un prompt mentionne une URL. Transmettez une surcharge partielle de `web_search` et `fetch_url` s&#39;exécutera malgré tout :
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input=(
+        "Read https://docs.perplexity.ai/docs/agent-api/presets "
+        "and list the preset names on that page."
+    ),
+    tools=[{
+        "type": "web_search",
+        "max_tokens": 6000,
+        "max_tokens_per_page": 1200,
+    }],
+)
+
+print("model:", response.model)
+print("tools ran:", list(response.usage.tool_calls_details.keys()))
+```
+
+Exécution réelle du 19 août 2026 avec `perplexityai==0.43.3` :
+
+```text theme={null}
+model: openai/gpt-5.6-luna
+tools ran: ['fetch_url']
+```
+
+La requête a ajusté `web_search`, mais c&#39;est `fetch_url` qui s&#39;est réellement exécuté, car le prompt demandait de lire une URL et `fetch_url` est l&#39;outil dédié à cette tâche. La preuve se trouve dans `usage.tool_calls_details` : `fetch_url` y apparaît alors que la requête n&#39;a jamais transmis d&#39;entrée `fetch_url`. C&#39;est ce qu&#39;on appelle la fusion d&#39;outils. Pour configurer également `fetch_url`, ajoutez une entrée `fetch_url` dans `tools`, aux côtés de `web_search`.
+
+<div id="put-both-moves-together-an-evidence-based-rollout-decision">
+  ## Combiner les deux approches : une décision de déploiement fondée sur des preuves
+</div>
+
+Réunissons ces concepts. Imaginons que le responsable des performances d&#39;un service limité par le CPU doive décider s&#39;il convient de tester la version *free-threaded* de Python 3.14. `low` constitue une bonne base de départ, mais cette tâche exige davantage de marge de raisonnement (une surcharge) et un contexte plus riche, issu de deux pages techniques précises (une fusion d&#39;outils).
+
+```python theme={null}
+from perplexity import Perplexity
+
+client = Perplexity()
+
+response = client.responses.create(
+    preset="low",
+    input=(
+        "You are the performance lead for a CPU-bound fraud-scoring service. "
+        "The team proposes piloting Python 3.14's free-threaded build in "
+        "production. Create an adoption brief of at most 450 words with exactly "
+        "these Markdown headings: ## Decision, ## Three technical risks, "
+        "## Five benchmark gates, and ## Two stop conditions. Make each list "
+        "match the number in its heading. For every risk, separate the "
+        "documented behavior from its implication for this service. Use only "
+        "the sources allowed by the web_search tool. Cite factual claims inline "
+        "using numeric result IDs, one source per bracket, like [1][2]. Never "
+        "invent citation IDs. Do not include shell commands."
+    ),
+    max_steps=8,
+    tools=[{
+        "type": "web_search",
+        "search_context_size": "high",
+        "filters": {
+            "search_domain_filter": [
+                "docs.python.org/3.14/whatsnew/3.14.html",
+                "docs.python.org/3/howto/free-threading-python.html",
+            ],
+        },
+    }],
+)
+
+print(response.output_text)
+
+print("\n--- Observed run ---")
+print("model:      ", response.model)
+print("status:     ", response.status)
+print("tools:      ", response.usage.tool_calls_details)
+print("total cost: $", response.usage.cost.total_cost)
+```
+
+Chaque élément de l&#39;appel a un rôle précis :
+
+| Aspect                                                                                      | Fourni par                                                   |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Modèle maintenu, prompt système, raisonnement, valeurs par défaut et outils non répertoriés | Preset `low`                                                 |
+| Tâche applicative et contrat de sortie                                                      | `input`                                                      |
+| Marge de raisonnement supplémentaire                                                        | Surcharge `max_steps=8`                                      |
+| Extraction de preuves plus approfondie                                                      | Fusion d&#39;outils `search_context_size="high"`             |
+| Politique de sources fiables                                                                | Fusion d&#39;outils `search_domain_filter` au niveau des URL |
+| Preuves collectées à l&#39;exécution                                                        | Métadonnées de la réponse                                    |
+
+Une exécution réelle représentative, le 19 août 2026 avec `perplexityai==0.43.3`, a produit ce résumé (`response.output_text`) :
+
+```markdown theme={null}
+## Décision
+
+N'expérimenter la version « free-threaded » de Python 3.14 en production qu'en tant que canari au périmètre strictement délimité, et non comme environnement d'exécution par défaut. Python 3.14 prend officiellement en charge le free-threading, mais celui-ci reste optionnel : la compatibilité des extensions tierces et la montée en charge propre à chaque charge de travail demeurent des incertitudes majeures. [1][2] Exiger un chemin de retour arrière vers une version avec GIL, des contrôles de capacité identiques et les seuils de performance ci-dessous avant d'élargir le trafic.
+
+## Trois risques techniques
+
+1. **Comportement documenté :** l'exécution free-threaded ajoute une surcharge en mono-thread : environ 1 à 8 % sur `pyperformance`, selon la plateforme et le matériel. [2] **Implication :** une requête de détection de fraude essentiellement séquentielle en Python peut devenir plus lente ou consommer davantage de CPU, même si le débit multithread s'améliore.
+
+2. **Comportement documenté :** certaines extensions C ne sont pas prêtes pour le fonctionnement free-threaded et peuvent réactiver automatiquement le GIL à l'importation ; un avertissement est alors émis. [2] **Implication :** les workers du service, supposés parallèles, pourraient se sérialiser silencieusement, rendant trompeurs les résultats de débit et de latence de queue. Auditer chaque dépendance et interrompre le pilote si le GIL est réactivé de façon inattendue.
+
+3. **Comportement documenté :** les conteneurs intégrés offrent des protections proches du comportement de l'ère du GIL, mais les itérateurs partagés ne sont généralement pas thread-safe, et l'accès concurrent aux frames peut faire planter l'interpréteur. [2] **Implication :** les hypothèses existantes du type « sûr grâce au GIL » dans l'extraction de caractéristiques, la mise en cache ou la plomberie des modèles peuvent engendrer des accès concurrents, des résultats corrompus ou des plantages de processus. Considérer que tout état mutable partagé exige une synchronisation explicite.
+
+## Cinq seuils de performance
+
+1. **Exactitude :** rejouer un trafic représentatif de la production sur la version avec GIL ; exiger des décisions de fraude, des scores, des classifications d'erreurs et des enregistrements d'audit identiques.
+
+2. **Débit :** à l'allocation de cœurs cible et avec un nombre de threads réaliste, exiger au moins 1,20x de requêtes/seconde en régime soutenu par rapport à la version avec GIL.
+
+3. **Latence :** aux p50, p95 et p99 en charge de pointe, n'accepter aucune régression supérieure à 5 %, sans aucun objectif de niveau de service manqué.
+
+4. **Efficacité CPU :** exiger au moins 10 % de secondes-CPU en moins par requête scorée à trafic égal ; mesurer séparément la montée en charge à mesure que le nombre de workers augmente, car le free-threading ne profite pas automatiquement à tous les programmes. [2]
+
+5. **Sûreté opérationnelle :** effectuer un test d'endurance de 24 heures avec les versions de dépendances de production ; exiger zéro plantage, interblocage, accès concurrent problématique, avertissement inattendu de réactivation du GIL, ou croissance mémoire au-delà du budget convenu pour la version avec GIL. Les versions free-threaded consomment généralement plus de mémoire. [2]
+
+## Deux conditions d'arrêt
+
+1. **Retour arrière immédiat :** arrêter le pilote et revenir à la version avec GIL si l'exactitude diffère, si le SLO est enfreint, si un plantage ou un interblocage survient, ou si une dépendance réactive le GIL dans le chemin de production.
+
+2. **Abandon après le pilote :** ne pas dépasser le périmètre du canari si l'un des seuils de performance échoue, en particulier si les gains de débit ne compensent pas la surcharge mono-thread documentée, ou si le coût en mémoire et en capacité dépasse le budget approuvé.
+```
+
+Et ce bloc d&#39;exécution observée :
+
+```text theme={null}
+model:       openai/gpt-5.6-luna
+status:      completed
+tools:       {'search_web': ToolCallDetailsOutput(invocation=2)}
+total cost:  $0.00672
+```
+
+La note de synthèse comptait 410 mots, respectait l&#39;ensemble des titres et du nombre d&#39;éléments de liste demandés, utilisait des citations numériques valides et s&#39;appuyait uniquement sur les deux pages officielles Python autorisées. Des vérifications ponctuelles ont confirmé ses affirmations sur l&#39;exécution parallèle, la réactivation du GIL déclenchée par les extensions, la sûreté des itérateurs, la prise en charge officielle de Python 3.14 et la perte de performance documentée en mono-thread.
+
+Les résultats varient d&#39;une exécution à l&#39;autre. Les recommandations de déploiement générées restent une ébauche : validez les identifiants de citation à partir des résultats de recherche de la réponse et relisez les recommandations à fort impact avant de les appliquer en production.
+
+<div id="inspect-what-actually-ran">
+  ## Inspecter ce qui a réellement été exécuté
+</div>
+
+Il vous faut un moyen de vérifier ce que l&#39;API a réellement renvoyé. Consultez `response.model` pour le modèle sous-jacent, `response.usage.tool_calls_details` pour les outils qui ont été exécutés et `response.usage.cost.total_cost` pour le montant facturé. La réponse n&#39;expose ni le prompt système effectif, ni `max_steps`, ni le raisonnement, ni l&#39;ensemble complet des outils hérités : considérez donc cela comme l&#39;inspection de l&#39;exécution observée, et non de la configuration du preset.
+
+```python theme={null}
+def inspect(preset: str, prompt: str) -> None:
+    response = client.responses.create(preset=preset, input=prompt)
+    print(f"preset={preset}")
+    print(f"  model:       {response.model}")
+    print(f"  status:      {response.status}")
+    print(f"  invocations: {response.usage.tool_calls_details}")
+    print(f"  total_cost:  ${response.usage.cost.total_cost}")
+
+inspect("low", "Summarize the current Perplexity Agent API pricing page.")
+```
+
+Vos chiffres seront différents. Exécution réelle du 19 août 2026 avec `perplexityai==0.43.3` :
+
+```text theme={null}
+preset=low
+  model:       openai/gpt-5.6-luna
+  status:      completed
+  invocations: {'fetch_url': ToolCallDetailsOutput(invocation=1), 'search_web': ToolCallDetailsOutput(invocation=1)}
+  total_cost:  $0.01812
+```
+
+Inspectez ce qui a réellement été exécuté pour toute requête dont l&#39;exactitude ou le coût est critique. Vous pouvez ainsi voir quel modèle a traité l&#39;appel, quels outils ont été exécutés et le coût de l&#39;appel.
+
+<div id="summary">
+  ## Résumé
+</div>
+
+Les presets vous offrent une configuration Agent API maintenue que vous pouvez appeler par son nom. Surchargez un champ pour ne modifier qu&#39;un seul paramètre sans perdre les autres valeurs par défaut. Fusionnez les options d&#39;un outil pour l&#39;ajuster tout en conservant les autres outils disponibles du preset. Consultez `response.model` et `response.usage.tool_calls_details` pour inspecter vos appels.
+
+<div id="resources">
+  ## Ressources
+</div>
+
+* [Presets de l&#39;Agent API](https://docs.perplexity.ai/docs/agent-api/presets)
+* [Démarrage rapide de l&#39;Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart)
+* [Web Search](https://docs.perplexity.ai/docs/agent-api/tools/web-search)
+* [Tarifs de la Perplexity API](https://docs.perplexity.ai/docs/getting-started/pricing)

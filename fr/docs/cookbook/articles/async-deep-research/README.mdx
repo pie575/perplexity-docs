@@ -1,0 +1,401 @@
+---
+title: "Workflows de recherche approfondie"
+description: "Utiliser le preset medium de l'Agent API pour des tâches de recherche approfondie en plusieurs étapes — usage synchrone, traitement par lots en parallèle, exploitation des résultats et patterns de production"
+---
+
+Ce guide explique comment utiliser le preset `medium` de l&#39;Agent API pour des tâches de recherche approfondie en plusieurs étapes. La recherche approfondie effectue une exploration web étendue, en suivant des chaînes de sources et en synthétisant des réponses détaillées. Vous apprendrez à exécuter des requêtes de recherche approfondie, à exploiter les résultats, à gérer les requêtes de longue durée et à mettre en place des workflows de recherche par lots.
+
+<Info>
+  Le preset `medium` de l&#39;Agent API effectue une recherche web en plusieurs étapes, en suivant des chaînes de sources et en synthétisant des réponses complètes. Il sélectionne automatiquement le meilleur modèle et configure les outils adaptés à la recherche approfondie. Pour en savoir plus sur les presets, consultez la documentation [Presets de l&#39;Agent API](/fr/docs/agent-api/presets).
+</Info>
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+Installez le SDK Perplexity :
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+Si vous n&#39;avez pas encore d&#39;API key :
+
+<Card title="Obtenez votre API key Perplexity" icon="key" arrow="True" horizontal="True" iconType="solid" cta="Cliquez ici" href="https://perplexity.ai/account/api">
+  Rendez-vous dans l&#39;onglet **API Keys** du portail API et générez une nouvelle clé.
+</Card>
+
+Exportez ensuite votre API key dans une variable d&#39;environnement :
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="basic-deep-research">
+  ## Recherche approfondie de base
+</div>
+
+Utilisez le preset `medium` pour les requêtes de recherche exhaustives.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="medium",
+      input=(
+          "Provide a comprehensive analysis of the current state of nuclear fusion research. "
+          "Cover the main approaches (tokamak, stellarator, inertial confinement, laser-driven), "
+          "key milestones achieved in the past 2 years, major private companies involved, "
+          "and realistic timelines for commercial fusion power."
+      ),
+  )
+
+  print(f"Model: {response.model}")
+  print(f"\n{response.output_text}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      preset: "medium",
+      input: "Provide a comprehensive analysis of the current state of nuclear fusion research. Cover the main approaches (tokamak, stellarator, inertial confinement, laser-driven), key milestones achieved in the past 2 years, major private companies involved, and realistic timelines for commercial fusion power.",
+  });
+
+  console.log(`Model: ${response.model}`);
+  console.log(`\n${response.output_text}`);
+  ```
+
+  ```bash curl theme={null}
+  curl "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "medium",
+      "input": "Provide a comprehensive analysis of the current state of nuclear fusion research."
+    }'
+  ```
+</CodeGroup>
+
+<Tip>
+  Le preset `medium` sélectionne automatiquement le meilleur modèle et configure les outils nécessaires à une recherche en plusieurs étapes. Inutile de préciser un modèle ou des outils lorsque vous utilisez des presets.
+</Tip>
+
+<div id="processing-deep-research-results">
+  ## Traitement des résultats de recherche approfondie
+</div>
+
+Extrayez et mettez en forme les éléments clés d&#39;une réponse de recherche approfondie.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def deep_research(query: str) -> dict:
+      """Exécute une requête de recherche approfondie et en extrait des résultats structurés."""
+      print(f"Researching: {query[:80]}...")
+
+      response = client.responses.create(
+          preset="medium",
+          input=query,
+      )
+
+      content = response.output_text
+      usage = response.usage
+
+      return {
+          "content": content,
+          "model": response.model,
+          "tokens": {
+              "input": usage.input_tokens if usage else 0,
+              "output": usage.output_tokens if usage else 0,
+          },
+          "word_count": len(content.split()),
+      }
+
+
+  if __name__ == "__main__":
+      output = deep_research(
+          "What is the current state of solid-state battery technology? "
+          "Cover the leading companies, technical challenges remaining, "
+          "and expected timeline for mass production in EVs."
+      )
+      print(f"\nModel: {output['model']}")
+      print(f"Words: {output['word_count']}")
+      print(f"Tokens: {output['tokens']['input']} in, {output['tokens']['output']} out")
+      print(f"\n{'='*60}\n")
+      print(output["content"][:2000])
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  async function deepResearch(query: string) {
+      console.log(`Researching: ${query.slice(0, 80)}...`);
+
+      const response = await client.responses.create({
+          preset: "medium",
+          input: query,
+      });
+
+      const content = response.output_text;
+      const usage = response.usage;
+
+      return {
+          content,
+          model: response.model,
+          tokens: {
+              input: usage?.input_tokens ?? 0,
+              output: usage?.output_tokens ?? 0,
+          },
+          wordCount: content.split(/\s+/).length,
+      };
+  }
+
+  const output = await deepResearch(
+      "What is the current state of solid-state battery technology? Cover the leading companies, technical challenges remaining, and expected timeline for mass production in EVs."
+  );
+
+  console.log(`\nModel: ${output.model}`);
+  console.log(`Words: ${output.wordCount}`);
+  console.log(`Tokens: ${output.tokens.input} in, ${output.tokens.output} out`);
+  console.log(`\n${"=".repeat(60)}\n`);
+  console.log(output.content.slice(0, 2000));
+  ```
+</CodeGroup>
+
+<div id="deep-research-with-domain-filtering">
+  ## Recherche approfondie avec filtrage par domaine
+</div>
+
+Combinez la recherche approfondie et des filtres de domaine pour obtenir des recherches ciblées, appuyées sur des sources fiables.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # Recherche approfondie limitée aux sources gouvernementales et universitaires
+  response = client.responses.create(
+      model="openai/gpt-5.2",
+      input=(
+          "Analyze the current regulatory landscape for AI in healthcare. "
+          "Cover FDA guidance, EU AI Act implications, and recent enforcement actions."
+      ),
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": [".gov", ".europa.eu", "who.int", "nature.com", ".edu"],
+          },
+      }],
+      instructions=(
+          "Conduct thorough research using only government and academic sources. "
+          "Provide specific regulatory references, dates, and policy details."
+      ),
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.2",
+      input: "Analyze the current regulatory landscape for AI in healthcare. Cover FDA guidance, EU AI Act implications, and recent enforcement actions.",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: [".gov", ".europa.eu", "who.int", "nature.com", ".edu"],
+          },
+      }],
+      instructions: "Conduct thorough research using only government and academic sources. Provide specific regulatory references, dates, and policy details.",
+  });
+
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="batch-research-with-concurrency">
+  ## Recherche par lots avec exécution concurrente
+</div>
+
+Exécutez plusieurs requêtes de recherche approfondie en parallèle grâce à asyncio et au SDK Perplexity.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import time
+  from perplexity import AsyncPerplexity
+
+
+  async def single_research(client: AsyncPerplexity, query: str) -> dict:
+      """Exécute une seule requête de recherche approfondie."""
+      start = time.time()
+      try:
+          response = await client.responses.create(
+              preset="medium",
+              input=query,
+          )
+          return {
+              "query": query,
+              "content": response.output_text,
+              "model": response.model,
+              "elapsed": time.time() - start,
+          }
+      except Exception as e:
+          return {"query": query, "error": str(e), "elapsed": time.time() - start}
+
+
+  async def batch_research(queries: list[str], max_concurrent: int = 3) -> list[dict]:
+      """Exécute plusieurs requêtes de recherche approfondie en limitant le nombre d'exécutions concurrentes."""
+      semaphore = asyncio.Semaphore(max_concurrent)
+
+      async def limited_research(client, query):
+          async with semaphore:
+              return await single_research(client, query)
+
+      async with AsyncPerplexity() as client:
+          tasks = [limited_research(client, q) for q in queries]
+          return await asyncio.gather(*tasks)
+
+
+  if __name__ == "__main__":
+      queries = [
+          "What are the latest advances in room-temperature superconductors?",
+          "What is the current state of quantum error correction?",
+          "What are the most promising approaches to carbon capture and storage?",
+      ]
+
+      print(f"Starting batch research: {len(queries)} queries\n")
+      results = asyncio.run(batch_research(queries, max_concurrent=3))
+
+      for r in results:
+          status = "OK" if "content" in r else f"FAILED ({r.get('error')})"
+          word_count = len(r.get("content", "").split()) if "content" in r else 0
+          print(f"  [{r['elapsed']:.0f}s] {r['query'][:60]}... → {status} ({word_count} words)")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  interface ResearchResult {
+    query: string;
+    content?: string;
+    model?: string;
+    elapsed: number;
+    error?: string;
+  }
+
+  const client = new Perplexity();
+
+  async function singleResearch(query: string): Promise<ResearchResult> {
+    const start = Date.now();
+    try {
+      const response = await client.responses.create({
+        preset: 'medium',
+        input: query,
+      });
+      return {
+        query,
+        content: response.output_text,
+        model: response.model,
+        elapsed: (Date.now() - start) / 1000,
+      };
+    } catch (e) {
+      return { query, error: String(e), elapsed: (Date.now() - start) / 1000 };
+    }
+  }
+
+  async function batchResearch(queries: string[], maxConcurrent = 3) {
+    const results: ResearchResult[] = [];
+    const queue = [...queries];
+    async function worker() {
+      while (queue.length) {
+        const q = queue.shift()!;
+        results.push(await singleResearch(q));
+      }
+    }
+    await Promise.all(
+      Array.from({ length: maxConcurrent }, () => worker())
+    );
+    return results;
+  }
+
+  const queries = [
+    'What are the latest advances in room-temperature superconductors?',
+    'What is the current state of quantum error correction?',
+    'What are the most promising approaches to carbon capture and storage?',
+  ];
+
+  console.log(`Starting batch research: ${queries.length} queries\n`);
+  const results = await batchResearch(queries, 3);
+
+  for (const r of results) {
+    const status = r.content ? 'OK' : `FAILED (${r.error})`;
+    const words = r.content ? r.content.split(/\s+/).length : 0;
+    console.log(`  [${r.elapsed.toFixed(0)}s] ${r.query.slice(0, 60)}... → ${status} (${words} words)`);
+  }
+  ```
+</CodeGroup>
+
+<Warning>
+  Les requêtes de recherche approfondie consomment d&#39;importantes ressources de calcul. Limitez-vous à 3 à 5 requêtes simultanées afin de rester dans les limites de débit et d&#39;éviter le throttling. Consultez vos [limites de débit](/fr/docs/admin/rate-limits-usage-tiers) pour connaître les seuils exacts.
+</Warning>
+
+<div id="tips-and-best-practices">
+  ## Conseils et bonnes pratiques
+</div>
+
+1. **Utilisez le preset `medium`** pour l&#39;intégration la plus simple. Il sélectionne automatiquement le meilleur modèle et configure les outils.
+
+2. **Combinez-le avec des filtres de domaine** lorsque vous avez besoin de sources faisant autorité. Utilisez `search_domain_filter` pour restreindre la recherche à des domaines précis.
+
+3. **Utilisez `instructions`** pour orienter la profondeur et le champ de la recherche. Précisez les aspects à couvrir.
+
+4. **Limitez la concurrence.** Lancer trop de requêtes de recherche approfondie en parallèle peut déclencher des limites de débit. Utilisez un sémaphore pour plafonner le nombre de requêtes simultanées à 3-5.
+
+5. **Utilisez le client asynchrone pour les workflows par lots.** `AsyncPerplexity` permet d&#39;envoyer des requêtes simultanées sans blocage.
+
+6. **Définissez `max_output_tokens`** pour maîtriser les coûts lorsque vous préférez des synthèses courtes plutôt que des rapports exhaustifs.
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Presets de l'Agent API" icon="settings" href="/fr/docs/agent-api/presets">
+    Référence complète des presets disponibles, dont medium.
+  </Card>
+
+  <Card title="Démarrage rapide de l'Agent API" icon="rocket" href="/fr/docs/agent-api/quickstart">
+    Démarrez avec l&#39;Agent API pour accéder à plusieurs fournisseurs et outils.
+  </Card>
+
+  <Card title="Filtrage par domaine" icon="filter" href="/fr/docs/cookbook/articles/search-domain-filtering/README">
+    Contrôlez les domaines inclus ou exclus de la recherche.
+  </Card>
+
+  <Card title="Limites de débit" icon="gauge-max" href="/fr/docs/admin/rate-limits-usage-tiers">
+    Comprenez les limites de débit applicables aux workflows de recherche et par lots.
+  </Card>
+</CardGroup>

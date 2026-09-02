@@ -1,0 +1,228 @@
+---
+title: "Perplexity avec LangChain"
+description: "Utilisez l'Agent API de Perplexity depuis LangChain et LangGraph."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+Si votre intégration LangChain appelle toujours Sonar Chat Completions, elle cessera de fonctionner à la fin de la prise en charge de Sonar. Redirigez-la plutôt vers l&#39;Agent API.
+
+[LangChain](https://www.langchain.com) fournit des modèles de chat et des agents. [LangGraph](https://www.langchain.com/langgraph) y ajoute des workflows à états. Cette page présente deux façons d&#39;appeler l&#39;[Agent API](/fr/docs/agent-api/quickstart) de Perplexity depuis l&#39;un ou l&#39;autre, toutes deux reposant sur Perplexity de bout en bout.
+
+<Info>
+  Deux approches d&#39;intégration, toutes deux basées sur l&#39;Agent API de Perplexity :
+
+  * **`langchain-perplexity`** avec la classe native `ChatPerplexity` et `use_responses_api=True`. Constructeur plus court, aucune URL de base à configurer. C&#39;est l&#39;approche retenue dans les exemples de code ci-dessous. Nécessite `langchain-perplexity` 1.4.1 ou une version ultérieure.
+  * **`langchain-openai`** avec `ChatOpenAI` pointé vers l&#39;URL de base de Perplexity. Fonctionne également aujourd&#39;hui avec `langchain-openai` 1.5.x. Voir [l&#39;approche alternative langchain-openai](#langchain-openai-alternate-path).
+
+  Aucune de ces deux approches n&#39;utilise Sonar Chat Completions.
+</Info>
+
+<div id="installation">
+  ## Installation
+</div>
+
+```bash theme={null}
+pip install -U langchain langchain-perplexity
+```
+
+`langchain` 1.0 ou version ultérieure fournit `create_agent` et installe automatiquement LangGraph. `langchain-perplexity` 1.4.1 ou version ultérieure fournit `ChatPerplexity` avec `use_responses_api=True`.
+
+<div id="api-key-setup">
+  ## Configuration de l&#39;API key
+</div>
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="Obtenir une API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Générez votre API key Perplexity depuis le portail API.
+</Card>
+
+<div id="chat-model">
+  ## Modèle de chat
+</div>
+
+Utilisez `ChatPerplexity` avec `use_responses_api=True` pour rediriger les appels vers l&#39;Agent API de Perplexity. Transmettez l&#39;outil intégré `web_search` pour obtenir des réponses ancrées dans des sources.
+
+<Tip>
+  L&#39;outil intégré `web_search` de Perplexity offre une recherche web ancrée de premier plan. Le modèle l&#39;appelle pour ancrer ses réponses dans des sources en temps réel. Consultez la [documentation de l&#39;outil `web_search`](/fr/docs/agent-api/tools/web-search) pour connaître les filtres et les options disponibles.
+</Tip>
+
+```python theme={null}
+from langchain_perplexity import ChatPerplexity
+
+llm = ChatPerplexity(
+    use_responses_api=True,
+    model_kwargs={
+        "preset": "medium",
+        "tools": [{"type": "web_search"}],
+    },
+)
+
+response = llm.invoke("What did Perplexity announce most recently?")
+print(response.text)
+```
+
+`response.text` est une propriété. N&#39;appelez pas `response.text()`.
+
+<div id="selecting-a-model-or-preset">
+  ### Sélectionner un modèle ou un preset
+</div>
+
+`ChatPerplexity(use_responses_api=True)` envoie l&#39;appel à l&#39;Agent API : vous avez donc deux façons de définir le routage.
+
+* Passer un `preset` via `model_kwargs`. Les presets disponibles sont `"fast"`, `"low"`, `"medium"`, `"high"`, `"xhigh"` et `"wide-research"`. Le preset retient le modèle actuellement recommandé ainsi que les outils par défaut associés à ce niveau. Consultez [Presets](/fr/docs/agent-api/presets) pour la liste complète.
+* Définir explicitement `model=` sur un modèle de l&#39;Agent API, par exemple `openai/gpt-5.6-sol`. Consultez [Models de l&#39;Agent API](/fr/docs/agent-api/models).
+
+Les deux approches se combinent : un `model=` explicite remplace le modèle par défaut du preset, tout en conservant les autres valeurs par défaut de ce dernier.
+
+<div id="passing-perplexity-built-in-tools-and-options">
+  ### Transmettre les outils intégrés et les options de Perplexity
+</div>
+
+Acheminez les outils intégrés de Perplexity (`web_search`, `fetch_url`) et les champs propres à l&#39;Agent API (comme `preset`) via `model_kwargs`. Tout ce dont l&#39;Agent API a besoin reste ainsi regroupé au même endroit.
+
+<Info>
+  `ChatPerplexity` lit `PERPLEXITY_API_KEY` dans l&#39;environnement et cible directement l&#39;Agent API de Perplexity : vous n&#39;avez donc pas à définir `base_url`.
+</Info>
+
+<div id="filtering-web-search">
+  ### Filtrer la recherche web
+</div>
+
+Les filtres de recherche web se définissent dans un objet `filters` de la configuration de l&#39;outil `web_search` :
+
+```python theme={null}
+llm = ChatPerplexity(
+    use_responses_api=True,
+    model_kwargs={
+        "preset": "medium",
+        "tools": [
+            {
+                "type": "web_search",
+                "filters": {
+                    "search_domain_filter": ["docs.perplexity.ai", "developer.mozilla.org"],
+                    "search_recency_filter": "week",
+                },
+            }
+        ],
+    },
+)
+```
+
+Consultez la [documentation de l&#39;outil `web_search`](/fr/docs/agent-api/tools/web-search) pour la référence complète des filtres, y compris les règles de liste d&#39;autorisation et de liste de blocage de domaines ainsi que les filtres de plage de dates.
+
+<Warning>
+  Lorsque vous utilisez `web_search`, prévoyez suffisamment de marge dans le `max_output_tokens` de premier niveau pour la boucle d&#39;outils et la réponse finale. Un budget très restreint peut être épuisé avant même que le modèle ne rédige sa réponse.
+</Warning>
+
+<div id="langchain-agent">
+  ## Agent LangChain
+</div>
+
+Créez un agent avec `create_agent` depuis `langchain.agents`. N&#39;utilisez pas `langgraph.prebuilt.create_react_agent` : cette approche est obsolète. Transmettez les outils intégrés de Perplexity dans la liste `tools` de l&#39;agent.
+
+<Tip>
+  `web_search` offre à l&#39;agent la recherche web de Perplexity, la meilleure de sa catégorie, lui permettant d&#39;exploiter des sources en direct et de raisonner à partir d&#39;elles lorsqu&#39;une requête l&#39;exige. Pour en savoir plus, consultez la [documentation de l&#39;outil `web_search`](/fr/docs/agent-api/tools/web-search).
+</Tip>
+
+```python theme={null}
+from langchain.agents import create_agent
+from langchain_perplexity import ChatPerplexity
+
+llm = ChatPerplexity(
+    use_responses_api=True,
+    model_kwargs={"preset": "medium"},
+)
+
+agent = create_agent(llm, tools=[{"type": "web_search"}])
+result = agent.invoke(
+    {"messages": [{"role": "user", "content": "Summarize today's top AI news."}]}
+)
+print(result["messages"][-1].text)
+```
+
+Pour les agents, placez tous les outils que l&#39;agent doit utiliser dans la liste `tools` de `create_agent`, y compris les outils intégrés de Perplexity et vos éventuels outils locaux :
+
+```python theme={null}
+agent = create_agent(llm, tools=[{"type": "web_search"}, my_local_tool])
+```
+
+LangChain lie la liste `tools` de l&#39;agent au modèle : définissez donc vos outils à cet endroit plutôt que dans `model_kwargs`.
+
+<div id="reading-sources">
+  ## Lire les sources
+</div>
+
+Pour lire des `search_results` structurés, avec titres et URL, appelez directement l&#39;Agent API avec le [SDK Perplexity](/fr/docs/sdk/overview) :
+
+```python theme={null}
+import os
+
+from perplexity import Perplexity
+
+client = Perplexity()
+
+response = client.responses.create(
+    model="openai/gpt-5.6-sol",
+    input="What did Perplexity announce most recently?",
+    tools=[{"type": "web_search"}],
+)
+
+for item in response.output:
+    if item.type == "search_results":
+        for source in item.results:
+            print(source.title, "-", source.url)
+```
+
+Consultez [les modèles de l&#39;Agent API](/fr/docs/agent-api/models) pour connaître les modèles pris en charge et leurs tarifs.
+
+<div id="langchain-openai-alternate-path">
+  ## Variante avec langchain-openai
+</div>
+
+Si vous utilisez déjà `langchain-openai`, faites pointer `ChatOpenAI` vers l&#39;URL de base `/v1` de Perplexity, définissez `use_responses_api=True` et transmettez l&#39;outil intégré `web_search` via `model_kwargs`.
+
+```python theme={null}
+import os
+
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+    base_url="https://api.perplexity.ai/v1",
+    api_key=os.environ["PERPLEXITY_API_KEY"],
+    model="openai/gpt-5.6-sol",
+    use_responses_api=True,
+    model_kwargs={"tools": [{"type": "web_search"}]},
+    extra_body={"preset": "medium"},
+)
+
+response = llm.invoke("What did Perplexity announce most recently?")
+print(response.text)
+```
+
+<Info>
+  Avec `ChatOpenAI`, transmettez les outils intégrés de Perplexity via `model_kwargs={"tools": [...]}` et les champs spécifiques à l&#39;Agent API tels que `preset` via `extra_body`. Le SDK OpenAI sous-jacent les rejette lorsqu&#39;ils sont passés comme arguments nommés inconnus de premier niveau.
+</Info>
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Démarrage rapide avec l'Agent API" icon="bolt" href="/fr/docs/agent-api/quickstart">
+    Développez avec les modèles, les outils et les presets de l&#39;Agent API.
+  </Card>
+
+  <Card title="Modèles de l'Agent API" icon="sparkles" href="/fr/docs/agent-api/models">
+    Modèles disponibles et tarifs.
+  </Card>
+
+  <Card title="Documentation LangGraph" icon="globe" href="https://www.langchain.com/langgraph">
+    Créez des agents à état avec LangGraph.
+  </Card>
+</CardGroup>

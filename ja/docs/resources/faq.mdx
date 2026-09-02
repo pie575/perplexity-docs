@@ -1,0 +1,209 @@
+---
+title: "よくある質問"
+description: "モデル、出力と機能、検索の挙動、課金と制限、エラー、データプライバシー、サポートなど、Perplexity API に関するよくある質問への回答。"
+---
+
+<div id="models">
+  ## モデル
+</div>
+
+<AccordionGroup>
+  <Accordion title="現在、APIはWebブラウジングに対応していますか？">
+    はい。Agent APIには組み込みの[Web検索ツール](/ja/docs/agent-api/tools/web-search)が用意されており、リサーチ向けの[preset](/ja/docs/agent-api/presets)ではデフォルトで検索が有効になっています。
+  </Accordion>
+
+  <Accordion title="各モデルのコンテキストウィンドウはどれくらいですか？">
+    コンテキストウィンドウのサイズはモデルによって異なります。[Agent APIのモデルページ](/ja/docs/agent-api/models)および、そこからリンクされているプロバイダーのドキュメントをご覧ください。
+  </Accordion>
+
+  <Accordion title="ファインチューニングに対応していますか？">
+    現在、ファインチューニングには対応していません。
+  </Accordion>
+
+  <Accordion title="モデルのバージョン管理と提供終了はどのように行われますか？">
+    モデルの提供を終了する際は、推奨される代替モデルとあわせて[変更履歴](/ja/docs/resources/changelog)でお知らせします。影響を避けるため、デフォルト値に頼らず、リクエストでモデルIDを明示的に指定し、変更履歴で提供終了の告知を確認するようにしてください。現在利用可能なモデルの一覧は[Agent APIのモデル](/ja/docs/agent-api/models)ページに掲載しています。
+  </Accordion>
+</AccordionGroup>
+
+<div id="output-capabilities">
+  ## 出力と機能
+</div>
+
+<AccordionGroup>
+  <Accordion title="構造化された（JSON）出力を取得できますか？">
+    はい。`text.format` フィールドを使用すると、レスポンスを JSON スキーマに従わせることができます。例については [構造化出力](/ja/docs/agent-api/output-control#structured-outputs) を参照してください。
+  </Accordion>
+
+  <Accordion title="APIはストリーミングレスポンスに対応していますか？">
+    はい。`stream: true` を渡すと、結果がすべて揃うのを待たずに、生成されるそばからレスポンスを逐次受け取れます。[ストリーミングレスポンス](/ja/docs/agent-api/output-control#streaming-responses) を参照してください。[公式SDK](/ja/docs/sdk/overview) はストリーミングを直接扱えるようになっています。
+  </Accordion>
+
+  <Accordion title="APIはツール呼び出しや関数呼び出しに対応していますか？">
+    はい。Agent API は組み込みツールとして、[Web検索](/ja/docs/agent-api/tools/web-search)、[fetch URL content](/ja/docs/agent-api/tools/fetch-url-content)、[people search](/ja/docs/agent-api/tools/people-search)、[finance search](/ja/docs/agent-api/tools/finance-search)、および [コード sandbox](/ja/docs/agent-api/tools/sandbox) を提供します。モデル はリクエストに回答する過程で、これらをいつ呼び出すかを自ら判断します。
+  </Accordion>
+
+  <Accordion title="APIはどの程度OpenAI互換ですか？">
+    Perplexity API は、OpenAI の chat completions エンドポイントと幅広く互換性を持つよう設計されています。`id`、`model`、`usage` といったフィールドを含む類似の構造を採用し、`model`、`messages`、`stream` などの同等のパラメータをサポートしています。
+
+    **標準的な OpenAI レスポンスとの主な相違点は次のとおりです:**
+
+    * **レスポンスオブジェクトの構造:**
+      * OpenAI のレスポンスは通常、`object` の値が `"chat.completion"` で `created` タイムスタンプを持ちますが、Perplexity のレスポンスは `object: "response"` と `created_at` フィールドを使用します。
+      * `choices` 配列の代わりに、レスポンスの内容は詳細なメッセージオブジェクトを含む `output` 配列として提供されます。
+
+    * **メッセージの詳細:**
+      * 出力内の各メッセージには、`type` (通常は `"message"`) 、一意の `id`、`status` が含まれます。
+      * 実際のテキストは `content` 配列の中にネストされており、この配列には `type`、`text`、および補足情報を示す `annotations` 配列を持つオブジェクトが含まれます。
+
+    * **追加フィールド:**
+      * Perplexity の API レスポンスは、標準的な OpenAI レスポンスには存在しない追加のメタ情報 (`status`、`error`、`instructions`、`max_output_tokens` など) を返します。
+      * `usage` フィールドも異なり、入力 トークン と出力 トークン の詳細な内訳 (`input_tokens_details` や `output_tokens_details` などのフィールドを含む) を提供します。
+
+    これらの相違点は、OpenAI の API 設計との幅広い互換性を保ちながら、機能の強化と追加のコンテキストを提供することを目的としています。
+  </Accordion>
+
+  <Accordion title="Deep Researchの推論トークンは回答内のCoTと同じものですか？">
+    Deep Research における推論 トークン は、回答内の CoT とは少し異なります。これらの トークン は、CoT によって最終的な出力を生成する前段階で、調査資料を読み解いて推論するために使用されます。
+  </Accordion>
+</AccordionGroup>
+
+<div id="search-results">
+  ## 検索と結果
+</div>
+
+<AccordionGroup>
+  <Accordion title="APIの結果がUIと異なるのはなぜですか？">
+    1. APIはUIと同じ検索システムを使用していますが、設定が異なるため、出力に違いが出ることがあります。
+    2. 同じクエリでも、APIとUIで基盤となるAI モデルが異なる場合があります。
+  </Accordion>
+
+  <Accordion title="APIが提供するインターネットデータへのアクセスは、PerplexityのWebインターフェースと同一ですか？">
+    はい、APIはPerplexityのWebプラットフォームとまったく同じインターネットデータへのアクセスを提供します。
+  </Accordion>
+
+  <Accordion title="APIはコンテンツフィルタリングやSafeSearchを使用していますか？">
+    はい、APIではSafeSearchによるコンテンツフィルタリングがデフォルトで有効になっています。これにより、ポルノなどの不快または不適切な可能性のあるコンテンツを検索結果から除外できます。SafeSearchは検索結果全体に適用される自動フィルターで、より安全な利用体験を実現します。SafeSearchの詳細については、[Wikipediaの公式ページ](https://en.wikipedia.org/wiki/SafeSearch)をご覧ください。
+  </Accordion>
+</AccordionGroup>
+
+<div id="account-billing-limits">
+  ## アカウント、請求、制限
+</div>
+
+<AccordionGroup>
+  <Accordion title="APIの料金はどのように決まりますか？">
+    料金は使用量ベースで、APIごとに異なります。Router APIは各モデルの公表レートに基づくトークン課金で、リクエストごとの手数料はかかりません。Agent APIはプロバイダーの直接レートに基づくトークン課金で上乗せはなく、これに加えてツールの呼び出しごとの手数料が発生します。Search APIはリクエストごとの課金、Embeddingsはトークンごとの課金です。詳細は[料金ページ](/ja/docs/getting-started/pricing)をご覧ください。
+  </Accordion>
+
+  <Accordion title="クレジットの追加や請求の設定はどのように行いますか？">
+    APIクレジットは、APIコンソールの[請求ページ](https://console.perplexity.ai/project/billing)で購入できます。**自動チャージ**を有効にすると、残高が少なくなった際に自動でクレジットが追加され、サービスの中断を防げます。請求を一元化したい場合は、[AWS Marketplace](/ja/docs/resources/aws-marketplace)経由でクレジットを購入することもできます。エンタープライズ調達については[営業チームにお問い合わせ](https://perplexity.typeform.com/to/m3WnMaG6)ください。[利用ティア](/ja/docs/admin/rate-limits-usage-tiers)は、累計購入額の増加に応じて自動的に上がります。
+  </Accordion>
+
+  <Accordion title="次の利用ティアにアップグレードするにはどうすればよいですか？">
+    アカウントを次の利用ティアにアップグレードする唯一の方法は、累計のクレジット購入額を増やすことです。
+
+    各ティアに対応する購入額の基準は次のとおりです。
+
+    | ティア    | クレジット購入額 (累計)  |
+    | ------ | -------------- |
+    | Tier 0 | -              |
+    | Tier 1 | $50            |
+    | Tier 2 | $250           |
+    | Tier 3 | $500           |
+    | Tier 4 | $1000          |
+    | Tier 5 | $5000          |
+  </Accordion>
+
+  <Accordion title="API呼び出し回数にはどのような制限がありますか？">
+    [レート制限はこちら](/ja/docs/admin/rate-limits-usage-tiers)で確認できます。
+  </Accordion>
+
+  <Accordion title="API keyごとの支出・使用量を確認するにはどうすればよいですか？">
+    API keyごとに請求内容を確認する方法をご用意しています。以下の手順で移動してください。
+
+    **Settings &gt; View Dashboard &gt; Invoice history &gt; Invoices**
+
+    任意の請求書をクリックすると、合計請求額の各項目の末尾にコードが表示されます (例: pro (743S)) 。この4文字が、API keyの末尾4文字です。
+  </Accordion>
+</AccordionGroup>
+
+<div id="errors-troubleshooting">
+  ## エラーとトラブルシューティング
+</div>
+
+<AccordionGroup>
+  <Accordion title="401: 認証エラーにはどう対応すればよいですか？">
+    401 エラーコードは、指定された API key が無効である、削除されている、またはクレジットを使い切ったアカウントのものであることを示します。多くの場合、[請求ページ](https://console.perplexity.ai/project/billing)でクレジットを追加購入する必要があります。自動チャージ (auto-top-up) を設定しておけば、この問題を回避できます。
+  </Accordion>
+
+  <Accordion title="429: リクエスト過多エラーはどう処理すればよいですか？">
+    429 はレート制限を超過したことを意味します。レート制限は[使用ティア](/ja/docs/admin/rate-limits-usage-tiers)に応じて引き上げられ、制限値までの短時間のバーストを許容するリーキーバケットアルゴリズムを採用しています。指数バックオフとジッターを用いて再試行し、バッチジョブではバースト容量を活用してください。継続的に高いスループットが必要な場合は、ティアをアップグレードするか、[カスタム制限をリクエスト](https://perplexity.typeform.com/to/yctmfyVT)してください。両 SDK での再試行の例については[エラーハンドリング](/ja/docs/sdk/error-handling)を参照してください。
+  </Accordion>
+
+  <Accordion title="5xx エラーや接続・タイムアウトエラーにはどう対処すればよいですか？">
+    5xx レスポンスは一時的なサーバー側の問題を示し、接続エラーやタイムアウトエラーは通常ネットワーク側の問題を示します。これらは指数バックオフで再試行し、適切なクライアントタイムアウトを設定したうえで、サポートへの問い合わせ時に伝えられるよう `X-Request-ID` レスポンスヘッダーを記録しておいてください。[エラーハンドリングガイド](/ja/docs/sdk/error-handling)では、SDK の例外の種類と復旧パターンを解説しています。
+  </Accordion>
+
+  <Accordion title="API のステータスや障害情報はどこで確認できますか？">
+    現在の API の稼働状況と障害履歴は[システムステータスページ](/ja/docs/resources/status)で確認できます。そこに記載のないエラーが発生している場合は、以下のサポート窓口までご連絡ください。
+  </Accordion>
+</AccordionGroup>
+
+<div id="data-privacy-security">
+  ## データ、プライバシー、セキュリティ
+</div>
+
+<AccordionGroup>
+  <Accordion title="APIを通じて送信されたユーザーデータは、モデルのトレーニングやその他の目的に使用されますか？">
+    当社は以下の種類の情報を収集します。
+
+    **API利用データ:** リクエスト数やトークン数など、課金対象となる利用メタデータを収集します。ご自身の利用状況は、APIコンソールの[請求ページ](https://console.perplexity.ai/project/billing)で確認できます。
+
+    **ユーザーアカウント情報:** アカウント作成時に、お名前、メールアドレス、その他の関連する連絡先情報を収集します。
+
+    APIを通じて送信されたクエリデータは一切保持せず、お客様のデータをトレーニングに使用することもありません。
+  </Accordion>
+
+  <Accordion title="Perplexityの言語モデルはどこでホストされていますか？">
+    当社のコンピュート環境は、北米のAmazon Web Services上でホストされています。デフォルトでは、APIはユーザーのプロンプトデータを一切保持せず (ゼロデイリテンション) 、AIのトレーニングに使用することもありません。
+  </Accordion>
+
+  <Accordion title="APIはどのようなセキュリティおよびコンプライアンス認証を取得していますか？">
+    Perplexityは、**SOC 2 Type II**レポート、**2025年HIPAAギャップ評価**、および**CAIQlite**クラウドセキュリティ評価を保持しています。これらのレポートは、データ処理に関する文書やその他のコンプライアンス文書 (DPAやGDPRに関するリクエスト向けなど) とあわせて、[Perplexity Trust Center](https://trust.perplexity.ai/)から入手できます。概要については[プライバシーとセキュリティ](/ja/docs/resources/privacy-security)をご覧ください。Trust Centerで公開されていない文書については、[お問い合わせ](mailto:api@perplexity.ai)ください。
+  </Accordion>
+</AccordionGroup>
+
+<div id="support-reliability">
+  ## サポートと信頼性
+</div>
+
+<AccordionGroup>
+  <Accordion title="バグ報告はどのように行い、その後どうなりますか？">
+    バグを報告するには、[開発者コミュニティ](https://community.perplexity.ai/)にアクセスし、「Bug Reports」カテゴリに新しい投稿を作成してください。
+
+    お待ちいただきありがとうございます。できるだけ早くご返信いたします。現在、報告件数が多いため回答までに少しお時間をいただく場合がありますが、必ず対応いたしますのでご安心ください。
+  </Accordion>
+
+  <Accordion title="新機能をリクエストするにはどうすればよいですか？">
+    機能リクエストとは、Perplexity API プラットフォームの機能改善や新機能追加に関する提案で、たとえば次のようなものです。
+
+    * 新しい モデル や機能のサポート要望 (例：画像処理、ファインチューニングのオプション)
+    * 新しい API パラメータの要望 (例：追加のフィルタ、検索オプション)
+    * パフォーマンス改善の提案 (例：応答時間の短縮、引用処理の改善)
+    * 既存の API 機能の拡張 (例：ストリーミングの信頼性向上、新しい出力形式の追加)
+
+    ご要望がこれらに該当する場合は、こちらから機能リクエストを送信してください：[Github Feature requests](https://github.com/ppl-ai/api-discussion/issues)
+  </Accordion>
+
+  <Accordion title="API のアップデート情報を把握する最適な方法は何ですか？">
+    新しい開発内容についてはユーザーの皆様にメールでお知らせするとともに、[変更履歴](/ja/docs/resources/changelog)にも掲載しています。
+  </Accordion>
+
+  <Accordion title="Perplexity は稼働率、障害発生頻度、障害時の目標復旧時間などのサービス品質保証を提供していますか？">
+    現時点では保証しておりません。
+  </Accordion>
+
+  <Accordion title="他に質問や問題がある場合">
+    その他の API に関するお問い合わせは、[api@perplexity.ai](mailto:api@perplexity.ai) または [support@perplexity.ai](mailto:support@perplexity.ai) までご連絡ください。[ディスカッションフォーラム](https://github.com/ppl-ai/api-discussion/discussions)へ投稿いただいた場合も、こちらから回答いたします。
+  </Accordion>
+</AccordionGroup>

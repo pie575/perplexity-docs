@@ -1,0 +1,707 @@
+---
+title: "ストリーミング引用のパース"
+description: "Agent API からのストリーミング応答を受信し、チャンクの到着に合わせてリアルタイムに引用を抽出・検証・表示する"
+---
+
+このガイドでは、Agent API からのストリーミング応答を受信し、到着した引用を抽出し、ソース URL を検証して、引用付きの完全な出力を組み立てる方法を説明します。ストリーミングは、応答性の高い UI や長時間実行される検索に欠かせません。応答全体を待たずに、テキストとソースを順次表示できます。
+
+<Info>
+  `fast` プリセット は、引用が豊富な回答を素早く返すよう最適化されています。model はテキスト中に `[1]`、`[2]` のような番号付き参照を挿入し、対応するソース URL は `search_results` 出力アイテムとして届きます。利用可能な プリセット の一覧は [Agent API Presets](/ja/docs/agent-api/presets) のドキュメントを参照してください。
+</Info>
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+SDK をインストールします。
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai openai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai openai
+  ```
+</CodeGroup>
+
+API key をまだお持ちでない場合:
+
+<Card title="Perplexity API Key を取得する" icon="key" arrow="True" horizontal="True" iconType="solid" cta="こちらをクリック" href="https://perplexity.ai/account/api">
+  API Portal の **API Keys** タブに移動し、新しいキーを生成してください。
+</Card>
+
+次に、API key を環境変数としてエクスポートします。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-streaming-citations-work">
+  ## ストリーミング引用のしくみ
+</div>
+
+検索対応のプリセットでAgent APIのレスポンスをストリーミングすると、APIはserver-sent events (SSE) を連続して送信します。流れは次のとおりです。
+
+1. **検索結果** が `response.reasoning.search_results` イベントで届きます (modelが実行した検索ごとに1イベント) 。各ソースのURL、タイトル、スニペットが含まれます。
+2. **コンテンツのチャンク** が、modelのテキスト生成に合わせて `response.output_text.delta` イベントで順次届きます。
+3. **引用参照** が `[1]`、`[2]` のような番号付きマーカーとしてテキスト中に現れ、検索結果の `id` フィールドに対応します。
+
+クライアント側ではテキストを蓄積し、検索結果を収集したうえで、`id` フィールドを使って番号付きの参照をソースのURLにマッピングします。
+
+<Warning>
+  **1つのレスポンスに検索結果のバッチが複数含まれる場合があります。** `fast` のような単一ステップのプリセットは通常1回しか検索しませんが、マルチステップのプリセット (ディープリサーチなど) は多数の検索を実行し、検索ごとに `search_results` イベント (ストリーミング時) または出力アイテム (非ストリーミング時) が1つずつ生成されます。これらはすべて単一の引用 `id` 空間を共有します。**すべての** イベントまたはアイテムから結果を収集してください。最初のバッチだけを保持すると、テキスト内のほとんどの `[N]` 参照が解決できず、引用がハルシネーションのように見えてしまいます。
+</Warning>
+
+<div id="basic-streaming-with-citations">
+  ## 引用付きの基本的なストリーミング
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  from openai import OpenAI
+
+  # OpenAI SDK は /v1/responses エイリアス経由で Agent API のストリーミングに対応しています
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+  stream = client.responses.create(
+      input="What are the latest breakthroughs in quantum computing?",
+      stream=True,
+      extra_body={"preset": "fast"},
+  )
+
+  full_content = ""
+  search_results = []
+
+  for event in stream:
+      event_type = event.type
+
+      # 検索結果を収集する（検索ごとに 1 イベント — 上書きせずに蓄積する）
+      if event_type == "response.reasoning.search_results":
+          search_results.extend(event.results or [])
+
+      # 各デルタの内容を蓄積する
+      if event_type == "response.output_text.delta":
+          full_content += event.delta
+          print(event.delta, end="", flush=True)
+
+  print("\n\n--- Citations ---")
+  for result in search_results:
+      print(f"[{result['id']}] {result['title']} — {result['url']}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import OpenAI from "openai";
+
+  // OpenAI SDK は /v1/responses エイリアス経由で Agent API のストリーミングに対応しています
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/v1",
+  });
+
+  const stream = await client.responses.create({
+      input: "What are the latest breakthroughs in quantum computing?",
+      stream: true,
+      preset: "fast",
+  } as any);
+
+  let fullContent = "";
+  let searchResults: Array<{ id: number; title: string; url: string }> = [];
+
+  for await (const event of stream) {
+      // 検索結果を収集する（検索ごとに 1 イベント — 上書きせずに蓄積する）
+      if (event.type === "response.reasoning.search_results") {
+          searchResults.push(...((event as any).results ?? []));
+      }
+
+      // 各デルタの内容を蓄積する
+      if (event.type === "response.output_text.delta") {
+          fullContent += event.delta;
+          process.stdout.write(event.delta);
+      }
+  }
+
+  console.log("\n\n--- Citations ---");
+  searchResults.forEach((result) => {
+      console.log(`[${result.id}] ${result.title} — ${result.url}`);
+  });
+  ```
+
+  ```bash curl theme={null}
+  curl -N "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "fast",
+      "input": "What are the latest breakthroughs in quantum computing?",
+      "stream": true
+    }'
+  ```
+</CodeGroup>
+
+<div id="parsing-citation-references-from-text">
+  ## テキストからの引用参照の解析
+</div>
+
+model は生成テキスト中に `[1]`、`[2]` のような番号付き参照を挿入します。クリック可能なリンクを備えたリッチな出力を作るには、これらの参照を解析し、search&#95;results を使ってソース URL に対応付けます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import re
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def extract_citation_refs(text: str) -> list[int]:
+      """テキストからすべての引用参照番号（例: [1]、[2]）を抽出する。"""
+      return sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", text)))
+
+
+  def build_cited_output(content: str, search_results: list) -> str:
+      """[N] 形式の参照を markdown リンクに置き換え、参考文献セクションを追加する。"""
+      cited_content = content
+
+      # id から URL へのマップを構築する
+      url_map = {r.id: r.url for r in search_results}
+      title_map = {r.id: r.title for r in search_results}
+
+      # インラインの参照を markdown リンクに置き換える
+      for ref_id, url in url_map.items():
+          cited_content = cited_content.replace(
+              f"[{ref_id}]",
+              f"[[{ref_id}]]({url})"
+          )
+
+      # 引用したすべてのソースを含む参考文献セクションを追加する
+      used_refs = extract_citation_refs(content)
+      if used_refs:
+          cited_content += "\n\n---\n**References:**\n"
+          for ref in used_refs:
+              if ref in url_map:
+                  cited_content += f"- [{ref}] {title_map[ref]} — {url_map[ref]}\n"
+
+      return cited_content
+
+
+  # コンテンツと検索結果を取得するための非ストリーミングリクエスト
+  response = client.responses.create(
+      preset="fast",
+      input="What is CRISPR gene editing and how does it work?",
+  )
+
+  # レスポンスの出力から検索結果を抽出する。
+  # 複数ステップの preset はリサーチステップごとに search_results 項目を返し、
+  # それらはすべて単一の id 空間を共有する — すべての項目から結果を収集すること。
+  content = response.output_text
+  search_results = []
+  for item in response.output:
+      if item.type == "search_results":
+          search_results.extend(item.results or [])
+
+  # リンク付き引用を含む最終出力を構築する
+  output = build_cited_output(content, search_results)
+  print(output)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const client = new Perplexity();
+
+  function extractCitationRefs(text: string): number[] {
+      const refs = new Set<number>();
+      for (const match of text.matchAll(/\[(\d+)\]/g)) {
+          refs.add(parseInt(match[1]));
+      }
+      return [...refs].sort((a, b) => a - b);
+  }
+
+  function buildCitedOutput(
+      content: string,
+      searchResults: Array<{ id: number; url: string; title: string }>
+  ): string {
+      let cited = content;
+
+      // id から URL およびタイトルへのマップを構築する
+      const urlMap = new Map(searchResults.map((r) => [r.id, r.url]));
+      const titleMap = new Map(searchResults.map((r) => [r.id, r.title]));
+
+      // インラインの参照を markdown リンクに置き換える
+      for (const [id, url] of urlMap) {
+          cited = cited.replaceAll(`[${id}]`, `[[${id}]](${url})`);
+      }
+
+      // 参考文献セクションを追加する
+      const usedRefs = extractCitationRefs(content);
+      if (usedRefs.length > 0) {
+          cited += "\n\n---\n**References:**\n";
+          for (const ref of usedRefs) {
+              if (urlMap.has(ref)) {
+                  cited += `- [${ref}] ${titleMap.get(ref)} — ${urlMap.get(ref)}\n`;
+              }
+          }
+      }
+
+      return cited;
+  }
+
+  // コンテンツと検索結果を取得するための非ストリーミングリクエスト
+  const response = await client.responses.create({
+      preset: "fast",
+      input: "What is CRISPR gene editing and how does it work?",
+  });
+
+  // レスポンスの出力から検索結果を抽出する。
+  // 複数ステップの preset はリサーチステップごとに search_results 項目を返し、
+  // それらはすべて単一の id 空間を共有する — すべての項目から結果を収集すること。
+  const content = response.output_text;
+  const searchResults: Array<{ id: number; url: string; title: string }> = [];
+  for (const item of response.output) {
+      if (item.type === "search_results") {
+          searchResults.push(...((item as any).results ?? []));
+      }
+  }
+
+  const output = buildCitedOutput(content, searchResults);
+  console.log(output);
+  ```
+</CodeGroup>
+
+<div id="validating-citation-urls">
+  ## 引用URLの検証
+</div>
+
+本番システムでは、引用URLをユーザーに提示する前に、URLの形式が正しく到達可能であることを検証してください。これにより、リンク切れを防ぎ、出力に対する信頼性を高められます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import aiohttp
+  from urllib.parse import urlparse
+
+
+  def is_valid_url(url: str) -> bool:
+      """URLの構造が有効かどうかを確認する。"""
+      try:
+          result = urlparse(url)
+          return all([result.scheme in ("http", "https"), result.netloc])
+      except Exception:
+          return False
+
+
+  async def check_url_reachable(url: str, timeout: float = 5.0) -> dict:
+      """URLにHEADリクエストを送り、到達可能かどうかを確認する。"""
+      if not is_valid_url(url):
+          return {"url": url, "valid": False, "reason": "malformed URL"}
+
+      try:
+          async with aiohttp.ClientSession() as session:
+              async with session.head(url, timeout=aiohttp.ClientTimeout(total=timeout), allow_redirects=True) as resp:
+                  return {
+                      "url": url,
+                      "valid": resp.status < 400,
+                      "status": resp.status,
+                  }
+      except asyncio.TimeoutError:
+          return {"url": url, "valid": False, "reason": "timeout"}
+      except Exception as e:
+          return {"url": url, "valid": False, "reason": str(e)}
+
+
+  async def validate_citations(search_results: list) -> list[dict]:
+      """検索結果に含まれるすべての引用URLを並行して検証する。"""
+      tasks = [check_url_reachable(r.url) for r in search_results]
+      return await asyncio.gather(*tasks)
+
+
+  # レスポンス取得後の使用例:
+  # results = asyncio.run(validate_citations(search_results))
+  # for r in results:
+  #     status = "OK" if r["valid"] else f"FAILED ({r.get('reason', r.get('status'))})"
+  #     print(f"  {r['url']}: {status}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  function isValidUrl(url: string): boolean {
+      try {
+          const parsed = new URL(url);
+          return parsed.protocol === "http:" || parsed.protocol === "https:";
+      } catch {
+          return false;
+      }
+  }
+
+  async function checkUrlReachable(url: string, timeoutMs = 5000): Promise<{ url: string; valid: boolean; reason?: string; status?: number }> {
+      if (!isValidUrl(url)) {
+          return { url, valid: false, reason: "malformed URL" };
+      }
+
+      try {
+          const controller = new AbortController();
+          const timer = setTimeout(() => controller.abort(), timeoutMs);
+          const resp = await fetch(url, { method: "HEAD", signal: controller.signal, redirect: "follow" });
+          clearTimeout(timer);
+          return { url, valid: resp.status < 400, status: resp.status };
+      } catch (e: any) {
+          return { url, valid: false, reason: e.message };
+      }
+  }
+
+  async function validateCitations(searchResults: Array<{ url: string }>): Promise<Array<{ url: string; valid: boolean; reason?: string }>> {
+      return Promise.all(searchResults.map(r => checkUrlReachable(r.url)));
+  }
+
+  // レスポンス取得後の使用例:
+  // const results = await validateCitations(searchResults);
+  // results.forEach(r => {
+  //     const status = r.valid ? "OK" : `FAILED (${r.reason ?? r.status})`;
+  //     console.log(`  ${r.url}: ${status}`);
+  // });
+  ```
+</CodeGroup>
+
+<Warning>
+  **モデルにソースURLを生成させないでください。** 必ずAPIレスポンスの `search_results` 出力を使用してください。モデルが生成したURLはハルシネーションの可能性があります。検索結果には、実際のウェブ検索で得られた検証済みのURLが含まれています。
+</Warning>
+
+<div id="progressive-display-with-live-citation-count">
+  ## 引用数をリアルタイム表示する段階的レンダリング
+</div>
+
+チャットUIでは、テキストがストリーミングされる間に引用数をリアルタイムで表示し、ストリーム完了後に参照リスト全体をレンダリングすると効果的です。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import re
+  import sys
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+
+  def stream_with_progress(query: str):
+      """引用数をリアルタイム表示しながらレスポンスをストリーミングする。"""
+      stream = client.responses.create(
+          input=query,
+          stream=True,
+          extra_body={"preset": "fast"},
+      )
+
+      full_content = ""
+      search_results = []
+      seen_refs = set()
+
+      for event in stream:
+          if event.type == "response.reasoning.search_results":
+              search_results.extend(event.results or [])
+
+          if event.type == "response.output_text.delta":
+              full_content += event.delta
+              sys.stdout.write(event.delta)
+              sys.stdout.flush()
+
+              # 蓄積されたテキストから新しい引用参照を検出する
+              # (個々のデルタでは [N] がチャンクをまたいで分割される場合がある)
+              current_refs = set(int(m) for m in re.findall(r"\[(\d+)\]", full_content))
+              if current_refs - seen_refs:
+                  seen_refs = current_refs
+                  sys.stdout.write(f" [📚 {len(seen_refs)} sources]")
+                  sys.stdout.flush()
+
+      # 最終サマリー
+      print(f"\n\n{'='*60}")
+      print(f"Response complete: {len(search_results)} sources found, {len(seen_refs)} cited")
+      print(f"{'='*60}")
+
+      # 検索結果から URL マップを構築する
+      url_map = {r["id"]: r for r in search_results}
+      for ref_id in sorted(seen_refs):
+          if ref_id in url_map:
+              r = url_map[ref_id]
+              print(f"  ✓ [{ref_id}] {r['title']} — {r['url']}")
+
+      return full_content, search_results
+
+
+  content, results = stream_with_progress(
+      "What are the environmental impacts of lithium mining?"
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import OpenAI from "openai";
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/v1",
+  });
+
+  async function streamWithProgress(query: string) {
+      const stream = await client.responses.create({
+          input: query,
+          stream: true,
+          preset: "fast",
+      } as any);
+
+      let fullContent = "";
+      let searchResults: Array<{ id: number; title: string; url: string }> = [];
+      const seenRefs = new Set<number>();
+
+      for await (const event of stream) {
+          if (event.type === "response.reasoning.search_results") {
+              searchResults.push(...((event as any).results ?? []));
+          }
+
+          if (event.type === "response.output_text.delta") {
+              fullContent += event.delta;
+              process.stdout.write(event.delta);
+
+              // 蓄積されたテキストから新しい引用参照を検出する
+              // (個々のデルタでは [N] がチャンクをまたいで分割される場合がある)
+              const prevSize = seenRefs.size;
+              for (const match of fullContent.matchAll(/\[(\d+)\]/g)) {
+                  seenRefs.add(parseInt(match[1]));
+              }
+              if (seenRefs.size > prevSize) {
+                  process.stdout.write(` [📚 ${seenRefs.size} sources]`);
+              }
+          }
+      }
+
+      console.log(`\n\n${"=".repeat(60)}`);
+      console.log(`Response complete: ${searchResults.length} sources found, ${seenRefs.size} cited`);
+      console.log("=".repeat(60));
+
+      const urlMap = new Map(searchResults.map((r) => [r.id, r]));
+      for (const refId of [...seenRefs].sort((a, b) => a - b)) {
+          const r = urlMap.get(refId);
+          if (r) {
+              console.log(`  ✓ [${refId}] ${r.title} — ${r.url}`);
+          }
+      }
+
+      return { fullContent, searchResults };
+  }
+
+  await streamWithProgress("What are the environmental impacts of lithium mining?");
+  ```
+</CodeGroup>
+
+<div id="handling-search-results">
+  ## 検索結果の処理
+</div>
+
+Agent API は、各ソースの詳細なメタデータ (id、title、snippet、URL、date) を含む `search_results` 出力アイテムを 1 つ以上返します。model が実行した検索ごとに 1 アイテムが返されます。単純な URL のリストよりも情報量が多いため、ソースカードやサイドバー、詳細な参照セクションの構築に活用できます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # レスポンス全体の構造を示すための非ストリーミングリクエスト
+  response = client.responses.create(
+      preset="fast",
+      input="What is the current state of fusion energy research?",
+  )
+
+  content = response.output_text
+
+  # 出力内のすべての search_results アイテムから検索結果を抽出する
+  search_results = []
+  for item in response.output:
+      if item.type == "search_results":
+          search_results.extend(item.results or [])
+
+  print("--- Answer ---")
+  print(content)
+
+  print("\n--- Search Results (rich metadata) ---")
+  for result in search_results:
+      print(f"  [{result.id}] {result.title}")
+      print(f"      URL:  {result.url}")
+      print(f"      Date: {result.date}")
+      print(f"      Snippet: {result.snippet[:100]}...")
+      print()
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      preset: "fast",
+      input: "What is the current state of fusion energy research?",
+  });
+
+  const content = response.output_text;
+
+  // 出力内のすべての search_results アイテムから検索結果を抽出する
+  const searchResults: any[] = [];
+  for (const item of response.output) {
+      if (item.type === "search_results") {
+          searchResults.push(...((item as any).results ?? []));
+      }
+  }
+
+  console.log("--- Answer ---");
+  console.log(content);
+
+  console.log("\n--- Search Results (rich metadata) ---");
+  for (const result of searchResults) {
+      console.log(`  [${result.id}] ${result.title}`);
+      console.log(`      URL:  ${result.url}`);
+      console.log(`      Date: ${result.date}`);
+      console.log(`      Snippet: ${result.snippet?.slice(0, 100)}...`);
+      console.log();
+  }
+  ```
+</CodeGroup>
+
+<Tip>
+  各検索結果には `id`、`title`、`url`、`snippet`、`date` が含まれます。`id` は本文中の `[N]` 参照にそのまま対応します。これを利用して、UI 向けに情報量の多いソースカードを構築できます。
+</Tip>
+
+<div id="complete-example-streaming-research-assistant">
+  ## 完全な例: ストリーミング対応リサーチアシスタント
+</div>
+
+Agent API のレスポンスをストリーミングし、引用を抽出して URL を検証したうえで、整形された markdown 出力を生成する自己完結型のスクリプトです。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import os
+  import re
+  from urllib.parse import urlparse
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ["PERPLEXITY_API_KEY"],
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+
+  def is_valid_url(url: str) -> bool:
+      try:
+          result = urlparse(url)
+          return all([result.scheme in ("http", "https"), result.netloc])
+      except Exception:
+          return False
+
+
+  def stream_and_collect(query: str) -> tuple[str, list[dict]]:
+      """Agent API のレスポンスをストリーミングし、全文と検索結果を返す。"""
+      stream = client.responses.create(
+          input=query,
+          stream=True,
+          extra_body={"preset": "fast"},
+      )
+
+      content = ""
+      search_results = []
+
+      for event in stream:
+          if event.type == "response.reasoning.search_results":
+              search_results.extend(event.results or [])
+
+          if event.type == "response.output_text.delta":
+              content += event.delta
+              print(event.delta, end="", flush=True)
+
+      print()  # ストリーミング後の改行
+      return content, search_results
+
+
+  def format_markdown_report(query: str, content: str, search_results: list[dict]) -> str:
+      """インライン引用リンク付きの markdown レポートを組み立てる。"""
+      # 検索結果から URL マップを作成する
+      url_map = {r["id"]: r["url"] for r in search_results}
+      title_map = {r["id"]: r["title"] for r in search_results}
+
+      # [N] を markdown リンクに置き換える
+      formatted = content
+      for ref_id, url in url_map.items():
+          if is_valid_url(url):
+              formatted = formatted.replace(f"[{ref_id}]", f"[\\[{ref_id}\\]]({url})")
+
+      # レポートを組み立てる
+      report = f"# {query}\n\n{formatted}\n\n"
+
+      # 出典を追記する
+      used_refs = sorted(set(int(m) for m in re.findall(r"\[(\d+)\]", content)))
+      if search_results:
+          report += "## Sources\n\n"
+          for result in search_results:
+              marker = "→" if result["id"] in used_refs else " "
+              report += f"{marker} **[{result['id']}]** {result['title']} — {result['url']}\n\n"
+
+      return report
+
+
+  if __name__ == "__main__":
+      query = "What are the most promising approaches to carbon capture technology?"
+
+      print(f"Researching: {query}\n")
+      print("-" * 60)
+
+      content, search_results = stream_and_collect(query)
+
+      print(f"\n{'=' * 60}")
+      print(f"Collected {len(search_results)} sources\n")
+
+      # 形式が不正な URL を除外する
+      valid_results = [r for r in search_results if is_valid_url(r["url"])]
+      invalid_count = len(search_results) - len(valid_results)
+      if invalid_count:
+          print(f"Warning: {invalid_count} sources had malformed URLs and were excluded.\n")
+
+      report = format_markdown_report(query, content, valid_results)
+      print(report)
+  ```
+</CodeGroup>
+
+<div id="tips-and-best-practices">
+  ## ヒントとベストプラクティス
+</div>
+
+1. **引用を多く含むレスポンスを得るには、`fast` や `low` などの検索対応 プリセット を使用してください。** プリセット ごとに引用形式が異なり、`fast` は `[1]`、`low` は `[web:1]` を使用します。
+
+2. **すべてのイベントまたはアイテムから検索結果を蓄積してください。** レスポンスには、model が実行した検索ごとに 1 つの `search_results` イベント (ストリーミング) または出力アイテム (非ストリーミング) が含まれます。多段階の プリセット では検索が何度も実行されます。各バッチを 1 つのリストに追加してください。イベントごとに上書きしたり、最初のアイテムだけを読み取ったりすると、大半のソースが気付かないうちに失われます。
+
+3. **引用のマッピングには `id` フィールドを使用してください。** 各検索結果には、テキスト中の `[N]` 参照に対応する数値の `id` が付与されています。
+
+4. **表示する前に URL を検証してください。** タイムアウトを設定した HEAD リクエストで、到達できないソースを除外します。
+
+5. **URL を自前で生成しないでください。** API レスポンスの `search_results` のみを使用してください。model が生成した URL はハルシネーションの可能性があります。
+
+6. **参照が見つからない場合も適切に処理してください。** テキスト中の `[N]` 参照に対応する `id` が収集した検索結果に存在しない場合は、クラッシュさせずに、リンクなしで参照番号を表示してください。
+
+7. **URL 検証のレート制限も検討してください。** レスポンスに多数のソースが含まれる場合は、対象サーバーに過剰な負荷をかけないよう、並列数を制限して検証してください。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API のプリセット" icon="bolt" href="/ja/docs/agent-api/presets">
+    すべてのプリセットと、それぞれの引用形式を確認できます。
+  </Card>
+
+  <Card title="Agent API クイックスタート" icon="rocket" href="/ja/docs/agent-api/quickstart">
+    Agent API を使い始め、マルチプロバイダーへのアクセスとツールを活用しましょう。
+  </Card>
+
+  <Card title="Agent API のストリーミング" icon="stream" href="/ja/docs/agent-api/output-control">
+    Agent API のストリーミングパターンとイベントの種類。
+  </Card>
+</CardGroup>

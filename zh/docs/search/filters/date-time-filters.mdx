@@ -1,0 +1,1332 @@
+---
+title: "搜索日期与时间过滤器"
+---
+
+<Note>
+  `search_after_date_filter` 和 `search_before_date_filter` 参数可将搜索结果限制在特定的发布日期范围内，只有发布日期落在这两个日期之间的结果才会返回。
+
+  `last_updated_after_filter` 和 `last_updated_before_filter` 参数则按内容最后一次修改或更新的时间进行筛选，而非按最初发布的时间。
+
+  `search_recency_filter` 参数提供了一种便捷方式，可按相对于当前日期的预定义时间段 (例如 &quot;hour&quot;、&quot;day&quot;、&quot;week&quot;、&quot;month&quot;、&quot;year&quot;) 筛选结果。
+</Note>
+
+<Info>
+  具体日期过滤器必须使用 &quot;%m/%d/%Y&quot; 格式 (例如 &quot;3/1/2025&quot;) 。时效性过滤器使用 &quot;hour&quot;、&quot;day&quot;、&quot;week&quot;、&quot;month&quot; 或 &quot;year&quot; 等预定义值。所有过滤器均为可选——你可以根据需要提供具体日期或时效性过滤器。
+</Info>
+
+<div id="overview">
+  ## 概览
+</div>
+
+Search API 的日期与时间过滤器可将搜索结果限定在特定时间范围内，从而控制返回哪些结果。共有三类日期与时间过滤器可用：
+
+<div id="publication-date-filters">
+  ### 发布日期过滤器
+</div>
+
+`search_after_date_filter` 和 `search_before_date_filter` 参数根据内容**最初创建或发布**的时间来筛选结果。它适用于以下场景：
+
+* 查找在特定时间范围内发布的内容
+* 排除过于陈旧或过于新近的内容
+* 聚焦于某一特定发布时期的内容
+
+<div id="last-updated-date-filters">
+  ### 最后更新日期过滤器
+</div>
+
+`last_updated_after_filter` 和 `last_updated_before_filter` 参数用于按内容的**最后修改或更新**时间过滤结果。它适用于以下场景：
+
+* 查找近期更新或持续维护的内容
+* 排除长期未更新的陈旧内容
+* 只关注在特定时间段内更新过的内容
+
+<div id="search-recency-filter">
+  ### 搜索时效性过滤器
+</div>
+
+`search_recency_filter` 参数提供了一种简单的方式，可按相对于当前日期的预定义时间段过滤结果。它适用于以下场景：
+
+* 查找过去一小时、一天、一周、一个月或一年内的内容
+* 无需指定具体日期即可获取最新结果
+* 快速筛选出时效性强的信息
+
+**可用取值：**
+
+* `"hour"` —— 过去一小时内的内容。适用于突发新闻、实时事件等实时性数据。
+* `"day"` —— 过去 24 小时内的内容
+* `"week"` —— 过去 7 天内的内容
+* `"month"` —— 过去 30 天内的内容
+* `"year"` —— 过去 365 天内的内容
+
+**重要提示：** 发布日期过滤器依据内容的原始创建/发布日期，最后更新过滤器依据修改日期，而时效性过滤器依据的是相对于当前日期的时间段。
+
+按发布日期限定搜索结果：
+
+```bash theme={null}
+"search_after_date_filter": "3/1/2025",
+"search_before_date_filter": "3/5/2025"
+```
+
+若要按最后更新日期筛选搜索结果：
+
+```bash theme={null}
+"last_updated_after_filter": "07/01/2025",
+"last_updated_before_filter": "12/30/2025"
+```
+
+若要按时间范围限制搜索结果：
+
+```bash theme={null}
+"search_recency_filter": "week"
+```
+
+这些过滤器会在其他搜索参数的基础上叠加生效。
+
+<div id="examples">
+  ## 示例
+</div>
+
+**1. 按发布日期范围限制结果**
+
+本示例将搜索结果限定为 2025 年 3 月 1 日至 2025 年 3 月 5 日期间发布的内容。
+
+**请求示例**
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.search.create(
+      query="transformer architecture attention mechanism",
+      max_results=10,
+      search_after_date_filter="3/1/2025",
+      search_before_date_filter="3/5/2025"
+  )
+
+  print(response)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.search.create({
+    query: "transformer architecture attention mechanism",
+    max_results: 10,
+    search_after_date_filter: "3/1/2025",
+    search_before_date_filter: "3/5/2025"
+  });
+
+  console.log(response);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/search' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "query": "transformer architecture attention mechanism",
+      "max_results": 10,
+      "search_after_date_filter": "3/1/2025",
+      "search_before_date_filter": "3/5/2025"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "5cdd76b9-da5a-4f9f-8c75-61c90a2399a2",
+    "results": [
+      {
+        "snippet": "",
+        "title": "What is an attention mechanism?",
+        "url": "https://www.ibm.com/think/topics/attention-mechanism",
+        "date": "2024-12-05",
+        "last_updated": "2026-03-31"
+      },
+      {
+        "snippet": "",
+        "title": "Introduction to Transformers and Attention Mechanisms",
+        "url": "https://medium.com/@kalra.rakshit/introduction-to-transformers-and-attention-mechanisms-c29d252ea2c5",
+        "date": "2024-02-07",
+        "last_updated": "2025-10-29"
+      },
+      {
+        "snippet": "",
+        "title": "Transformer (deep learning) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Transformer_(deep_learning)",
+        "date": "2019-08-25",
+        "last_updated": "2026-05-15"
+      },
+      {
+        "snippet": "",
+        "title": "Transformer (deep learning) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)",
+        "date": "2019-08-25",
+        "last_updated": "2026-05-19"
+      },
+      {
+        "snippet": "The famous paper “Attention is all you need” by Vaswani et al. presents the transformer architecture.\nThis neural network architecture builds on the attention mechanism and is at the core of current large language models (LLMs) such as ChatGPT, GPT-4, BERT, etc.\n...\nTransformers process sequences of tokens such as (sub-)words in a sentence.\nThe transformer architecture consists of two parts:\n1. The encoder, which processes the tokens of the input sequence and\n2. the decoder, which produces new tokens as output based on the input tokens and the previously produced output tokens.\nThe overall architecture is shown in the figure below with the encoder on the left and the decoder on the right side.\n...\nThe encoder (left side of the figure above), processes the tokens of the input sequence.\nEach token is initially embedded into a *d- * dimensional vector, e.g., using word2vec.\nIt is then processed individually and compared to other tokens in the input.\nThe process works with variable-length sequences.\nAfter embedding the words as vectors, a **positional encoding** is added, which indicates the absolute and relative position of the tokens in the sequence.\nThis is necessary for many tasks, particularly in natural language, since the later parts of the encoder are permutation invariant.\nThis means they do not distinguish the position of the tokens in the sequence.\n...\nAfter positional encoding, follows a **self-attention** block.\nDuring self-attention, the tokens *within the input sequence* are compared to each other, computing *attention weights.\n* A high attention weight for a pair of two tokens indicates that they are syntactically or semantically related.\nThus high weights indicate important tokens that the model should “attend” to.\n...\nFinally, a normal feed-forward neural network follows the attention block and outputs the encoded tokens one by one.\n...\nIn contrast to the encoder, the decoder contains a **cross-attention** block, which compares to the encoded tokens of the input sequence using cross-attention (explained in more detail below).\nThis cross-attention is at the heart of the decoder and helps producing the next output token, taking both the full input and the output produced so far into account.\n...\n## The Attention Mechanism\nThe attention mechanism is at the core of the transformer architecture — thus the paper title “Attention is all you need”.\nIn a transformer, the attention mechanism enables the model to assign different *attention weights/scores* to different tokens in a sequence.\nThis way, the model can give more importance to relevant information, ignore irrelevant information, and effectively capture long-range dependencies in the data.\nThe attention mechanism distinguishes three inputs: The **query Q, the key K, and the value V**.\nEach token in a sequence is a separate input for Q, K, or V.\nThe mechanism compares queries Q with keys K to determine their importance/compatibility to each other, computing attention weights.\nIt then selects corresponding values V with high attention weights.\nThis is an analogy to data bases, hash tables, or Python dictionaries, where we select the values whose keys match a given query best.\n...\n*Self- and cross-attention only differ in which tokens are given as inputs Q, K, and V.* In **self-attention**, the same tokens are used for all three inputs, i.e., each token is used for Q, K, and V.\nIn **cross-attention**, the same tokens are given to K and V, but different tokens are used for Q.\nSelf-attention is applied to the input sequence in the encoder and to the output sequence in the decoder.\nThe decoder’s cross-attention module then uses the encoded input tokens as K and V and the produced output tokens as Q.\nIn either case, attention weights between tokens in Q and in K are calculated using scaled dot-product attention.\nWhile there are other forms of attention such as learned attention weights, scaled dot-product attention is faster and more space efficient.\nIn scaled dot-product attention, attention weights are computed without extra parameters as illustrated in the figure below: Tokens in Q and K are multiplied, scaled, and passed through a softmax function to obtain attention weights.\nThe attention weights are then multiplied with the tokens in V to select values with high corresponding weights.\n...\nMulti-head attention repeats the attention mechanism explained above multiple times (*h * times) in parallel.\nBefore passing the input tokens of dimension *d * into these *h * attention blocks, they projected into smaller embeddings of size* d/h * by using small linear neural networks*.\n* Each of the *h * linear networks has different weights and leads to different projections.\nConsequently, each attention “head” can learn to focus on different aspects, e.g., subject and object of a sentence.\nThe outputs of the *h* heads are then concatenated and passed through another linear neural network.\n...\nOverall, attention is a surprisingly simple yet effective mechanism to emphasize meaningful tokens and ignore less meaningful tokens.\nBased on this mechanism, transformers can take capture the context even in long sequences and produce coherent outputs.",
+        "title": "Understanding Transformers and Attention | by Stefan",
+        "url": "https://medium.com/@stefanbschneider/understanding-attention-and-transformers-d84b016cd352",
+        "date": "2023-11-28",
+        "last_updated": "2025-10-27"
+      },
+      {
+        "snippet": "",
+        "title": "Attention in transformers, step-by-step | Deep Learning Chapter 6",
+        "url": "https://www.youtube.com/watch?v=eMlx5fFNoYc&vl=en",
+        "date": "2024-04-07",
+        "last_updated": "2026-05-26"
+      },
+      {
+        "snippet": "At the present moment, the dominant models for nearly all natural\nlanguage processing tasks are based on the Transformer architecture.\n...\nThe core idea behind the Transformer model is the *attention mechanism*, an innovation that was originally envisioned as an enhancement for encoder–decoder RNNs applied to sequence-to-sequence applications, such as machine translations ().\nYou might recall that in the first sequence-to-sequence models for machine translation (), the entire input was compressed by the encoder into a single fixed-length vector to be fed into the decoder.\nThe intuition behind attention is that rather than compressing the input, it might be better for the decoder to revisit the input sequence at every step.\nMoreover, rather than always seeing the same representation of the input, one might imagine that the decoder should selectively focus on particular parts of the input sequence at particular decoding steps.\nBahdanau’s attention mechanism provided a simple means by which the decoder could dynamically *attend* to different parts of the input at each decoding step.\nThe high-level idea is that the encoder could produce a representation of length equal to the original input sequence.\nThen, at decoding time, the decoder can (via some control mechanism) receive as input a context vector consisting of a weighted sum of the representations on the input at each time step.\nIntuitively, the weights determine the extent to which each step’s context “focuses” on each input token, and the key is to make this process for assigning the weights differentiable so that it can be learned along with all of the other neural network parameters.\nInitially, the idea was a remarkably successful enhancement to the\n...\nHowever, attention mechanisms soon emerged as more significant concerns,\nbeyond their usefulness as an enhancement for encoder–decoder recurrent\nneural networks and their putative usefulness for picking out salient\ninputs.\nVaswani *et al.* () proposed the Transformer architecture for machine translation, dispensing with recurrent connections altogether, and instead relying on cleverly arranged attention mechanisms to capture all relationships among input and output tokens.",
+        "title": "11. Attention Mechanisms and Transformers - Dive into Deep Learning",
+        "url": "http://www.d2l.ai/chapter_attention-mechanisms-and-transformers/index.html",
+        "date": null,
+        "last_updated": "2026-03-12"
+      },
+      {
+        "snippet": "",
+        "title": "The self-attention mechanism",
+        "url": "https://www.codecademy.com/article/transformer-architecture-self-attention-mechanism",
+        "date": "2025-09-19",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "",
+        "title": "How Attention Mechanism Works in Transformer Architecture",
+        "url": "https://www.youtube.com/watch?v=KMHkbXzHn7s",
+        "date": "2025-03-08",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "",
+        "title": "Transformer (deep learning architecture) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Grouped-query_attention",
+        "date": "2025-03-14",
+        "last_updated": "2025-03-15"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+**2. 使用单个发布日期参数进行筛选**
+
+如果只想将结果限定为在某一特定日期当天或之后发布的内容，只需加上 `search_after_date_filter`：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.search.create(
+      query="tech industry layoffs at major technology companies",
+      max_results=10,
+      search_after_date_filter="3/1/2025"
+  )
+
+  print(response)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.search.create({
+    query: "tech industry layoffs at major technology companies",
+    max_results: 10,
+    search_after_date_filter: "3/1/2025"
+  });
+
+  console.log(response);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/search' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "query": "tech industry layoffs at major technology companies",
+      "max_results": 10,
+      "search_after_date_filter": "3/1/2025"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "de495208-dca3-4c87-b69a-6f2eecea26dc",
+    "results": [
+      {
+        "snippet": "114,173 tech employees laid off ∙ 148 tech companies w/ layoffs ∙",
+        "title": "Layoffs.fyi - Tech and Startup Layoff Tracker",
+        "url": "https://layoffs.fyi",
+        "date": "2026-02-03",
+        "last_updated": "2026-05-20"
+      },
+      {
+        "snippet": "",
+        "title": "Tech Layoffs: US Companies With Job Cuts In 2024, 2025 and 2026",
+        "url": "https://news.crunchbase.com/startups/tech-layoffs/",
+        "date": "2026-05-14",
+        "last_updated": "2026-05-15"
+      },
+      {
+        "snippet": "Meta to Cut 10% of Workforce in Latest AI-Driven Tech Layoffs - NerdWallet\n...\nIn 2026, tech layoffs are surging, with major companies citing AI development as a key driver.\n...\nUpdated April 23.\nSo far in 2026, roughly 98 tech companies have laid off over 92,000 workers.\nSeveral major companies have explicitly pointed to investments in AI research and development as the driving force behind recent job cuts.\n- Amazon announced on Jan. 28 it would cut about 16,000 more roles across the company, following an October trim of 14,000 jobs.\n- In February, Block — led by Twitter co-founder Jack Dorsey — cut 4,000 jobs, or about 40% of its staff.\n- On March 11, Atlassian laid off 1,600 workers.\n- On March 16, Dell said it reduced its global staff by 10%, or nearly 11,000 workers.\n- On April 6, Oracle laid off 30,000 workers to fund its AI infrastructure initiatives.\n- On April 23, Meta said it would cut 10% of its workforce — about 8,000 jobs — and close 6,000 open roles as it zeroes in on AI development.\n...\nSo far in 2026, roughly 98 tech companies have laid off more than 92,000 workers.\n...\n## What tech layoffs happened in 2025?\nThe total number of tech layoffs in 2025 was 122,549 across 257 companies according to layoffs.fyi., which tracks job cuts in the tech industry.\nThat’s down from 152,922 employees laid off from 551 companies in 2024, according to layoffs.fyi.\nCompanies that announced layoffs in waves of more than 10,000 workers included some of the biggest names in tech: Intel, Amazon, Tesla, Google, Meta and Microsoft.\n...\nThe majority of layoffs at the beginning of 2022 came from startups, according to Lee.\nBut in late 2022 and early 2023 it started to creep into bigger tech, as well.\nLee also said that “Big Tech” layoffs like those seen at Meta and Twitter “present a unique opportunity to recruit a caliber of talent that would've previously been impossible to attract.”",
+        "title": "Meta to Cut 10% of Workforce in Latest AI-Driven Tech Layoffs",
+        "url": "https://www.nerdwallet.com/finance/learn/tech-layoffs",
+        "date": "2022-12-01",
+        "last_updated": "2026-05-22"
+      },
+      {
+        "snippet": "",
+        "title": "Companies that announced Major Layoffs and Hiring Freezes",
+        "url": "https://intellizence.com/insights/layoff-downsizing/major-companies-that-announced-mass-layoffs/",
+        "date": "2026-05-11",
+        "last_updated": "2026-05-18"
+      },
+      {
+        "snippet": "",
+        "title": "Major tech layoffs: An updated tracker - InformationWeek",
+        "url": "https://www.informationweek.com/it-leadership/tech-company-layoffs-the-covid-tech-bubble-bursts-sep-14",
+        "date": "2026-01-05",
+        "last_updated": "2026-05-26"
+      },
+      {
+        "snippet": "Layoffs are making headlines, and most seem to be centered on one job sector -- tech.\nJanuary layoffs were the highest they've been since 2009, according to a report from Challenger, Gray & Christmas, including 22,291 job cuts in the tech sector.\nThe bulk of these came from a round of Amazon layoffs that cut 16,000 jobs, disproportionately affecting tech roles, including AWS.\nGoogle and Pinterest also announced cuts in January.\nIn 2025, 271 tech companies laid off more than 124,201 employees, according to Layoffs.fyi, compared to 152,922 employees in 2024 and 264,320 in 2023.\nUnlike previous layoff surges during and after the COVID-19 crisis, layoffs are now more focused on restructuring driven by AI and slow market growth, rather than emergency cost-cutting.\nTech roles have accounted for a large share of recent layoffs due to AI integration and AI-related job consolidation, but roles affected by layoffs go far beyond tech.\nHowever, in a high-volume sector, tech layoffs tend to have more visibility because a small percentage of layoffs still translates to thousands of people losing their jobs.\nThere are several factors contributing to tech layoffs, including uncertain macroeconomic conditions, market instability and the scaling of AI.\n...\nAI is now the top influence on layoff decisions, cited more frequently by HR leaders than industry or market trends, according to a CareerMinds report.\n...\nAI was cited as the reason for nearly 55,000 layoffs in 2025, according to Challenger, Gray & Christmas.\nIn the coming year, 32% of companies expect a decrease in workforce size due to AI, according to a McKinsey report.\n...\nThis has led to layoffs due to role redesigns that move away from administrative, repetitive tasks and toward high-level oversight of automated processes and technology.\n...\nIn 2025, 55% of companies conducting layoffs cited economic uncertainty, according to a Resume.org survey.\nSix in 10 companies plan to conduct layoffs in 2026.\n...\nPepsiCo announced job cuts and plant closures, as well as slashing 20% of its products, in relation to an agreement with Elliott Investment Management to improve operational efficiency and cut costs.\n...\nTech layoffs may also result from the industry maturing or becoming more stable after rapid growth.\nDuring the pandemic and into the AI boom, tech companies saw rapid expansions both in operations and hiring.\nNow, many companies are conducting layoffs to stabilize and correct unsustainable growth.\nTech companies may not be on pace to acquire as many new customers as they have already adopted their services.\nInstead, tech companies may be looking beyond growth and into diversifying products or expanding globally.\nOrganizations are also prioritizing workforce consolidation and operational discipline to accommodate market shifts and slower revenue growth.\n...\nMany companies are also laying off workers due to shifts in skill demands.\nAI skills are splitting the market, creating a gap between AI-skilled and non-AI-skilled workers.\n...\nIn September 2025, Accenture's CEO announced layoff plans, targeting employees who couldn't reskill on AI, resulting in 11,000 job cuts.\n...\nDepending on the size of the company, large layoffs may range from a few hundred to tens of thousands, which can be a large percentage of its workforce.\nSome big tech companies -- such as Amazon and Meta -- have announced large layoffs in waves.\nIn October 2025, Amazon announced 14,000 job cuts.\nIn January 2026, they cut 16,000 more jobs.\nSalesforce eliminated more than 4,000 customer support roles in June 2025.\nIts CEO Marc Benioff cited AI, saying that it was already doing 30-50% of the work at the company.\nIn April 2025, Intel cut 20% of its workforce, more than 21,000 roles in a restructuring under new executive leadership.\nHP announced plans to cut 6,000 roles by the end of the 2028 fiscal year in an AI-focused restructuring.\nLayoffs are still rampant across the tech sector in 2026.\nAs of this writing, 35,650 tech employees from 50 tech companies have been laid off, according to Layoffs.fyi.",
+        "title": "Tech sector layoffs explained: What you need to know - TechTarget",
+        "url": "https://www.techtarget.com/whatis/feature/Tech-sector-layoffs-explained-What-you-need-to-know",
+        "date": "2026-03-06",
+        "last_updated": "2026-05-23"
+      },
+      {
+        "snippet": "",
+        "title": "Tech Companies That Have Made Layoffs from 2022 to 2026",
+        "url": "https://tech.co/news/tech-companies-layoffs",
+        "date": "2023-02-27",
+        "last_updated": "2026-05-22"
+      },
+      {
+        "snippet": "",
+        "title": "A comprehensive list of 2025 tech layoffs | TechCrunch",
+        "url": "https://techcrunch.com/2025/12/22/tech-layoffs-2025-list/",
+        "date": "2025-12-22",
+        "last_updated": "2026-05-26"
+      },
+      {
+        "snippet": "",
+        "title": "2026 Tech Layoffs Tracker - SkillSyncer",
+        "url": "https://skillsyncer.com/layoffs-tracker",
+        "date": null,
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "Big Tech companies laid off hundreds of employees in recent days, commanding headlines and confronting workers across the economy with a question: Am I next?\nAmazon and Google each imposed cuts, with Apple shutting down a 121-person team in San Diego, Calif., telling workers they must either transfer to Texas or leave the company, Bloomberg reported.\nIn all, the tech sector has laid off nearly 8,000 workers so far this year, according to layoffs.fyi, a site that tracks tech-sector employment.\nThe job cuts stem in large part from an ongoing staff reevaluation specific to the tech industry, since sales have retreated from the blistering pace attained during the pandemic, analysts said, noting comparatively scant layoffs across the wider workforce.\nHowever, the recent cutbacks in tech also are due to the rise of artificial intelligence and the persistence of high interest rates, some analysts said, foretelling similar risks for workers across major swathes of the economy.MORE: Bank overdraft fees may soon plummet.\nHere's what to know.\n...\nEven the job cuts in tech are relatively small compared with tens of thousands of employees laid off at the outset of last year.\n...\nLayoffs at Google, for instance, affected hundreds of workers focused on the company's well-known products, such as Google Assistant, as well as Google-owned YouTube.\nThe cuts came in part from the company's priority shift toward AI, according to an internal memo from CEO Sundar Pichai, confirmed to ABC News by a Google spokesperson.\n...\n\"Tech companies are hiring and firing on a small scale very often because they're still experimenting with how to commercialize and scale AI,\" Daniel Keum, a professor of management at the Columbia University Business School, told ABC News.\n...\nReluctant to overstate the risk, however, Kayes downplayed the recent job cuts in tech.\n\"These are fairly small layoffs,\" he said.",
+        "title": "Big Tech layoffs are back. Are other workers at risk?",
+        "url": "https://abcnews.go.com/amp/Business/big-tech-layoffs-back-workers-risk/story?id=106476154",
+        "date": "2024-01-18",
+        "last_updated": "2025-03-07"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+**3. 按最后更新日期范围筛选**
+
+此示例将搜索结果限制为最后更新时间介于 2025 年 7 月 1 日至 2025 年 12 月 30 日之间的内容，适用于查找近期维护或更新过的内容。
+
+**请求示例**
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.search.create(
+      query="machine learning interpretability research methods",
+      max_results=10,
+      last_updated_after_filter="07/01/2025",
+      last_updated_before_filter="12/30/2025"
+  )
+
+  print(response)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.search.create({
+    query: "machine learning interpretability research methods",
+    max_results: 10,
+    last_updated_after_filter: "07/01/2025",
+    last_updated_before_filter: "12/30/2025"
+  });
+
+  console.log(response);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/search' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "query": "machine learning interpretability research methods",
+      "max_results": 10,
+      "last_updated_after_filter": "07/01/2025",
+      "last_updated_before_filter": "12/30/2025"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "43425e11-87b1-4ba6-82f6-d399c308f4a6",
+    "results": [
+      {
+        "snippet": "### 与模型无关的可解释性方法\n\n目前存在若干重要的与模型无关的可解释性方法，虽然它们都不完美，但可以帮助研究人员解释即便是非常复杂的机器学习模型的结果。\n\n为便于演示，我们来考虑一个小型时间序列数据集。时间序列不过是按时间顺序索引的一系列数据点。它是金融行业中最常见的数据类型。量化研究的一个常见目标，就是使用统计和机器学习方法识别金融时间序列数据中的趋势、季节性变化和相关性。\n\n…\n\n#### 方法一：部分依赖图（PDP）\n\n我们要考察的第一种方法是部分依赖图（Partial Dependence Plot，简称 PDP）。它在几十年前就已被提出，用于展示一个或两个特征对机器学习模型预测结果的边际影响。\n\n它帮助研究人员判断：当各类特征被调整时，模型预测会发生什么变化。\n\n在这张图中，x 轴表示特征 f0 的取值，y 轴表示预测值。阴影区域中的实线显示了平均预测如何随 f0 取值的变化而变化。\nPDP 非常直观且易于实现，但由于它只展示平均边际效应，**异质性效应可能被掩盖**。^1^ 例如，某个特征在一半数据上可能与预测呈正相关，而在另一半数据上呈负相关。此时 PDP 的曲线将只是一条水平线。\n\n…\n\n##### PDP、ICE 与特征重要性的比较\n\n上述三种方法都很直观且易于实现。\n\nPDP 展示全局效应，但会掩盖异质性效应。ICE 能揭示异质性效应，却难以看出平均情况。\n\n特征重要性提供了一种简洁的方式来理解模型的行为。使用误差比率（而非误差本身）使得不同问题之间的度量具有可比性。并且它会自动考虑与其他特征的所有交互作用。\n然而，这些交互作用并不可加。将特征重要性相加并不等于性能的总体下降幅度。打乱特征会引入随机性，因此每次的结果可能不同。此外，打乱操作需要获取真实结果，而这在许多场景下是不可能的。\n\n此外，这三种方法都假设特征之间相互独立，因此如果特征之间存在相关性，就会生成不太可能出现的数据点，解释也可能因这些不现实的数据点而产生偏差。\n\n#### 方法四：全局代理模型\n\n全局代理方法采取了不同的思路。在这种情况下，训练一个可解释模型来逼近黑箱模型的预测。\n\n过程很简单。首先用训练好的黑箱模型在某个数据集上得到预测结果，然后基于该数据集及其预测结果训练一个可解释模型。训练好的可解释模型便成为原模型的代理，我们只需解释这个代理模型即可。注意，代理模型可以是任何可解释模型：线性模型、决策树、人工定义的规则等等。\n\n…\n\n首先，左侧图像被划分为若干可解释组件。随后，LIME 通过将部分可解释组件“关闭”（在此例中是将其变为灰色）来生成一组扰动实例数据集。\n\n对于每个扰动实例，可以使用训练好的模型得到图像中存在树蛙的概率，然后在该数据集上学习一个局部加权线性模型。\n\n…\n\n##### 全局代理方法与局部代理方法的比较\n\n全局代理方法和局部代理方法各有优劣。\n\n全局代理关注的是解释模型的整体逻辑，而局部代理只关心理解具体的预测。\n\n采用全局代理方法时，任何可解释模型都可以用作代理，并且代理模型与黑箱模型的接近程度很容易衡量。\n然而，由于代理模型只在黑箱模型的预测结果（而非真实结果）上训练，它们只能解释模型，而不能解释数据。此外，代理模型在很多情况下比黑箱模型更简单，可能只能对部分数据给出良好解释，而无法覆盖整个数据集。\n另一方面，局部代理方法不存在这些缺点。此外，局部代理方法与模型无关：如果你需要为你的问题尝试不同的黑箱模型，仍然可以使用相同的代理模型进行解释。与全局代理方法给出的解释相比，局部代理方法的解释往往简短、具有对比性且更贴近人类理解。\n然而，局部代理也有其自身的问题。\n\n首先，LIME 使用核函数来界定在局部解释中纳入考量的数据点范围，但为某一任务找到合适的核设置是很困难的。LIME 的采样方式可能导致不现实的数据点，局部解释也可能偏向这些数据点。\n另一个顾虑是解释的不稳定性。两个非常接近的点可能导致两种截然不同的解释。\n\n…\n\n##### Shapley 值与 LIME 的比较\n\n正如数据科学家 Christoph Molnar 在*《可解释机器学习》*中指出的，Shapley 值可能是唯一能够提供完整解释的方法，也是理论基础最为坚实的解释方法。\n\n然而，这也存在权衡。计算 Shapley 值的计算开销很大。最近开发的核 SHAP 方法通过快速核近似来解决这一问题，但对于大规模背景数据，其计算量仍然很大。\n\n…\n\n- **基于应用**的评估需要由人在真实应用场景中开展实验。^4^ 例如，要评估关于某种疾病诊断的解释，最好的方式是由医生来进行诊断。\n- **基于人**的评估则是开展较为简化的人类被试实验。例如，向人们展示成对的解释，让他们从中选出自认为质量更高的那一个。",
+        "title": "机器学习中的可解释性方法：简要综述",
+        "url": "https://www.twosigma.com/articles/interpretability-methods-in-machine-learning-a-brief-survey/",
+        "date": "2019-06-25",
+        "last_updated": "2026-04-01"
+      },
+      {
+        "snippet": "",
+        "title": "2 Interpretability – Interpretable Machine Learning",
+        "url": "https://christophm.github.io/interpretable-ml-book/interpretability.html",
+        "date": null,
+        "last_updated": "2026-05-16"
+      },
+      {
+        "snippet": "## Type 3 interpretability: unraveled rules and laws\n\nWith this type of interpretability, we seek to discover “rules” and “laws” learned by the machine model. These can be in the form of decision rules, or even “counterfactual” explanations in the form of “What if?” question-answer pairs that describe the smallest adjustment to the patient’s features that would change the model’s prediction to a predefined output. For example, a clinician could use this type of interpretability to establish the smallest difference in tumor size that would change the model’s prediction for a patient with cancer.\n\n…\n\nUsing five familiar data sets from the UCI repository and two familiar machine learning algorithms, we demonstrate that our algorithm produces global interpretations that are both faithful (highly accurate) and parsimonious (involve a small number of terms). Our interpretations permit easy understanding of the relative importance of features and feature interactions. Our interpretation algorithm represents a leap forward from the previous state of the art.\n\n…\n\nThrough this rigorous formalism, we derive (1) two metrics to measure the robustness of any interpretability method with respect to the model symmetry group; (2) theoretical robustness guarantees for some popular interpretability methods and (3) a systematic approach to increase the invariance of any interpretability method with respect to a symmetry group. By empirically measuring our metrics for explanations of models associated with various modalities and symmetry groups, we derive a set of 5 guidelines that we present in-depth to allow users and developers of interpretability methods to produce robust explanations.\n\n### Evaluating the Robustness of Interpretability Methods through Explanation Invariance and Equivariance\n\nJonathan Crabbé, Mihaela van der Schaar\n\n*NeurIPS 202*3\n\n**Abstract**\n\nInterpretability methods are valuable only if their explanations faithfully describe the explained model. In this work, we consider neural networks whose predictions are invariant under a specific symmetry group. This includes popular architectures, ranging from convolutional to graph neural networks.\nAny explanation that faithfully explains this type of model needs to be in agreement with this invariance property. We formalize this intuition through the notion of explanation invariance and equivariance by leveraging the formalism from geometric deep learning. Through this rigorous formalism, we derive (1) two metrics to measure the robustness of any interpretability method with respect to the model symmetry group; (2) theoretical robustness guarantees for some popular interpretability methods and (3) a systematic approach to increase the invariance of any interpretability method with respect to a symmetry group.\nBy empirically measuring our metrics for explanations of models associated with various modalities and symmetry groups, we derive a set of 5 guidelines to allow users and developers of interpretability methods to produce robust explanations.",
+        "title": "Interpretable machine learning - van der Schaar Lab",
+        "url": "https://www.vanderschaar-lab.com/interpretable-machine-learning/",
+        "date": "2024-05-31",
+        "last_updated": "2026-02-02"
+      },
+      {
+        "snippet": "This taxonomy focuses on the purpose that these methods were created to serve and the ways through which they accomplish this purpose. As a result, according to the presented taxonomy, four major categories for interpretability methods are identified: methods for explaining complex black-box models, methods for creating white-box models, methods that promote fairness and restrict the existence of discrimination, and, lastly, methods for analysing the sensitivity of model predictions.\n\n…\n\nIn order to address this issue, after introducing a quality criterion for neuron-wise signal estimators in order to evaluate existing methods and ultimately obtain estimators that optimize towards this criterion, the authors propose two interpretation methods that are are theoretically sound for linear models, PatternNet and PatternAtrribution. The former is used to estimate the correct direction, improving upon the DeConvNet[32] and Guided BackPropagation[31] visualizations, while the latter to identify how much the different signal dimensions contribute to the output through the network layers.\n\n…\n\nIn order to address these issues, they proposed an improved faster, model agnostic technique for finding explainable counterfactual explanations of classifier predictions. This novel method incorporates class prototypes, constructed using either an encoder or class specific k-d trees, in the cost function to enable the perturbations to converge much faster to an interpretable counterfactual, hence removing the computational bottleneck and making the method more suitable for practical applications.\nIn order to illustrate the effectiveness of their approach and the quality of the produced counterfactuals, the authors introduced two new metrics focusing on local interpretability at the instance level. By conducting experiments on both image data (MNIST dataset) and tabular data (Wisconsin Breast Cancer dataset), they showed that prototypes help to produce counterfactuals of superior quality.",
+        "title": "Explainable AI: A Review of Machine Learning Interpretability Methods",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC7824368/",
+        "date": "2020-12-25",
+        "last_updated": "2026-03-27"
+      },
+      {
+        "snippet": "In particular, it is unclear how the wide array of proposed interpretation methods are related and what common concepts can be used to evaluate them. We aim to address these concerns by defining interpretability in the context of machine learning and introducing the predictive, descriptive, relevant (PDR) framework for discussing interpretations. The PDR framework provides 3 overarching desiderata for evaluation: predictive accuracy, descriptive accuracy, and relevancy, with relevancy judged relative to a human audience.\n\n…\n\nIn this paper, we attempt to address these concerns. To do so, we first define interpretability in the context of machine learning and place it within a generic data science life cycle. This allows us to distinguish between 2 main classes of interpretation methods: model based* and post hoc. We then introduce the predictive, descriptive, relevant (PDR) framework, consisting of 3 desiderata for evaluating and constructing interpretations: predictive accuracy, descriptive accuracy, and relevancy, where relevancy is judged by a human audience. Using these terms, we categorize a broad range of existing methods, all grounded in real-world examples.\n\n…\n\n### Interpretation Methods within the PDR Framework.\n\nIn the framework described above, our definition of interpretable ML focuses on methods in either the modeling or post hoc analysis stages. We call interpretability in the modeling stage model-based interpretability (\n\n*Section 5*). This part of interpretability is focused upon the construction of models that readily provide insight into the relationships they have learned. To provide this insight, model-based interpretability techniques must generally use simpler models, which can result in lower predictive accuracy. Consequently, model-based interpretability is best used when the underlying relationship is sufficiently simple that model-based techniques can achieve reasonable predictive accuracy or when predictive accuracy is not a concern.\n\n…\n\n## 5. Model-Based Interpretability\n\nWe now discuss how interpretability considerations come into play in the modeling stage of the data–science life cycle (Fig. 1). At this stage, the practitioner constructs an ML model from the collected data. We define model-based interpretability as the construction of models that readily provide insight into the relationships they have learned. Different model-based interpretability methods provide different ways of increasing descriptive accuracy by constructing models which are easier to understand, sometimes resulting in lower predictive accuracy. The main challenge of model-based interpretability is to come up with models that are simple enough to be easily understood by the audience, while maintaining high predictive accuracy.\nIn selecting a model to solve a domain problem, the practitioner must consider the entirety of the PDR framework. The first desideratum to consider is predictive accuracy. If the constructed model does not accurately represent the underlying problem, any subsequent analysis will be suspect (29, 30). Second, the main purpose of model-based interpretation methods is to increase descriptive accuracy. Finally, the relevancy of a model’s output must be considered and is determined by the context of the problem, data, and audience. We now discuss some common types of model-based interpretability methods.\n\n…\n\n### B. Model Based.\n\nNow that we have discussed the general problem of evaluating interpretations, we highlight important challenges for the 2 main subfields of interpretable machine learning: model-based and post hoc interpretability. Whenever model-based interpretability can achieve reasonable predictive accuracy and relevancy, by virtue of its high descriptive accuracy it is preferable to fitting a more complex model and relying upon post hoc interpretability. Thus, the main focus for model-based interpretability is increasing its range of possible use cases by increasing its predictive accuracy through more accurate models and transparent feature engineering. It is worth noting that sometimes a combination of model-based and post hoc interpretations is ideal.",
+        "title": "Definitions, methods, and applications in interpretable machine learning | PNAS",
+        "url": "https://www.pnas.org/doi/10.1073/pnas.1900654116",
+        "date": "2019-10-29",
+        "last_updated": "2025-03-08"
+      },
+      {
+        "snippet": "",
+        "title": "[PDF] An Overview of Interpretability of Machine Learning - arXiv",
+        "url": "https://arxiv.org/pdf/1806.00069.pdf",
+        "date": null,
+        "last_updated": "2026-05-06"
+      },
+      {
+        "snippet": "特别是，目前尚不清楚已提出的众多解释方法之间有何关联，以及可以用哪些共通概念来评估它们。我们旨在通过在机器学习背景下定义可解释性，并引入用于讨论解释的预测性、描述性、相关性（PDR）框架来解决这些问题。PDR 框架为评估提供了 3 项总体要求：预测准确性、描述准确性和相关性，其中相关性是相对于人类受众来判断的。\n\n…\n\n在本文中，我们尝试解决这些问题。为此，我们首先在机器学习背景下定义可解释性，并将其置于一个通用的数据科学生命周期之中。这使我们能够区分解释方法的 2 大主要类别：基于模型的方法和事后（post hoc）方法。随后我们引入预测性、描述性、相关性（PDR）框架，该框架包含用于评估和构建解释的 3 项要求：预测准确性、描述准确性和相关性，其中相关性由人类受众来判断。\n\n…\n\n### PDR 框架内的解释方法。\n\n在上述框架中，我们对可解释机器学习的定义聚焦于建模阶段或事后分析阶段的方法。我们把建模阶段的可解释性称为基于模型的可解释性（*第 5 节*）。这部分可解释性关注于构建能够便捷地揭示其所学到的关系的模型。为提供这种洞察，基于模型的可解释性技术通常必须使用更简单的模型，这可能导致较低的预测准确性。因此，当潜在关系足够简单以致基于模型的技术能够达到合理的预测准确性时，或者当预测准确性并非关注重点时，最适宜采用基于模型的可解释性。\n\n…\n\n在选择模型以解决某一领域问题时，实践者必须综合考虑整个 PDR 框架。首先要考虑的要求是预测准确性。如果所构建的模型不能准确表征潜在问题，那么任何后续分析都将存疑（29, 30）。其次，基于模型的解释方法的主要目的是提高描述准确性。最后，必须考虑模型输出的相关性，它由问题、数据和受众的背景所决定。下面我们讨论几种常见的基于模型的可解释性方法。",
+        "title": "可解释性中的定义、方法与应用……",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC6825274/",
+        "date": "2019-10-16",
+        "last_updated": "2026-02-02"
+      },
+      {
+        "snippet": "Within this framework, methods are organized into two classes: model-based and post-hoc. To provide guidance in selecting and evaluating interpretation methods, we introduce three desiderata: predictive accuracy, descriptive accuracy, and relevancy. Using our framework, we review existing work, grounded in real-world studies which exemplify our desiderata, and suggest directions for future work. \\authorcontributionsW.M., C.S., K.K., R.A., and B.Y. helped identify important concepts and provided feedback on the paper.\n\n…\n\nWe aim to address these concerns by defining interpretability in the context of machine learning and introducing the Predictive, Descriptive, Relevant (PDR) framework for discussing interpretations. The PDR framework provides three overarching desiderata for evaluation: predictive accuracy, descriptive accuracy and relevancy, with relevancy judged relative to a human audience.\n\n…\n\n### 2.1 Interpretation methods within the PDR framework\n\nIn the framework described above, most interpretation methods fall either in the modeling or post hoc analysis stages. We call interpretability in the modeling stage model-based interpretability (Sec 4). This part of interpretability is focused upon constraining the form of ML models so that they readily provide useful information about the uncovered relationships. As a result of these constraints, the space of potential models is smaller, which can result in lower predictive accuracy. Consequently, model-based interpretability is best used when the underlying relationship is relatively simple.\n\n…\n\nIn selecting a model to solve a domain problem, the practitioner must consider the entirety of the PDR  framework. The first desideratum to consider is predictive accuracy. If the constructed model does not accurately represent the underlying problem, any subsequent analysis will be suspect (28, 29). Second, the main purpose of model-based interpretation methods is to increase descriptive accuracy. Finally, the relevancy of a model’s output must be considered, and is determined by the context of the problem, data, and audience. We now discuss some widely useful types of model-based interpretability methods.\n\n…\n\nMost widely useful post hoc interpretation methods fall into two main categories: prediction-level and dataset-level interpretations, which are sometimes referred to as local and global interpretations, respectively. Prediction-level interpretation methods focus on explaining individual predictions made by models, such as what features and/or interactions led to the particular prediction. Dataset-level approaches focus on the global relationships the model has learned, such as what visual patterns are associated with a predicted response. These two categories have much in common (in fact, dataset-level approaches often yield information at the prediction-level), but we discuss them separately, as methods at different levels are meaningfully different.\n\n…\n\n### 6.2 Model-based\n\nNow that we have discussed the general problem of evaluating interpretations, we highlight important challenges for the two main sub-fields of interpretable machine learning: model-based and post hoc interpretability. Whenever model-based interpretability can achieve reasonable predictive accuracy and relevancy, by virtue of its high descriptive accuracy it is preferable to fitting a more complex model, and relying upon post hoc interpretability. Thus, the main focus for model-based interpretability is increasing its range of possible use cases by increasing its predictive accuracy through more accurate models and transparent feature engineering. It is worth noting that sometimes a combination of model-based and post hoc interpretations is ideal.",
+        "title": "Interpretable machine learning: definitions, methods, and applications",
+        "url": "https://ar5iv.labs.arxiv.org/html/1901.04592",
+        "date": "2011-02-07",
+        "last_updated": "2026-03-14"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+**4. 使用搜索时效性过滤器**
+
+`search_recency_filter` 提供了一种便捷方式，无需指定具体日期即可按预设的时间范围筛选结果：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.search.create(
+      query="transformer architecture attention mechanism",
+      max_results=10,
+      search_recency_filter="week"
+  )
+
+  print(response)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.search.create({
+    query: "transformer architecture attention mechanism",
+    max_results: 10,
+    search_recency_filter: "week"
+  });
+
+  console.log(response);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/search' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "query": "transformer architecture attention mechanism",
+      "max_results": 10,
+      "search_recency_filter": "week"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "5cdd76b9-da5a-4f9f-8c75-61c90a2399a2",
+    "results": [
+      {
+        "snippet": "",
+        "title": "What is an attention mechanism?",
+        "url": "https://www.ibm.com/think/topics/attention-mechanism",
+        "date": "2024-12-05",
+        "last_updated": "2026-03-31"
+      },
+      {
+        "snippet": "",
+        "title": "Introduction to Transformers and Attention Mechanisms",
+        "url": "https://medium.com/@kalra.rakshit/introduction-to-transformers-and-attention-mechanisms-c29d252ea2c5",
+        "date": "2024-02-07",
+        "last_updated": "2025-10-29"
+      },
+      {
+        "snippet": "",
+        "title": "Transformer (deep learning) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Transformer_(deep_learning)",
+        "date": "2019-08-25",
+        "last_updated": "2026-05-15"
+      },
+      {
+        "snippet": "",
+        "title": "Transformer (deep learning) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Transformer_(deep_learning_architecture)",
+        "date": "2019-08-25",
+        "last_updated": "2026-05-19"
+      },
+      {
+        "snippet": "The famous paper “Attention is all you need” by Vaswani et al. presents the transformer architecture.\nThis neural network architecture builds on the attention mechanism and is at the core of current large language models (LLMs) such as ChatGPT, GPT-4, BERT, etc.\n...\nTransformers process sequences of tokens such as (sub-)words in a sentence.\nThe transformer architecture consists of two parts:\n1. The encoder, which processes the tokens of the input sequence and\n2. the decoder, which produces new tokens as output based on the input tokens and the previously produced output tokens.\nThe overall architecture is shown in the figure below with the encoder on the left and the decoder on the right side.\n...\nThe encoder (left side of the figure above), processes the tokens of the input sequence.\nEach token is initially embedded into a *d- * dimensional vector, e.g., using word2vec.\nIt is then processed individually and compared to other tokens in the input.\nThe process works with variable-length sequences.\nAfter embedding the words as vectors, a **positional encoding** is added, which indicates the absolute and relative position of the tokens in the sequence.\nThis is necessary for many tasks, particularly in natural language, since the later parts of the encoder are permutation invariant.\nThis means they do not distinguish the position of the tokens in the sequence.\n...\nAfter positional encoding, follows a **self-attention** block.\nDuring self-attention, the tokens *within the input sequence* are compared to each other, computing *attention weights.\n* A high attention weight for a pair of two tokens indicates that they are syntactically or semantically related.\nThus high weights indicate important tokens that the model should “attend” to.\n...\nFinally, a normal feed-forward neural network follows the attention block and outputs the encoded tokens one by one.\n...\nIn contrast to the encoder, the decoder contains a **cross-attention** block, which compares to the encoded tokens of the input sequence using cross-attention (explained in more detail below).\nThis cross-attention is at the heart of the decoder and helps producing the next output token, taking both the full input and the output produced so far into account.\n...\n## The Attention Mechanism\nThe attention mechanism is at the core of the transformer architecture — thus the paper title “Attention is all you need”.\nIn a transformer, the attention mechanism enables the model to assign different *attention weights/scores* to different tokens in a sequence.\nThis way, the model can give more importance to relevant information, ignore irrelevant information, and effectively capture long-range dependencies in the data.\nThe attention mechanism distinguishes three inputs: The **query Q, the key K, and the value V**.\nEach token in a sequence is a separate input for Q, K, or V.\nThe mechanism compares queries Q with keys K to determine their importance/compatibility to each other, computing attention weights.\nIt then selects corresponding values V with high attention weights.\nThis is an analogy to data bases, hash tables, or Python dictionaries, where we select the values whose keys match a given query best.\n...\n*Self- and cross-attention only differ in which tokens are given as inputs Q, K, and V.* In **self-attention**, the same tokens are used for all three inputs, i.e., each token is used for Q, K, and V.\nIn **cross-attention**, the same tokens are given to K and V, but different tokens are used for Q.\nSelf-attention is applied to the input sequence in the encoder and to the output sequence in the decoder.\nThe decoder’s cross-attention module then uses the encoded input tokens as K and V and the produced output tokens as Q.\nIn either case, attention weights between tokens in Q and in K are calculated using scaled dot-product attention.\nWhile there are other forms of attention such as learned attention weights, scaled dot-product attention is faster and more space efficient.\nIn scaled dot-product attention, attention weights are computed without extra parameters as illustrated in the figure below: Tokens in Q and K are multiplied, scaled, and passed through a softmax function to obtain attention weights.\nThe attention weights are then multiplied with the tokens in V to select values with high corresponding weights.\n...\nMulti-head attention repeats the attention mechanism explained above multiple times (*h * times) in parallel.\nBefore passing the input tokens of dimension *d * into these *h * attention blocks, they projected into smaller embeddings of size* d/h * by using small linear neural networks*.\n* Each of the *h * linear networks has different weights and leads to different projections.\nConsequently, each attention “head” can learn to focus on different aspects, e.g., subject and object of a sentence.\nThe outputs of the *h* heads are then concatenated and passed through another linear neural network.\n...\nOverall, attention is a surprisingly simple yet effective mechanism to emphasize meaningful tokens and ignore less meaningful tokens.\nBased on this mechanism, transformers can take capture the context even in long sequences and produce coherent outputs.",
+        "title": "Understanding Transformers and Attention | by Stefan",
+        "url": "https://medium.com/@stefanbschneider/understanding-attention-and-transformers-d84b016cd352",
+        "date": "2023-11-28",
+        "last_updated": "2025-10-27"
+      },
+      {
+        "snippet": "",
+        "title": "Attention in transformers, step-by-step | Deep Learning Chapter 6",
+        "url": "https://www.youtube.com/watch?v=eMlx5fFNoYc&vl=en",
+        "date": "2024-04-07",
+        "last_updated": "2026-05-26"
+      },
+      {
+        "snippet": "At the present moment, the dominant models for nearly all natural\nlanguage processing tasks are based on the Transformer architecture.\n...\nThe core idea behind the Transformer model is the *attention mechanism*, an innovation that was originally envisioned as an enhancement for encoder–decoder RNNs applied to sequence-to-sequence applications, such as machine translations ().\nYou might recall that in the first sequence-to-sequence models for machine translation (), the entire input was compressed by the encoder into a single fixed-length vector to be fed into the decoder.\nThe intuition behind attention is that rather than compressing the input, it might be better for the decoder to revisit the input sequence at every step.\nMoreover, rather than always seeing the same representation of the input, one might imagine that the decoder should selectively focus on particular parts of the input sequence at particular decoding steps.\nBahdanau’s attention mechanism provided a simple means by which the decoder could dynamically *attend* to different parts of the input at each decoding step.\nThe high-level idea is that the encoder could produce a representation of length equal to the original input sequence.\nThen, at decoding time, the decoder can (via some control mechanism) receive as input a context vector consisting of a weighted sum of the representations on the input at each time step.\nIntuitively, the weights determine the extent to which each step’s context “focuses” on each input token, and the key is to make this process for assigning the weights differentiable so that it can be learned along with all of the other neural network parameters.\nInitially, the idea was a remarkably successful enhancement to the\n...\nHowever, attention mechanisms soon emerged as more significant concerns,\nbeyond their usefulness as an enhancement for encoder–decoder recurrent\nneural networks and their putative usefulness for picking out salient\ninputs.\nVaswani *et al.* () proposed the Transformer architecture for machine translation, dispensing with recurrent connections altogether, and instead relying on cleverly arranged attention mechanisms to capture all relationships among input and output tokens.",
+        "title": "11. Attention Mechanisms and Transformers - Dive into Deep Learning",
+        "url": "http://www.d2l.ai/chapter_attention-mechanisms-and-transformers/index.html",
+        "date": null,
+        "last_updated": "2026-03-12"
+      },
+      {
+        "snippet": "",
+        "title": "The self-attention mechanism",
+        "url": "https://www.codecademy.com/article/transformer-architecture-self-attention-mechanism",
+        "date": "2025-09-19",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "",
+        "title": "How Attention Mechanism Works in Transformer Architecture",
+        "url": "https://www.youtube.com/watch?v=KMHkbXzHn7s",
+        "date": "2025-03-08",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "",
+        "title": "Transformer (deep learning architecture) - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Grouped-query_attention",
+        "date": "2025-03-14",
+        "last_updated": "2025-03-15"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+此示例仅返回过去 7 天内的内容，时间范围会根据当前日期自动计算。
+
+**5. 不同的时效性过滤选项**
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 获取过去一小时内的内容（实时：突发新闻或现场事件）
+  hour_response = client.search.create(
+      query="Apollo 11 moon landing mission overview",
+      max_results=5,
+      search_recency_filter="hour"
+  )
+
+  # 获取过去一天内的内容
+  day_response = client.search.create(
+      query="history of the printing press",
+      max_results=5,
+      search_recency_filter="day"
+  )
+
+  # 获取过去一个月内的内容
+  month_response = client.search.create(
+      query="AI research developments",
+      max_results=10,
+      search_recency_filter="month"
+  )
+
+  # 获取过去一年内的内容
+  year_response = client.search.create(
+      query="major technology trends",
+      max_results=15,
+      search_recency_filter="year"
+  )
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // 获取过去一小时内的内容（实时：突发新闻或现场事件）
+  const hourResponse = await client.search.create({
+    query: "Apollo 11 moon landing mission overview",
+    max_results: 5,
+    search_recency_filter: "hour"
+  });
+
+  // 获取过去一天内的内容
+  const dayResponse = await client.search.create({
+    query: "history of the printing press",
+    max_results: 5,
+    search_recency_filter: "day"
+  });
+
+  // 获取过去一个月内的内容
+  const monthResponse = await client.search.create({
+    query: "AI research developments",
+    max_results: 10,
+    search_recency_filter: "month"
+  });
+
+  // 获取过去一年内的内容
+  const yearResponse = await client.search.create({
+    query: "major technology trends",
+    max_results: 15,
+    search_recency_filter: "year"
+  });
+  ```
+
+  ```bash cURL theme={null}
+  # 获取过去一小时内的内容（实时：突发新闻或现场事件）
+  curl -X POST 'https://api.perplexity.ai/search' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "query": "Apollo 11 moon landing mission overview",
+      "max_results": 5,
+      "search_recency_filter": "hour"
+    }' | jq
+
+  # 获取过去一天内的内容
+  curl -X POST 'https://api.perplexity.ai/search' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "query": "history of the printing press",
+      "max_results": 5,
+      "search_recency_filter": "day"
+    }' | jq
+
+  # 获取过去一个月内的内容
+  curl -X POST 'https://api.perplexity.ai/search' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "query": "AI research developments",
+      "max_results": 10,
+      "search_recency_filter": "month"
+    }' | jq
+  ```
+</CodeGroup>
+
+<AccordionGroup>
+  <Accordion title="响应 — 阿波罗 11 号登月任务概览">
+    ```json theme={null}
+    {
+      "id": "1aebf3c7-ed3b-4e2c-9366-ce8ede12cec3",
+      "results": [
+        {
+          "snippet": "",
+          "title": "Apollo 11 - Wikipedia",
+          "url": "https://en.wikipedia.org/wiki/Apollo_11",
+          "date": "2001-09-24",
+          "last_updated": "2026-05-22"
+        },
+        {
+          "snippet": "阿波罗11号的首要目标是完成约翰·F·肯尼迪总统于1961年5月25日设定的国家目标：实施载人登月并返回地球。\n其他飞行目标包括由登月舱（LM）乘员进行科学考察；部署一台电视摄像机向地球传输信号；以及部署太阳风成分实验、月震实验包和激光测距后向反射器。\n在考察期间，两名航天员要采集月面物质样本带回地球。\n他们还要用静态相机和电影摄影机大量拍摄月面地形、已部署的科学设备、登月舱以及彼此。\n这将是最后一次采用“自由返回”轨道飞行的阿波罗任务，该轨道使飞船无需点火即可返回地球，从而在进入月球轨道之前的任何时刻都能随时中止任务。\n...\n阿波罗11号于1969年7月16日从肯尼迪角发射，搭载指令长尼尔·阿姆斯特朗、指令舱驾驶员迈克尔·柯林斯和登月舱驾驶员埃德温·“巴兹”·奥尔德林进入114×116英里的初始地球轨道。\n据估计，1969年7月20日有6.5亿人观看了阿姆斯特朗的电视图像，并听到他描述这一时刻：“……这是个人的一小步，却是人类的一大步。”\n发射后2小时44分、绕地一圈半时，S-IVB级再次点火，进行了5分48秒的第二次燃烧，将阿波罗11号送入奔月轨道。\n指令与服务舱（CSM）“哥伦比亚”号与该级分离，该级包含航天器—登月舱转接器（SLA），其中装载着登月舱（LM）“鹰”号。\n...\n在阿姆斯特朗部分手动操纵下，“鹰”号降落在静海2号着陆点，位于北纬0度41分15秒、东经23度26分。\n...\n经过195小时18分35秒的飞行——比计划长约36分钟——阿波罗11号在太平洋濺落，距回收舰“大黄蜂”号13英里。\n由于目标区域天气恶劣，着陆点改变了约250英里。\n1969年7月24日，阿波罗11号降落于北纬13度19分、西经169度9分。\n**乘员**\n尼尔·阿姆斯特朗，指令长\n埃德温·E.\n“巴兹”·奥尔德林二世，登月舱驾驶员\n迈克尔·柯林斯，指令舱驾驶员\n**备份乘员**\n詹姆斯·A·洛弗尔，指令长\n弗雷德·W·海斯二世，登月舱驾驶员\n威廉·A·安德斯，指令舱驾驶员\n**有效载荷**",
+          "title": "阿波罗11号任务概述 - NASA",
+          "url": "https://www.nasa.gov/history/apollo-11-mission-overview/",
+          "date": "2015-04-17",
+          "last_updated": "2026-05-13"
+        },
+        {
+          "snippet": "The primary objective of Apollo 11 was to complete a national goal set by President John F. Kennedy on May 25, 1961: perform a crewed lunar landing and return to Earth.\nMission Type\nLunar Landing\nastronauts\nNeil Armstrong, Buzz Aldrin, Michael Collins\nLaunch\nJuly 16, 1969\nSPLASHDOWN\nJuly 24, 1969\n...\n**First human to set foot on the Moon.**\nNeil A. Armstrong is probably best known as the commander for the Apollo 11 mission.\n...\nWatch highlights from the Apollo 11 mission including the launch on July 16, 1969, the landing of the lunar module, Neil Armstrong's first steps on the Moon, splashdown, and more.\n...\n20 July 1969—Astronaut Edwin E. Aldrin Jr., lunar module pilot, walks on the surface of the moon near the leg of the Lunar Module (LM) “Eagle” during the Apollo 11 extravehicular activity (EVA).\n...\nJOHNSON SPACE CENTER, HOUSTON, TEXAS – With a half-Earth in the background, the Lunar Module ascent stage with Moon-walking astronauts Neil Armstrong and Edwin Aldrin Jr. approaches for a rendezvous with the Apollo Command Module manned by Michael Collins.\nThe Apollo 11 liftoff from the Moon came early, ending a 22-hour stay on the Moon by Armstrong and Aldrin.\n...\nNeil Armstrong was the first person to walk on the moon.\nHe was an astronaut.\nHe flew on two space missions.\nOne was Apollo 11.\nThat mission landed on the moon.",
+          "title": "Apollo 11 - NASA",
+          "url": "https://www.nasa.gov/mission/apollo-11/",
+          "date": "2023-03-08",
+          "last_updated": "2026-05-15"
+        },
+        {
+          "snippet": "Apollo 11, the first space mission to put people on the Moon, was launched on July 16, 1969.\nAlmost every major aspect of the flight of Apollo 11 was witnessed via television by hundreds of millions of people in nearly every part of the globe, until splashdown in the Pacific Ocean on July 24.\n...\nApollo 11’s mission objective was to land astronauts on the Moon and return them safely back to Earth.\nIt succeeded in its objective by landing Neil Armstrong and Buzz Aldrin on the Moon on July 20, 1969.\n...\nApollo 11’s crew members were commander Neil Armstrong, lunar module pilot Buzz Aldrin, and command module pilot Michael Collins.\n...\nThe lunar module *Eagle* of the Apollo 11 mission landed on the Moon on July 20, 1969.\nNeil Armstrong and Buzz Aldrin became the first people to land on the Moon and walk on the lunar surface.\n...\nThe fastest speed Apollo 11 achieved was 39,715 kilometers (24,678 miles) per hour when the command module reentered Earth’s atmosphere on July 24, 1969.\n**\n**Apollo 11**, U.S. spaceflight during which commander Neil Armstrong and lunar module pilot Edwin (“Buzz”) Aldrin, Jr., on July 20, 1969, became the first people to land on the Moon and walk the lunar surface.\nApollo 11 was the culmination of the Apollo program and a massive national commitment by the United States to beat the Soviet Union in putting people on the Moon.\nAll told, 24 Apollo astronauts visited the Moon and 12 of them walked on its surface.\nAdditional NASA astronauts are scheduled to return to the Moon by 2025 as part of the Artemis space program.\n...\nSplashdown of Apollo 11 occurred in the Pacific Ocean about 1,400 km (900 miles) west of Hawaii on July 24.",
+          "title": "Apollo 11 | History, Mission, Landing, Astronauts ... - Britannica",
+          "url": "https://www.britannica.com/topic/Apollo-11",
+          "date": "2026-05-25",
+          "last_updated": "2026-05-26"
+        },
+        {
+          "snippet": "**1969年7月20日，人类首次在月球上行走。**\n**我们回顾人类在月球上第一小步留下的遗产，并期待下一次巨大的飞跃。**\n...\n1961年4月12日，苏联将第一位人类尤里·加加林送入太空。\n在苏联取得这一成就后的几天内，约翰·F·肯尼迪总统就要求副总统林登·约翰逊找出一项"有望取得惊人成果、并能让我们取胜的太空计划"。\n一个多月后，1961年5月25日，肯尼迪在国会两院联席会议上发表演讲，呼吁开展人类登月探索。\n...\n1969年7月16日\n## 升空！\n一枚载有阿波罗11号三名宇航员的土星五号火箭从肯尼迪角发射升空。\n包括副总统斯皮罗·阿格纽和前总统林登·约翰逊在内的一百多万名观众前来观看发射。\n1969年7月20日\n## \"鹰已着陆！\"\n在飞往月球四天之后，载有尼尔·阿姆斯特朗和巴兹·奥尔德林的登月舱*鹰号*降落在月球上。\n尼尔·阿姆斯特朗走出航天器，成为第一个在月球上行走的人类。\n在估计有6.5亿人观看的情况下，阿姆斯特朗宣告：\"这是我个人的一小步，却是人类的一大步。\"\n迈克尔·柯林斯留在指令舱*哥伦比亚号*上，充当通信中继并拍摄月球表面。\n...\n## 静海 | Mare Tranquillitatis\n**北纬00.67408°，东经23.47297°**\n对于首次登月，之所以选择静海（Mare Tranquilitatis）作为着陆点，是因为它是一片相对平滑平坦的区域。\n不过，那里确实有一些环形山，在着陆前的最后几分钟，尼尔·阿姆斯特朗不得不手动驾驶登月舱，以避开一个被称为"西部"的边缘锐利的辐射纹环形山，其直径约180米、深约30米。\n登月舱安全着陆于距原定着陆点约6公里处，位于"西部"环形山以西约400米、静海西南部萨宾D环形山以南偏西南20公里处。\n着陆点的月球表面由碎屑物质构成，大小从细颗粒到约0.8米宽的岩块不等。\n...\n在月球上停留约两个半小时后，阿姆斯特朗和奥尔德林返回登月舱，开始回家的旅程。\n三名宇航员于1969年7月24日在夏威夷附近溅落。\n随后他们被隔离三周，以防将传染病从月球带回，之后才开始举行欢迎他们回家的庆祝活动。\n...\n## 巴兹·奥尔德林\n登月舱驾驶员\n## 迈克尔·柯林斯\n指令舱驾驶员\n...\n有三名宇航员被选为该乘组的替补：指令长詹姆斯·A·洛弗尔；指令舱驾驶员威廉·A·安德斯；登月舱驾驶员弗雷德·W·海斯。\n这三名替补乘组成员最终都参加了阿波罗任务的飞行。\n...\n7月20日，世界各地的人们聚集在电视机前观看登月。\n估计有6.5亿名观众在观看。\n在美国，93%的电视机都调到了收看尼尔·阿姆斯特朗在月球上行走的节目。",
+          "title": "技术",
+          "url": "https://airandspace.si.edu/explore/stories/apollo-11-moon-landing",
+          "date": "2021-07-29",
+          "last_updated": "2026-05-26"
+        },
+        {
+          "snippet": "Apollo 11 was launched on July 16, 1969, at 8:32 AM Central Daylight Time (CDT) with the goal of performing the first human landing on the Moon.\nCommander Neil Armstrong, Command Module Pilot Michael Collins, and Lunar Module Pilot Edwin “Buzz” Aldrin entered lunar orbit on the afternoon of July 19.\nThe following day, Armstrong and Aldrin begin their descent to the lunar surface in the Lunar Module, Eagle.\nThe planned landing site in the Sea of Tranquility was selected as a flat, safe location and had been surveyed by Apollo 10 at an elevation of 10 miles above the Moon.\nHowever, a navigation error earlier in the mission caused Eagle to be about 7 kilometers beyond the planned landing location.\nDuring the 12.6-minute-long powered descent, there were a total of five unexpected computer alarms.\nThese alarms all indicated that Eagle’s computer system was overloaded, but in each case, Mission Control concluded that it was safe to continue the landing.\nThe last of these alarms occurred less than three minutes before landing, when the crew was less than 500 meters above the surface.\nBecause of the navigation error, the computer was guiding the spacecraft towards an unsafe touchdown point in the rugged, boulder-filled ejecta field surrounding West Crater.\nArmstrong took manual control and flew to a safe landing spot beyond the crater.\nAt 3:17 PM CDT, he announced their safe landing, “Houston, Tranquility Base.\nThe Eagle has landed.”\nAt the time of landing, Mission Control thought that the spacecraft had just 17 seconds of fuel left in the descent stage.\nHowever, post mission analysis showed that sloshing in the fuel tank during Armstrong’s search for a safe landing site caused the fuel gauge to give an inaccurate reading.\nEagle actually had about 45 seconds of fuel left when it touched down.\nAfter a checkout of Eagle’s systems, Armstrong and Aldrin prepared for their moonwalk.\nAt 9:56 PM CDT, Armstrong set foot on the lunar surface, “That’s one small step for man, one giant leap for mankind.”\nAldrin followed a short while later.\nThe duration of this first ever moonwalk was limited to just 2 hours and 31 minutes and the crew remained within 60 meters of Eagle.\nArmstrong and Aldrin collected 21.6 kilograms of samples and deployed a seismometer to measure moonquakes, a laser retroreflector to enable precise measurements of the distance between Earth and the Moon, and a device to collect a sample of the solar wind.\nThey also performed ceremonial duties, including setting up a United States flag, unveiling a commemorative plaque on the lunar module, and having a brief conversation with President Richard Nixon.\nDuring the moon landing, Collins remained in lunar orbit in the command module, Columbia.\nAfter just 21.6 hours on the Moon, Eagle’s ascent stage returned to lunar orbit and rejoined Columbia.\nAltogether, Apollo 11 spent 2.5 days in lunar orbit, circling the Moon 31 times.\nThe crew returned safely to Earth on July 24, landing in the Pacific Ocean southwest of Hawaii, after a flight of 8 days and 3 hours.\nAlthough scientists considered it unlikely that the Moon had life on it, the crew was kept in a biological quarantine for 21 days.\nPost-mission analysis showed that the Apollo 11 samples consisted of two primary rock types.\nBasalt is formed by the solidification of molten magma.\nThe Apollo 11 basalts formed 3.6 to 3.9 billion years ago and are unusually rich in the element titanium.\nBreccias are composed of fragments of other rocks.\nOn the Moon, breccias formed from rocks that are broken up by impacting objects.\nAnalysis of the lunar samples also confirmed that they were indeed lifeless and showed no evidence of water.",
+          "title": "Lunar - Missions - Apollo 11 Mission",
+          "url": "https://www.lpi.usra.edu/lunar/missions/apollo/apollo_11/",
+          "date": null,
+          "last_updated": "2025-07-28"
+        },
+        {
+          "snippet": "Apollo 11 was the first mission to land humans on the Moon.\nIt fulfilled a 1961 goal set by President John F. Kennedy to send American astronauts to the surface and return them safely to Earth before the end of the decade.\nOn 21 July 1969 at 02:56:15 UTC, Neil Armstrong pressed his left foot onto the Moon and said, \"That's one small step for [a] man, one giant leap for mankind,\" as 530 million people watched live on television.\nThe mission returned 20 kilograms of rock and soil to Earth, and paved the way for 5 additional Moon landings that greatly advanced the field of lunar science.\nNeil Armstrong, Buzz Aldrin, and Michael Collins began their journey\nwith a launch aboard a Saturn V rocket on the morning of 16 July 1969.\nThree hours later, their rocket's upper stage blasted them out of Earth\norbit towards the Moon.\nThey arrived 3 days later on 19 July and entered\nan initial lunar orbit of 111 by 306 kilometers.\nA second engine burn\nlowered their orbit to 100 by 113 kilometers.\nOn 20 July, Armstrong and Aldrin boarded their lunar module, nicknamed Eagle, and undocked it from the command module, where Collins remained.\nAlmost the same as in the Apollo 10 rehearsal 2 months earlier, the astronauts fired Eagle’s descent engine, dropping to an orbit with a low point of 14.5 kilometers.\nRoughly an hour later, as the duo approached the Sea of Tranquility, they began a final powered descent to the surface.\n...\nThe official touchdown time was 20:17:39 UTC on 20 July 1969.\n...\nArmstrong and Aldrin's single moonwalk lasted two and a half hours.\nDuring that time, they deployed science and engineering experiments, photographed their surroundings, displayed an American flag, read an inscription plaque, collected rock and soil samples for return to Earth, and spoke with President Richard Nixon.\nThe astronauts verbally described their surroundings and progress for geologists, while cameras mounted inside and outside the lunar module documented some of their activities.\n...\nThe Apollo 11 lunar module landing coordinates are 0.67416 degrees N, 23.47314 E.",
+          "title": "Apollo 11 | The Planetary Society",
+          "url": "https://www.planetary.org/space-missions/apollo-11",
+          "date": "2019-05-31",
+          "last_updated": "2026-03-31"
+        },
+        {
+          "snippet": "Apollo 11 (CSM Columbia and LM Eagle)\nSaturn V\nJuly 16-24, 1969\nNeil A. Armstrong\nMichael Collins\nEdwin E.\n\"Buzz\" Aldrin, Jr.\n08 days, 03 hours, 18 minutes\nFirst manned lunar landing mission and lunar\nsurface EVA.\n\"HOUSTON, TRANQUILITY BASE HERE.\nTHE EAGLE HAS LANDED.\"--July 20,\nLanding site: Sea of Tranquility.\nLanding Coordinates: 0.67409 degrees North, 23.47298 degrees East\n(Source: National Space Science Data Center); LROC QuickMap\n1 EVA of 02 hours, 31 minutes.\nFlag and instruments deployed; unveiled plaque on the LM descent stage with inscription: \"Here Men From Planet Earth First Set Foot Upon the Moon.\nJuly 1969 A.D.\nWe Came In Peace For All Mankind.\"\nLunar surface stay time 21.6 hours; 59.5 hours in lunar orbit, with 30 orbits.\nLM ascent stage left in lunar orbit.\n20 kg (44 lbs) of material gathered.",
+          "title": "Apollo 11 Lunar Surface Journal : Mission Overview",
+          "url": "https://www.nasa.gov/history/alsj/a11/a11ov.html",
+          "date": null,
+          "last_updated": "2025-10-25"
+        },
+        {
+          "snippet": "",
+          "title": "Apollo 11 Mission Overview | NASA+",
+          "url": "https://plus.nasa.gov/video/apollo-11-mission-overview/",
+          "date": "2024-07-12",
+          "last_updated": "2026-05-17"
+        },
+        {
+          "snippet": "Overview of the Apollo 11 spaceflight in which U.S. astronauts became the first people to walk on the Moon.\n...\nThe mission that took U.S. astronauts to the Moon was Apollo 11, NASA’s fifth crewed Apollo mission.\nThe astronauts on board the spacecraft were Neil Armstrong, Edwin (“Buzz”) Aldrin, Jr., and Michael Collins.\nOn the morning of July 20, Armstrong and Aldrin crawled from the command module, Columbia, through a tunnel to the lunar module, Eagle.\nArmstrong and Aldrin piloted Eagle to the lunar surface, touching down in the Sea of Tranquility.\nAt 4:17 PM U.S. Eastern Daylight Time (EDT), Armstrong radioed, “Houston, Tranquility Base here.\nThe Eagle has landed.”\nAt 10:56 PM EDT on July 20, Armstrong stepped out onto the lunar soil with the words, “That’s one small step for [a] man, one giant leap for mankind.”\n(In the excitement of the moment, Armstrong skipped the “a” in the statement that he had prepared.)\nArmstrong and Aldrin set up a device to measure the composition of the solar wind reaching the Moon, a device to receive laser beams from astronomical observatories on Earth to determine the exact distance of the two bodies from one each other, and a passive seismometer to measure moonquakes and meteor impacts.\nThey also took about 23 kg (50 pounds) of rock and soil samples, took many photographs, and maintained constant communication with mission control in Houston, Texas.\nAfter 21 hours 38 minutes on the Moon’s surface, the astronauts used Eagle’s ascent stage to launch it back into lunar orbit.\nSplashdown of Apollo 11 occurred in the Pacific Ocean about 1,400 km (900 miles) southwest of Hawaii on July 24.\nAfter their return, the astronauts were quarantined for 21 days from the time Eagle had left the Moon.\nThey were checked for any diseases they might have brought back from the Moon.",
+          "title": "Apollo 11's Incredible Journey to the Moon | Britannica",
+          "url": "https://www.britannica.com/video/Just-the-facts-Apollo-11-moon-landing/-246490",
+          "date": "2023-12-06",
+          "last_updated": "2025-08-25"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="响应 — 印刷术的历史">
+    ```json theme={null}
+    {
+      "id": "23f6db05-6316-4a0f-af87-55873840f369",
+      "results": [
+        {
+          "snippet": "",
+          "title": "Printing press - Wikipedia",
+          "url": "https://en.wikipedia.org/wiki/Printing_press",
+          "date": "2001-10-14",
+          "last_updated": "2026-05-18"
+        },
+        {
+          "snippet": "Printing presses push paper against inked movable type materials to transfer text and images from the type onto the paper.\nMedieval presses used a handle to turn a wooden screw that moved the platen on which the paper was mounted; the platen squeezed the paper against the type, which was locked in place in a frame, or form.\nMetal presses, developed late in the 18th century, used steam to drive a cylinder press.\nFlatbed presses, emerging early in the 19th century, used flat beds to hold the type and either a reciprocating platen or a cylinder to hold paper.\n...\nMovable type and paper were invented in China, and printing with movable type was undertaken in Korea by the 14th century, if not earlier.\nThe printing press first became mechanized in Europe.\nThe earliest mention of a printing press in Europe appears in a lawsuit in Strasbourg in 1439.\nIt reveals construction of a press for Johannes Gutenberg and his associates.\nThe earliest European printing presses owed much to the medieval paper press, which was in turn modeled after the ancient wine-and-olive press of the Mediterranean area.\n**printing press**, machine by which text and images are transferred from movable type to paper or other media by means of ink.\nMovable type and paper were invented in China, and the oldest known extant book printed from movable type was created in Korea in the 14th century.\nPrinting first became mechanized in Europe during the 15th century.\nThe earliest mention of a mechanized printing press in Europe appears in a lawsuit in Strasbourg in 1439; it reveals construction of a press for Johannes Gutenberg and his associates.\nGutenberg’s press and others of its era in Europe owed much to the medieval paper press, which was in turn modeled after the ancient wine-and-olive press of the Mediterranean area.\n...\nGutenberg used his press to print an edition of the Bible in 1455; this Bible is the first complete extant book in the West, and it is one of the earliest books printed from movable type.\n(*Jikji*, a book of the teachings of Buddhist priests, was printed by hand from movable type in Korea in 1377.)\nIn its essentials, the wooden press used by Gutenberg reigned supreme for more than 300 years, with a hardly varying rate of 250 sheets per hour printed on one side.\nMetal presses began to appear late in the 18th century, at about which time the advantages of the cylinder were first perceived and the application of steam power was considered.\nBy the mid-19th century Richard M. Hoe of New York had perfected a power-driven cylinder press in which a large central cylinder carrying the type successively printed on the paper of four impression cylinders, producing 8,000 sheets an hour in 2,000 revolutions.\nThe rotary press came to dominate the high-speed newspaper field, but the flatbed press, having a flat bed to hold the type and either a reciprocating platen or a cylinder to hold the paper, continued to be used for job printing.\nA significant innovation of the late 19th century was the offset press, in which the printing (blanket) cylinder runs continuously in one direction while paper is impressed against it by an impression cylinder.\nOffset printing is especially valuable for colour printing, because an offset press can print multiple colours in one run.\nOffset lithography—used for books, newspapers, magazines, business forms, and direct mail—continued to be the most widely used printing method at the start of the 21st century, though it was challenged by ink-jet, laser, and other printing methods.\n...\nApart from the introduction of electric power, advances in press design between 1900 and the 1950s consisted of a great number of relatively minor mechanical modifications designed to improve the speed of the operation.\nAmong these changes were better paper feed, improvements in plates and paper, automatic paper reels, and photoelectric control of colour register.\nThe introduction of computers in the 1950s revolutionized printing composition, with more and more steps in the print process being replaced by digital data.\nAt the end of the 20th century a new electronic printing method, print-on-demand, began to compete with offset printing, though it—and printing generally—came under increasing pressure in developed countries as publishers, newspapers, and others turned to online means of distributing what they had previously printed on paper.",
+          "title": "Printing press | Invention, Definition, History, Gutenberg, & Facts",
+          "url": "https://www.britannica.com/technology/printing-press",
+          "date": "2026-04-28",
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "The exact date of the first printing press invention is unknown, however, printed materials date as far back as 868 A.D.\nHere is a general timeline of the printing press invention.\nClick on each section to learn more.\n1. Block Printing: Pre 868 A.D.\n2. Moveable Type: Between 970 - 1051 A.D.\n3. Wood Type Updated: 1297\n4. The Gutenberg Press: 1450\n5. The Spread of Printing in Europe: 1465 - 1495\n6. Industrial Printing Press Invention: 1800 - 1843\n7. Modern Printing Processes: Offset and Digital Printing\n...\nEven though many people believe that the first printing press was invented by Johannes Gutenberg, people in China were actually using a process known as block printing to create printed text many centuries before the Gutenberg press.\nBlock printing involves using panels of wooden blocks that have been hand-carved in reverse.\nThe ink was then applied to these blocks and they were pressed onto paper to form the printed text.\nIt is unclear how long ago this process was developed (possibly as long ago as the 6th century), however, the oldest known printed book that used this method is called The Diamond Sutra, a Buddhist book from Dunhuang China dated 868 A.D.\nOther examples of block printing have also survived including:\n...\n- A calendar dating 877 A.D.\nBlock printing was also used during this time period in both Japan and Korea.\n...\nMoveable type replaced block printing around 970 A.D.\nThe first version of this type of printing involved carving individual letters into clay blocks and then baking them until they were hard.\nThese blocks were then arranged onto an iron frame which was pressed against an iron plate.\nThe great advantage of the moveable type was that you could re-use the letters for different texts.\nThis process was created by Bi Sheng who lived in Yingshan, Hubei, China from about 970 to 1051 A.D.\n...\nThe process of using wood type made a comeback in 1297 when a Chinese magistrate called Wang Zhen improved on the technique.\nHe developed a way of making the wood more precise and durable thus giving you a better-finished product.\nHe also created a type of revolving table that the typesetters were able to use to organize the type more efficiently.\nHis process greatly sped up the printing process.\nThe book Nung Shu was printed using this process and is considered to be the world's first mass-produced book.\n...\nJohannes Gutenberg started experimenting with printing while he was exiled from Germany in Strasbourg France in 1440.\nBy 1450, he had developed a printing machine that was ready to be used commercially.\nGutenberg's printing press used metal pieces instead of wood.\nEach letter was made to uniformly fit together so that the resulting print would be in perfectly straight lines and columns.\nHe also created a special ink that would stick to metal.\nIn addition, he figured out a way to flatten the printing paper to give a better finished product by using a winepress that had previously been used to press grapes and olives.\nGutenberg used his printing press invention to print the famous Gutenberg Bible.\nHe made about 180 copies of the Bible each containing 1.300 pages.\n...\nThe invention of the Gutenberg press meant that books could finally be mass-produced and at a fraction of the cost of previous printing methods.\nThe printing press invention is credited with contributing to the growth of literacy, education, and the availability of uniform information for the common person.\n...\nMany workers who had helped Gutenberg perfect his printing process became printers themselves in Germany.\nThe printing press was later brought to Italy in 1465 and in 1470, German printers were asked to set up printing presses in Sorbonne Paris.\nSpain and Portugal invited German printers to set up in their countries in 1473 and 1495 respectively.\nFinally, the printing press was brought to England in 1476 by William Caxton.\nCaxton was an Englishman who had gone to cologne to learn how to print in 1471.\n...\nEven though the essential workings of the Gutenberg press remained intact, the invention of mechanical printing presses made the printing process much more efficient.\nIn 1800, Lord Stanhope built a press that was completely made of cast iron, with double the printed area, and that was able to produce 480 pages per hour thus doubling the production of the previous presses.\nThe steam-powered rotary printing press, which Richard M. Hoe invented in the United States in 1843 made the printing process even faster, producing millions of copies of a page in one day.",
+          "title": "Digital Printing",
+          "url": "https://jhfrench.com/blog/the-printing-press-invention-history-important-dates-amp-facts",
+          "date": "2022-03-02",
+          "last_updated": "2026-05-19"
+        },
+        {
+          "snippet": "In 1436 Johaness Gutenberg, a German goldsmith, began designing a machine capable of producing pages of text at an incredible speed—a product that he hoped would offset losses from a failed attempt to sell metal mirrors.\nBy 1440 Gutenberg had established the basics of his printing press including the use of a mobile, reusable set of type, and within ten years he had constructed a working prototype of the press.\nIn 1454 Gutenberg put his press to commercial use, producing thousands of indulgences for the Church.\nThe following year he printed his famous 42-line Bible, the first book printed on a moveable type press in the West.\n1\nGutenberg's press was the combined effort of several discoveries and inventions.\nThe printing press was built around the traditional screw press, a precursor to today's drill press, with an added matrix on which individually-cast letters and symbols could be arranged to form the desired text.\nThis moveable type design allowed pages of text to be quickly assembled from a pre-cast selection of letters and symbols rather than laboriously carved from a block of wood as in the\n*block printing method*.\nGutenberg also created a unique oil-based ink which transferred from his metal type to the printing substrate much more effectively than the water-based inks that other printers of the era used.\nIn order to print a page, Gutenberg would arrange the necessary letters on the matrix and coat them in his ink.\nThe matrix was then mounted on the contact end of the modified screw press and lowered until it struck the paper underneath.\nThe process, while labor intensive, allowed Gutenberg to print pages at a much greater rate than printers using the block printing method or those doing manuscript work.\n...\nJohannes Gutenberg's moveable type press marked the beginning of the Printing Revolution in the western world, a colossal moment in the history of information and learning.\nWith access to printing presses, scientists, philosophers, politicians, and religious officials could replicate their ideas quickly and make them available to large audiences.",
+          "title": "The Gutenberg Press",
+          "url": "https://scarc.library.oregonstate.edu/omeka/exhibits/show/mcdonald/incunabula/gutenberg/",
+          "date": null,
+          "last_updated": "2025-05-09"
+        },
+        {
+          "snippet": "",
+          "title": "History of printing - Wikipedia",
+          "url": "https://en.wikipedia.org/wiki/History_of_printing",
+          "date": "2007-05-02",
+          "last_updated": "2026-05-13"
+        },
+        {
+          "snippet": "",
+          "title": "A Short History of The Printing Press, by Robert Hoe—A Project ...",
+          "url": "https://www.gutenberg.org/files/63545/63545-h/63545-h.htm",
+          "date": null,
+          "last_updated": "2026-03-21"
+        },
+        {
+          "snippet": "",
+          "title": "Printing - Wikipedia",
+          "url": "https://en.wikipedia.org/wiki/Printing",
+          "date": "2002-03-17",
+          "last_updated": "2026-03-30"
+        },
+        {
+          "snippet": "",
+          "title": "Gutenberg, Printing Press, Revolution | Britannica",
+          "url": "https://www.britannica.com/topic/printing-publishing/The-Gutenberg-press",
+          "date": "2025-09-05",
+          "last_updated": "2025-10-15"
+        },
+        {
+          "snippet": "The 15th century is a particularly interesting period in our history.\nIt is the last century of the Middle Ages and the Dark Ages, and at the same time, the bridge between the Late Middle Ages, the Early Renaissance, and the Modern Age.\nIt is also known as \"The Century of Innovations.\"\nOne of the most important innovations, and one that marked a milestone in human history, was undoubtedly the invention of the printing press.\nAt that time, reading was reserved for a select few, primarily the clergy and nobility.\nIt is estimated that only about 12% of the European population could read.\nThe few books that existed, produced by hand and copied by hand, were kept mainly in monasteries.\nThe church was the main source of information, transmitted orally.\nThe arrival of the printing press would revolutionize the world.\nSuddenly, people had access to a vast amount of information, which also gave rise to critical thinking.\nThis was not welcomed by those who, throughout history, have sought to control information and thought.\nAlthough the first printed book was a Bible, as early as 1559, Pope Paul IV established an Index Librorum Prohibitorum, a list of all books prohibited to Catholics.\nSince then, the Church and various governments have censored, banned, and burned thousands of books.\n...\nThe person responsible for this information revolution in the 15th Century was the son of a patrician from the city of Mainz, Germany.\nHis name was Johann Gensfleisch zur Laden zum Gutenberg, better known as Johannes Gutenberg.\nSome of the elements of his invention were movable type, an oil ink that soaked into metal and then transferred easily to paper, as well as a new printing press, probably adapted from those used for winemaking.\nLike every endeavor, Gutenberg’s was not without financial problems.\nA wealthy financier, Johann Fust, invested in his project, but later won a lawsuit against Gutenberg, which allowed him to use the invention as his own, continuing to produce Bibles and Gutenberg’s second masterpiece, a psalter.\nIn 1465, the Archbishop of Mainz granted Gutenberg a pension, granting him an annual ration of grain, wine, and clothing.\nShortly thereafter, in 1468, Gutenberg died in his native Mainz.\nThe establishment of the printing press in Mexico, the first in the Americas, is also an interesting story.\nJuan Cromberger, a German printer established in Seville and owner of a prestigious publishing house with capital to establish a branch in the New Spain, entrusted Juan Pablos, whom he trusted as a copyist or typesetter, to found a printing press in the New World.\nJuan Pablos, of Italian origin and whose name, Giovanni Paoli, we know now in Spanish, arrived in Mexico City with his wife Gerónima Gutiérrez, between September and October 1539.\nWith the support of his sponsors, Juan Pablos established the “House of Juan Cromberger” workshop in the “Casa de las Campanas”, Bishop Zumárraga’s house, located on the southwest corner of Moneda and Santa Teresa la Antigua streets, now known as Licenciado Verdad, across the street from the former archbishopric.\nThe workshop opened its doors around April 1540.\nThe world has evolved at an immense speed since the 15th and 16th centuries.\nToday, nearly 4 million book titles are produced annually worldwide.",
+          "title": "The history of the printing press - International Publishers Association",
+          "url": "https://internationalpublishers.org/the-history-of-the-printing-press/",
+          "date": "2025-05-12",
+          "last_updated": "2026-03-27"
+        },
+        {
+          "snippet": "The printing press has always been a marvel of human invention, and the printing of newspapers occupies a unique course in the history of printing machines.\nAs demands grew for more pages, more news, and faster delivery, newspapers had to achieve greater speeds and higher efficiency.\nNewspapers started on Gutenberg presses – individual type pieces arranged backwards by hand, secured in a flat bed, inked by hand, and a great leverage force applied to create the impression.\nThe machine did one part of the job, and newspapers were often printed once a week as one, large, single-sided page called a broadside.\nThe force required to get a good image was considerable, the wood that made up the printing press would crack or break over time, and the metal type would wear down.\nFrom the 1440s, the mechanics of the printing press were practically unchanged for 300 years!\nThe first improvements to the press were to replace some of the wooden parts with iron and improve the lever used to press the paper to type.\nThe first printing press made entirely out of iron appeared around 1800 in England and is attributed to Charles Mahon, the third Earl of Stanhope.\nThe power and durability of the Stanhope press allowed printers to get 200 pulls per hour – each ‘pull’ being a pressed side of a paper.\n200 pulls would be 100 issues of a double-sided broadsheet.\nThe Columbian press by George Clymer was the first entirely metal press in the United States, emerging in the 1810s.\nWhile other iron presses emerged in a variety of sizes, these two were the first big names in successful manufacturing companies.\nOne of the biggest jumps in newspaper press development at this time was from the flat-bed hand press (like the Columbian) to the rotary press – a machine run by steam, horses, or manpower that incorporated rotating cylinders in the printing process that skyrocketed production speeds.\nWhile methods of printing with cylinders can be found as far back as 1616, it wasn’t until the 1810s that a practical method was manufactured.\nFrederick Koenig and Andreas Bauer, German immigrants in England, patented a machine that obtained an impression not by pressing but by rolling paper attached to a cylinder over the bed of type.\nMade first for the London Times’ November 29, 1814 issue, this steam powered press could produce 1,100 sheets per hour.\nThe more cylinders the press had, the more pages it could print at once.\nIt even had a cylinder to automatically roll ink onto the type, but it still only printed single sided sheets which were fed into and taken off of the machine by hand.\n...\nCarried on by his son Richard in the 1840s, R.\nHoe developed the type-revolving printing presses nicknamed “lightning presses.”\nInstead of paper on a cylinder, the type pieces were wedge-shaped in order to be secured tightly into the surface of a cylinder and rolled onto paper.\n...\nThe 1860s saw American press factories develop two major improvements for printing newspapers: the stereotype plates and the paper web.\nThe stereotype is a thin piece of metal that has been cast from a mold of the composed type.\nThe thin metal is curved to fit around a rotating cylinder in the printing press, thus eliminating type from the actual printing process for the first time.\nThe stereotype process was developed over the course of the 1840s but did not enter the printing scene at-large until the 1860s.\nThe stereos, as they were called, would remain an integral piece in the printing process until the 1970s.\n...\nIn 1865, William Bullock of Philadelphia collaborated with papermakers to design a web – a continuous roll of paper – to run through his rotary presses and be cut to size in the printing process.\nHis rotary press also set the new standard for “perfecting” the paper – printing on both sides of the page.\nBullock’s early rotary press could get 8,000 – 10,000 copies per hour according to the New-York Tribune.\n...\nThe final touch was mechanized folding of the finished newspaper.\nEnglishman George Ashley Wilson is credited with designing the Victory printing and folding machine combined.\nOther companies like R.\nHoe created separate machines that could be hand-fed finished sheets or attached to the end of one of their existing presses.\nFolding would go on to become a standard function of large presses.\nBy the 1880s, newspaper presses achieved their highest speeds yet.\nCountless individual inventions followed by small adjustments, innovations, and tricks fill printing history, but these “headliners” would consistently be the standard for almost one hundred more years of newspaper printing.",
+          "title": "Printing Newspapers: 1400-1900",
+          "url": "https://blogs.loc.gov/headlinesandheroes/2022/04/printing-newspapers-1400-1900/",
+          "date": "2022-04-21",
+          "last_updated": "2026-03-11"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="响应 — AI 研究进展">
+    ```json theme={null}
+    {
+      "id": "4942a8e3-b0e6-40cc-8e86-ab60e6e4567c",
+      "results": [
+        {
+          "snippet": "# 我们最新的研究突破\n### Gemini for Science：面向发现新时代的 AI 实验与工具\nGoogle Labs\nGoogle DeepMind\nGoogle Research\n### 实证研究助手（ERA）：从《自然》论文到催化计算发现\nGoogle Research\n### Co-Scientist：加速研究的多智能体 AI 伙伴\nGoogle DeepMind\nGoogle Cloud\nGoogle Labs\nGoogle Research\n### Gemini Robotics ER 1.6：通过增强的具身推理驱动现实世界机器人任务\nGoogle DeepMind\n### 从游戏到生物学及更远：AlphaGo 影响力的十年\nGoogle DeepMind\n### AI 如何改善英国的乳腺癌检测\nGoogle Research\n### 我们如何借助 AI 帮助保存濒危物种的遗传信息\nGoogle Research\n### WeatherNext 2：我们最先进的天气预报模型\nGoogle DeepMind\nGoogle Research\n### SIMA 2：在虚拟 3D 世界中与你一起游戏、推理和学习的智能体\nGoogle DeepMind\n### 量子回声算法是迈向量子计算实际应用的一大步\nGoogle Research\n### 一个 Gemma 模型如何帮助发现新的潜在癌症治疗途径\nGoogle DeepMind\nGoogle Research\n### DeepSomatic：利用 AI 识别肿瘤中的基因变异\nGoogle Research\n### 仅用少量示例教会 Gemini 发现爆发中的恒星\nGoogle Research\n### Coral NPU：面向边缘 AI 的全栈平台\nGoogle Research\n### 利用 AI 更深入地感知宇宙\nGoogle DeepMind\n### Genie 3：能够生成多样化交互环境的通用世界模型\nGoogle DeepMind\n### 搭载 Deep Think 的 Gemini 高级版正式在国际数学奥林匹克竞赛中达到金牌水平\nGoogle DeepMind\n### FireSat：新卫星星座探测到的野火首批图像\nGoogle Research\n### SensorLM：学习可穿戴传感器的语言\nGoogle Research\n### Aeneas 改变历史学家连接过去的方式\nGoogle DeepMind\n### ZAPBench：脑活动研究中最具雄心的数据集之一\nGoogle Research\n### AlphaProteo：为健康研究生成新型蛋白质\nGoogle DeepMind\n### AlphaFold：用 AI 加速生物学突破\nGoogle DeepMind\n查看更多来自 Google 各团队的研究",
+          "title": "突破性 AI 研究 - Google AI",
+          "url": "https://ai.google/research/",
+          "date": null,
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "",
+          "title": "AI 的未来：塑造未来十年的趋势 - IBM",
+          "url": "https://www.ibm.com/think/insights/artificial-intelligence-future",
+          "date": "2024-10-11",
+          "last_updated": "2026-05-03"
+        },
+        {
+          "snippet": "",
+          "title": "AI 研究趋势",
+          "url": "https://ai100.stanford.edu/2016-report/section-i-what-artificial-intelligence/ai-research-trends",
+          "date": null,
+          "last_updated": "2026-04-28"
+        },
+        {
+          "snippet": "",
+          "title": "智能体 AI 新闻 + AI 突破 + AI 进展 | 2026",
+          "url": "https://www.crescendo.ai/news/latest-ai-news-and-updates",
+          "date": "2026-05-18",
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "# 通往 AGI 之路上的开创性研究\n我们相信我们的研究最终将带来通用人工智能，即一种能够解决人类水平问题的系统。\n构建安全且有益的 AGI 是我们的使命。\n...\n### 我们利用深度学习，借助海量数据和高级推理来训练 AI 系统完成任务。\n...\nOpenAI 的 GPT 系列模型是快速、通用且高性价比的 AI 系统，旨在理解上下文、生成内容，并在文本、图像等多种模态上进行推理。\n...\nOpenAI 的 o 系列模型是先进的推理 AI 系统，通过思维链过程以逻辑化、分步式的分析来解决复杂的 STEM 问题。\n...\n我们的文本模型是先进的语言处理工具，能够以高度的连贯性和准确性生成、分类和总结文本。\n...\n我们在图像生成建模方面的研究催生了诸如 CLIP 这样的表示模型——它在文本与图像之间建立了 AI 可读的映射，以及 DALL-E，一种根据文本描述创作生动图像的工具。\n...\n### 音频\n我们将 AI 应用于音频处理和音频生成的研究，推动了自动语音识别和原创音乐创作的发展。\n...\n> “安全地对齐强大的 AI 系统，是我们使命中最重要的未解难题之一。\n从人类反馈中学习等技术正帮助我们更接近目标，我们也在积极研究新技术来填补空白。”\n...\n查看研究索引",
+          "title": "研究 - OpenAI",
+          "url": "https://openai.com/research/",
+          "date": "2025-08-07",
+          "last_updated": "2026-03-29"
+        },
+        {
+          "snippet": "",
+          "title": "人工智能新闻",
+          "url": "https://www.sciencedaily.com/news/computers_math/artificial_intelligence/",
+          "date": "2026-05-21",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "*人工智能研发（AI R&D）跨机构工作组（IWG）协调联邦人工智能研发，并支持由 NSTC 人工智能特别委员会和机器学习与人工智能小组委员会共同布置的各项活动。\n这项关键工作促进美国在人工智能研发及其应用方面的领导力和全球竞争力。\nAI IWG 向人工智能研发计划组成领域报告投资情况。*\n...\n人工智能研发跨机构工作组（AI R&D IWG）成立于 2018 年，负责协调 32 家参与机构的联邦人工智能研发，并支持由 NSTC 人工智能特别委员会和机器学习与人工智能小组委员会（MLAI）共同布置的活动。\n通过 NITRD 小组委员会，AI IWG 将协调人工智能相关活动，以推进国家人工智能倡议办公室（NAIIO）的使命。\n...\n该仪表板展示了多个财政年度中非国防人工智能研发投资的联邦预算。\n它既提供总体预算汇总，也按机构以及按 NITRD 计划组成领域（PCA，即联邦 IT 研发的主要主题领域）细分投资情况。\n*进一步了解联邦机构在人工智能研发方面的投资，其显示了对关键优先研发领域的持续投入*：AI R&D 联邦投资仪表板。\n...\n国家人工智能倡议办公室于 2021 年 1 月设立，负责监督和实施《国家人工智能倡议法案》（NAIIA）。\nNAIIO 与 NITRD 小组委员会共同指导 NITRD AI R&D IWG 协调联邦在人工智能领域的研发投资。",
+          "title": "人工智能研究与开发 - NITRD",
+          "url": "https://www.nitrd.gov/coordination-areas/ai/",
+          "date": "2025-12-08",
+          "last_updated": "2026-05-17"
+        },
+        {
+          "snippet": "Artificial Intelligence has leapt to the forefront of global discourse, garnering increased attention from practitioners, industry leaders, policymakers, and the general public.\nThe diversity of opinions and debates gathered from news articles this year illustrates just how broadly AI is being investigated, studied, and applied.\nHowever, the field of AI is still evolving rapidly and even experts have a hard time understanding and tracking progress across the field.\n...\nThis chapter explores trends in AI research and development, beginning with an analysis of AI publications, patents, and notable AI systems.\nThe Technical Performance section of this year’s AI Index provides a comprehensive overview of AI advancements in 2024.\nArtificial intelligence is now deeply integrated into nearly every aspect of our lives.\nIt is reshaping sectors like education, finance, and healthcare, where algorithm-driven insights guide critical decisions.\n...\nAI’s advancing capabilities have captured policymakers’ attention, leading to an increase in AI-related policies worldwide.\nAI has entered the public consciousness through generative AI’s impact on work...\nAs AI continues to permeate broad swaths of society, it is becoming increasingly important to understand public sentiment around the technology.\n...\nIn 2023, researchers introduced new benchmarks—MMMU, GPQA, and SWE-bench—to test the limits of advanced AI systems.\nJust a year later, performance sharply increased: scores rose by 18.8, 48.9, and 67.3 percentage points on MMMU, GPQA, and SWE-bench, respectively.\nBeyond benchmarks, AI systems made major strides in generating high-quality video, and in some settings, language model agents even outperformed humans in programming tasks with limited time budgets.\nFrom healthcare to transportation, AI is rapidly moving from the lab to daily life.\nIn 2023, the FDA approved 223 AI-enabled medical devices, up from just six in 2015.\nOn the roads, self-driving cars are no longer experimental: Waymo, one of the largest U.S. operators, provides over 150,000 autonomous rides each week, while Baidu’s affordable Apollo Go robotaxi fleet now serves numerous cities across China.\nIn 2024, U.S. private AI investment grew to $109.1 billion—nearly 12 times China’s $9.3 billion and 24 times the U.K.’s $4.5 billion.\nGenerative AI saw particularly strong momentum, attracting $33.9 billion globally in private investment—an 18.7% increase from 2023.\nAI business usage is also accelerating: 78% of organizations reported using AI in 2024, up from 55% the year before.\nMeanwhile, a growing body of research confirms that AI boosts productivity and, in most cases, helps narrow skill gaps across the workforce.\nIn 2024, U.S.-based institutions produced 40 notable AI models, significantly outpacing China’s 15 and Europe’s three.\nWhile the U.S. maintains its lead in quantity, Chinese models have rapidly closed the quality gap: performance differences on major benchmarks such as MMLU and HumanEval shrank from double digits in 2023 to near parity in 2024.\nMeanwhile, China continues to lead in AI publications and patents.\nAt the same time, model development is increasingly global, with notable launches from regions such as the Middle East, Latin America, and Southeast Asia.\nAI-related incidents are rising sharply, yet standardized RAI evaluations remain rare among major industrial model developers.\nHowever, new benchmarks like HELM Safety, AIR-Bench, and FACTS offer promising tools for assessing factuality and safety.\nAmong companies, a gap persists between recognizing RAI risks and taking meaningful action.\nIn contrast, governments are showing increased urgency: In 2024, global cooperation on AI governance intensified, with organizations including the OECD, EU, U.N., and African Union releasing frameworks focused on transparency, trustworthiness, and other core responsible AI principles.\nIn countries like China (83%), Indonesia (80%), and Thailand (77%), strong majorities see AI products and services as more beneficial than harmful.\nIn contrast, optimism remains far lower in places like Canada (40%), the United States (39%), and the Netherlands (36%).\nStill, sentiment is shifting: since 2022, optimism has grown significantly in several previously skeptical countries—including Germany (+10%), France (+10%), Canada (+8%), Great Britain (+8%), and the United States (+4%).\nDriven by increasingly capable small models, the inference cost for a system performing at the level of GPT-3.5 dropped over 280-fold between November 2022 and October 2024.\nAt the hardware level, costs have declined by 30% annually, while energy efficiency has improved by 40% each year.\nOpen-weight models are also closing the gap with closed models, reducing the performance difference from 8% to just 1.7% on some benchmarks in a single year.\nTogether, these trends are rapidly lowering the barriers to advanced AI.\nIn 2024, U.S. federal agencies introduced 59 AI-related regulations—more than double the number in 2023—and issued by twice as many agencies.\nGlobally, legislative mentions of AI rose 21.3% across 75 countries since 2023, marking a ninefold increase since 2016.\nAlongside growing attention, governments are investing at scale: Canada pledged $2.4 billion, China launched a $47.5 billion semiconductor fund, France committed €109 billion, India pledged $1.25 billion, and Saudi Arabia’s Project Transcendence represents a $100 billion initiative.\nTwo-thirds of countries now offer or plan to offer K–12 CS education—twice as many as in 2019—with Africa and Latin America making the most progress.\nIn the U.S., the number of graduates with bachelor’s degrees in computing has increased 22% over the last 10 years.\nYet access remains limited in many African countries due to basic infrastructure gaps like electricity.\nIn the U.S., 81% of K–12 CS teachers say AI should be part of foundational CS education, but less than half feel equipped to teach it.\nNearly 90% of notable AI models in 2024 came from industry, up from 60% in 2023, while academia remains the top source of highly cited research.\nModel scale continues to grow rapidly—training compute doubles every five months, datasets every eight, and power use annually.\nYet performance gaps are shrinking: the score difference between the top and 10th-ranked models fell from 11.9% to 5.4% in a year, and the top two are now separated by just 0.7%.\nThe frontier is increasingly competitive—and increasingly crowded.\nAI’s growing importance is reflected in major scientific awards: two Nobel Prizes recognized work that led to deep learning (physics), and to its application to protein folding (chemistry), while the Turing Award honored groundbreaking contributions to reinforcement learning.\nAI models excel at tasks like International Mathematical Olympiad problems but still struggle with complex reasoning benchmarks like PlanBench.\nThey often fail to reliably solve logic tasks even when provably correct solutions exist, limiting their effectiveness in high-stakes settings where precision is critical.",
+          "title": "The 2025 AI Index Report | Stanford HAI",
+          "url": "https://hai.stanford.edu/ai-index/2025-ai-index-report",
+          "date": "2024-09-10",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "### Building AI models that understand chemical principles\nConnor Coley works at the interface of chemistry and machine learning, to discover and design new drug compounds.\n...\n### Justin Solomon appointed associate dean of engineering education\nMIT faculty member in electrical engineering and computer science to focus on innovation in engineering education and new pedagogical approaches.\n...\n### Two from MIT named 2026 Knight-Hennessy Scholars\nThe prestigious fellowship funds graduate studies at Stanford University.\n...\n### Q&A: Expanding MIT’s global reach through Universal Learning\nDimitris Bertsimas and Megan Mitchell discuss the motivation behind Universal Learning, and what sets the new MIT Open Learning educational initiative apart.\n...\n### Universal AI is “a pathway to AI fluency that’s accessible and approachable to anyone, anywhere”\nNew AI education program from MIT Open Learning debuts with AI-powered personalization and a free introductory course for learners everywhere.\n...\n### Study: Firms often use automation to control certain workers’ wages\nMIT economists found US companies tend to target employees earning a “wage premium,” which increases inequality but not necessarily productivity.\n...\n### Games people — and machines — play: Untangling strategic reasoning to advance AI\nAssistant Professor Gabriele Farina mines the foundations of decision-making in complex multi-agent scenarios.\n...\n### Beacon Biosignals is mapping the brain during sleep\nFounded by Jake Donoghue PhD ’19 and former MIT researcher Jarrett Revels, the company is creating an AI-driven platform to help diagnose and treat disease.\n...\nMIT senior Olivia Honeycutt investigates how the ways we communicate can shape our views of the world.\n...\nPresident Sally Kornbluth spoke in front of a packed crowd about growing challenges to the U.S. research ecosystem as funding for America’s top research universities becomes increasingly strained.\n...\n### Solving the “Whac-a-mole dilemma”: A smarter way to debias AI vision models\nA new debiasing technique called WRING avoids creating or amplifying biases that can occur with existing debiasing approaches.\n...\n### The MIT-IBM Computing Research Lab launches to shape the future of AI and quantum computing\nBuilding on a long-standing MIT–IBM collaboration, the new lab will chart the convergence of AI, algorithms, and quantum computing.\n...\n### Enabling privacy-preserving AI training on everyday devices\nA new method could bring more accurate and efficient AI models to high-stakes applications like health care and finance, even in under-resourced settings.\n...\n### A faster way to estimate AI power consumption\nThe “EnergAIzer” method generates reliable results in seconds, enabling data center operators to efficiently allocate resources and reduce wasted energy.\n...\n### MIT scientists build the world’s largest collection of Olympiad-level math problems, and open it to everyone\nNew dataset of 30,000-plus competition math problems from 47 countries gives AI researchers a harder test — and students worldwide a better training ground.",
+          "title": "Artificial intelligence | MIT News | Massachusetts Institute of ...",
+          "url": "https://news.mit.edu/topic/artificial-intelligence2",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "The rise of artificial intelligence has already transformed every facet of our lives at a remarkable speed.\nAt UC San Diego, AI is empowering bold advances in science, education, public safety, health and the arts.\n...\nFrom uncovering hidden disease mechanisms to guiding new therapies and medical technologies, UC San Diego researchers are harnessing AI to propel humanity toward a future in which diseases are mitigated or eradicated.\nWhat was once science fiction is now possible.\nAs a tool, AI speeds diagnoses, offers a better understanding of the human body and enables more innovative treatments.\n...\nA gene once thought to be just a biomarker for Alzheimer’s disease is actually one of its causes, according to the work of UC San Diego bioengineers.\nUsing AI to model the 3D structures of proteins, the team discovered that the gene PHGDH has a hidden “moonlighting” role: It disrupts how brain cells switch genes on and off, a disturbance that can fuel the disease.\n...\nJoe Pogliano, professor, and Kit Pogliano, dean and distinguished professor, both in the School of Biological Sciences, worked with Linnaeus Bioscience and Seattle Children’s Research Institute to develop MycoBCP, a new AI-powered tool that could accelerate the search for TB treatments.\n...\nBy pairing that method with deep learning, researchers could detect subtle changes in TB cells that would otherwise escape the human eye — revealing how potential drugs act on the pathogen.\n...\nBy recording signals from outside of heart muscle cells and using AI to reconstruct what’s happening inside these cells, engineers were able to monitor heart activity with remarkable accuracy — without invasive methods or physically penetrating the cells.\nThe breakthrough offers safer, faster insights into how heart cells function, communicate and respond to new drugs.\n...\nResearchers have developed advanced deep-learning techniques that could revolutionize treatment planning for breast cancer radiotherapy — making it faster and improving its quality.\nThe approach reduced errors in radiation doses to critical organs, such as the heart and lungs.\n...\nUC San Diego engineers have created a flexible patch — a wireless, skin-mounted ultrasound device — that monitors muscle activity in real time to control a robotic arm, among other uses.\nTo extract additional insights from these muscle signals, the researchers developed an AI algorithm that maps the signals to their corresponding muscle distributions.\nCompact, battery-powered and designed for long-term wear, the technology could open new possibilities in health care monitoring and human-machine interaction.\n...\nIn a unique and long-standing collaboration, UC San Diego electrical engineering graduate students have been embedded with the Jacobs Retina Center at Shiley Eye Institute to develop better computer vision, AI and image-processing tools.\nThese will help physicians diagnose patients with greater speed and accuracy, predict the most effective treatments, and aid in the development of new treatments.\n...\nUC San Diego researchers are using AI to better understand Earth’s changing environment.\nThese innovations provide faster forecasts, actionable insights and tools that help protect communities and the planet.\n...\nResearchers at UC San Diego and the Allen Institute for AI have developed a new model, Spherical DYffusion, that projects 100 years of climate patterns in just 25 hours.\nBy combining generative AI techniques with physics-based data, the model delivers results 25 times faster than current methods without the need for massive supercomputers.\nThe breakthrough could provide scientists and policymakers with faster and more flexible tools for anticipating the long-term effects of climate change.\n...\nWith a growing network of more than 1,200 natural-hazard monitoring cameras spanning remote mountaintops to wildland-urban interfaces, ALERTCalifornia collects real-time data and utilizes AI that helps emergency managers spot smoke, monitor fires and plan evacuations.\nUC San Diego’s WIFIRE team at the San Diego Supercomputer Center utilizes those camera and sensor feeds to pinpoint wildfire ignition locations and create predictive models that map how a fire will spread.\n...\nThese models are further refined by AI-powered aerial sensing — including infrared imaging — to track fire perimeters through thick smoke and give responders a strategic advantage as wildfires progress.",
+          "title": "Nine Breakthroughs Made Possible by AI - UC San Diego Today",
+          "url": "https://today.ucsd.edu/story/nine-breakthroughs-made-possible-by-ai",
+          "date": "2025-11-21",
+          "last_updated": "2026-05-20"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="响应 — 主要技术趋势">
+    ```json theme={null}
+    {
+      "id": "b21a4380-b32c-418a-ba52-960c9fc3f15b",
+      "results": [
+        {
+          "snippet": "## 随着技术创新与应用加速推进，五大趋势揭示了成功组织如何从试验走向实效\n文章\n...\n过去的问题是“我们能用人工智能做什么？”\n现在的问题是“我们如何从试验走向实效？”\n...\n17年来，《技术趋势》一直在探索有望在未来18至24个月重塑商业格局的新兴技术。\n我们的研究基于与德勤主题专家及外部技术领袖交流所获得的趋势洞察，以及德勤关于新兴技术的专有研究。\n今年，数据揭示了五股相互关联的力量。\n## 人工智能走向实体：驾驭人工智能与机器人技术的融合ti亚马逊部署了第一百万台机器人，其DeepFleet人工智能协调整个机器人集群，将仓库内的行进效率提升了10%。^5^ 宝马的工厂里，汽车能够自行驶过长达一公里的生产路线。^6^ 智能不再局限于屏幕之内；它已具身化、自主化，并在物理世界中解决真实问题。\n## 智能体的现实检验：为硅基劳动力做好准备or尽管38%的组织正在试点智能体，但只有11%的组织将其投入生产。\n从试点到生产之间的差距说明了一切。\n42%的组织仍在制定战略，而35%根本没有战略。^7^ Gartner预测，到2027年将有40%的智能体项目失败^8^——并非因为技术不奏效，而是因为组织在将失效的流程自动化，而非重新设计运营。\n慧与的首席财务官道出了成功之道：“我们希望选择一个端到端的流程，让我们能够真正实现转型，而不只是解决单个痛点。”^9^ 要重新设计，而非简单自动化。\n这正是区分成功与失败的模式。\n## 人工智能基础设施的清算时刻：在推理经济学时代优化算力战略mi两年间令牌成本下降了280倍；^10^ 然而一些企业的月度账单仍高达数千万美元。\n使用量的暴增快于成本的下降。\n各组织正在发现，其现有的基础设施战略并非为将人工智能扩展到生产级部署而设计。\n他们正从云优先转向战略性混合模式：以云获得弹性，以本地部署获得一致性，以边缘获得即时性。\n## 大重构：构建人工智能原生的技术组织ti人工智能正在重塑技术组织，使其更精简、更敏捷、更具战略性。\n在德勤调查的IT领导者中，仅有1%表示没有正在进行的重大运营模式变革。^11^ 领导者正从渐进式IT管理转向编排人机智能体团队，首席信息官则成为人工智能的倡导者。\n成功需要大胆的重新构想：将模块化架构、内嵌治理和持续演进作为核心能力。\n## 人工智能困境：保护并利用人工智能进行网络防御en原本旨在为企业带来优势的技术，正在成为被用来攻击它们的目标。\nAT&T的首席信息安全官道出了这一挑战：“我们今天所经历的与过去所经历的并无不同。\n人工智能带来的唯一区别在于速度和影响。”^12^ 组织必须在四个领域保护人工智能——数据、模型、应用和基础设施——但他们同样有机会利用人工智能驱动的防御手段来对抗以机器速度运行的威胁。",
+          "title": "2026技术趋势 | 德勤洞察",
+          "url": "https://www.deloitte.com/us/en/insights/topics/technology-management/tech-trends.html",
+          "date": "2025-12-10",
+          "last_updated": "2026-05-24"
+        },
+        {
+          "snippet": "",
+          "title": "McKinsey Technology Trends Outlook 2025",
+          "url": "https://www.mckinsey.com/capabilities/tech-and-ai/our-insights/the-top-trends-in-tech",
+          "date": "2025-07-22",
+          "last_updated": "2026-05-27"
+        },
+        {
+          "snippet": "",
+          "title": "The new Essential Eight technology trends: PwC",
+          "url": "https://www.pwc.com/us/en/tech-effect/emerging-tech/essential-eight-technologies.html",
+          "date": "2023-11-15",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "### The year of truth for AI\nAI becomes the backbone of the digital economy, shifting from isolated proofs of concept to coherent, adaptive, and trusted value systems.\nThis transformation demands not just technology, but governance and cultural readiness to embed AI into the very fabric of enterprise decision-making.\n### AI is eating software\nThe paradigm moves from “writing code” to “expressing intent.”\nDevelopers articulate desired outcomes, and AI autonomously delivers, integrating and maintaining systems behind the scenes.\nAs software becomes self-assembling and self-healing, the competitive edge will hinge on mastering orchestration and governance rather than manual coding.\n### Cloud 3.0: all flavors of cloud\nCloud is entering its next evolution.\nAfter a decade focused on migration and cost efficiency, cloud is now becoming the operational backbone for AI and AI assisted apps.\nAI cannot scale only on the classical public cloud architectures.\nThe need to fine-tune models on proprietary data, manage data sensitivity, and deploy low-latency inference is pushing organizations toward hybrid, private, multi and sovereign cloud models, and not by exception.\nCloud ceases to be a passive infrastructure layer and becomes an active enabler of AI-driven architectures, ensuring portability, sovereignty.\n### The rise of intelligent ops\nMonolithic enterprise backbones evolve into living ecosystems of intelligent, modular, and continuously learning applications, blending human oversight with autonomous AI agents and putting the process back at the core.\nThis shift turns operations into adaptive engines of value creation, where resilience and agility become structural rather than aspirational.\nIntelligent operations position enterprises not just to run better, but to reinvent themselves continuously.\n### The borderless paradox of tech sovereignty\nTech sovereignty returns to at the top of the agenda, but the race is now for resilient interdependence—balancing open collaboration with strategic self-reliance.\nSuccess will depend on designing systems that remain globally connected yet controllable, embedding sovereignty principles into architecture rather than isolationist strategies.\n...\n### What are the Top Tech Trends to watch in 2026?\n*TechnoVision 2026* highlights **five transformative trends that will shape the technology landscape**.\nFirst, **the Year of Truth for AI** signals a shift from hype to measurable impact, as organizations focus on trust and enterprise-wide adoption.\nSecond, **AI is Eating Software**, meaning artificial intelligence is redefining the software lifecycle by moving from traditional coding to intent-driven development and autonomous maintenance.\nThird, **Cloud 3.0: All Flavors of Cloud** introduces a diversified ecosystem of hybrid, multi-cloud, and sovereign architectures to support AI scalability and resilience.\nFourth, **the Rise of Intelligent Ops** marks the evolution of enterprise systems into adaptive engines powered by AI agents for smarter operations.\nFinally, **the Borderless Paradox of Tech Sovereignty** reflects the challenge of balancing global interdependence with strategic control over critical technology stacks.\n...\nIn 2025, we highlighted five major trends—generative AI agents, AI-driven cybersecurity, autonomous robotics, the resurgence of nuclear energy to power computing, and supply chain reinvention—that reached a pivotal moment last year and continue to shape the landscape in 2026.\nWhile artificial Intelligence (AI) and generative AI (Gen AI) remain central, their influence now extends across software development, cloud architectures, and enterprise operations.\n...\nAfter years of fragmented pilots and inflated expectations, 2026 marks the shift from proof-of-concept to **proof-of-impact**.\n...\nThe upcoming year will see AI become the backbone of enterprise architecture, reshape software lifecycle development, and redefine cloud consumption.",
+          "title": "Top Tech Trends 2026: AI Backbone, Intelligent Apps ... - Capgemini",
+          "url": "https://www.capgemini.com/insights/research-library/top-tech-trends-of-2026/",
+          "date": "2026-01-12",
+          "last_updated": "2026-05-27"
+        },
+        {
+          "snippet": "",
+          "title": "Here are the top 10 trends in tech - The World Economic Forum",
+          "url": "https://www.weforum.org/stories/2022/07/top-10-trends-in-tech/",
+          "date": "2022-07-27",
+          "last_updated": "2026-04-16"
+        },
+        {
+          "snippet": "",
+          "title": "Top 25 New Technology Trends in 2025 - GeeksforGeeks",
+          "url": "https://www.geeksforgeeks.org/blogs/top-new-technology-trends/",
+          "date": "2022-04-12",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "",
+          "title": "25 New Technology Trends for 2025",
+          "url": "https://www.simplilearn.com/top-technology-trends-and-jobs-article",
+          "date": "2018-08-08",
+          "last_updated": "2026-03-28"
+        },
+        {
+          "snippet": "The question used to be “What can we do with AI?”\nNow it’s “How do we move from experimentation to impact?”\nThe focus has moved from endless pilots to real business value, and there’s a sense of urgency behind it all.\nNot because the technology is getting better—though it is—but because the pace of change itself has accelerated.\nThe numbers tell the story (figure 1).\nThe telephone took 50 years to reach 50 million users.\nThe internet took seven years.\nA leading generative AI tool reached about twice that many in two months.\n1 As of this writing, that tool has over 800 million weekly users—roughly 10% of the planet’s population.\n2\nBut rapid adoption is only the surface.\nInnovation is compounding; forces aren’t simply additive, but multiplicative.\nThink of it as a flywheel: Better technology enables more applications.\nMore applications generate more data.\nMore data attracts more investment.\nMore investment builds better infrastructure.\nBetter infrastructure reduces costs.\nLower costs enable more experimentation.\nEach improvement simultaneously accelerates all the others.\nIt’s why AI startups scale from US$1 million to US$30 million in revenue five times faster than SaaS companies did.\n3 It’s why the knowledge half-life in AI has shrunk to months from years.\n4 And it’s why one chief information officer (CIO) told me, “The time it takes us to study a new technology now exceeds that technology’s relevance window.”\n...\nFor 17 years, Tech Trends has explored emerging technologies poised to reshape business in the next 18 to 24 months.\nOur research is based on trend sensing from conversations with Deloitte subject matter experts and external technology leaders, as well as Deloitte’s proprietary research on emerging technologies.\nThis year, the data reveals five interconnected forces.\nAmazon deployed its millionth robot, and its DeepFleet AI coordinates the entire robot fleet, improving travel efficiency within warehouses by 10%.\n5 BMW’s factories have cars driving themselves through kilometer-long production routes.\n6 Intelligence isn’t confined to screens anymore; it’s embodied, autonomous, and solving real problems in the physical world.\nOnly 11% of organizations have agents in production, despite 38% piloting them.\nThe gap between pilot to production tells you everything.\nForty-two percent are still developing their strategy, while 35% have no strategy at all.\n7 Gartner predicts that 40% of agentic projects will fail by 2027 8—not because the technology doesn’t work, but because organizations are automating broken processes instead of redesigning operations.\nHPE’s chief financial officer captured what works: “We wanted to select an end-to-end process where we could truly transform, not just solve for a single pain point.”\n9 Redesign, don’t automate.\nThat’s the pattern separating success from failure.\nToken costs have dropped 280-fold in two years;\n10 yet some enterprises are seeing monthly bills in the tens of millions.\nUsage exploded faster than costs declined.\nOrganizations are discovering their existing infrastructure strategies aren't designed to scale AI to production-scale deployment.\nThey're shifting from cloud-first to strategic hybrid: cloud for elasticity, on-premises for consistency, and edge for immediacy.\nAI is restructuring tech organizations, making them leaner, faster, and more strategic.\nOnly 1% of IT leaders surveyed by Deloitte reported that no major operating model changes were underway.\n11 Leaders are shifting from incremental IT management to orchestrating human-agent teams, with CIOs becoming AI evangelists.\nSuccess requires bold reimagination: modular architectures, embedded governance, and perpetual evolution as core capabilities.\nThe technology meant to give businesses an advantage is becoming the target used against them.\nAT&T’s chief information security officer captured the challenge: “What we’re experiencing today is no different than what we’ve experienced in the past.\nThe only difference with AI is speed and impact.”\n12 Organizations must secure AI across four domains—data, models, applications, and infrastructure—but they also have the opportunity to use AI-powered defenses to fight threats operating at machine speed.\n...\nIt’s not just that AI is powerful.\nIt’s that the S-curves are compressing.\nThe distance between emerging and mainstream is collapsing.\nOrganizations built for sequential improvement can’t compete with those operating in continuous learning loops.\n...\nThat assumption no longer holds.",
+          "title": "Tech Trends 2026",
+          "url": "https://www.deloitte.com/us/en/insights/topics/technology-management/tech-trends.html?icid=disubnav_tech-trends",
+          "date": "2025-12-10",
+          "last_updated": "2025-12-11"
+        },
+        {
+          "snippet": "Generative AI (gen AI) has rightly seized leaders’ attention in recent years.\nBut is it also eclipsing adjacent or lower-profile digital imperatives?\nQuantumBlack and the McKinsey Technology Council identified 15 most significant technology trends unfolding today, grouped into five broader categories: the AI revolution, building the digital future, compute and connectivity frontiers, cutting-edge engineering, and a sustainable world.",
+          "title": "Top 15 technology trends unfolding today - McKinsey & Company",
+          "url": "https://www.mckinsey.com/featured-insights/themes/top-15-technology-trends-unfolding-today",
+          "date": "2024-08-10",
+          "last_updated": "2025-09-20"
+        },
+        {
+          "snippet": "## As technology innovation and adoption accelerate, five trends reveal how successful organizations are moving from experimentation to impact\nArticle\n...\nThe question used to be “What can we do with AI?”\n...\nFor 17 years, Tech Trends has explored emerging technologies poised to reshape business in the next 18 to 24 months.\nOur research is based on trend sensing from conversations with Deloitte subject matter experts and external technology leaders, as well as Deloitte’s proprietary research on emerging technologies.\nThis year, the data reveals five interconnected forces.\n## AI goes physical: Navigating the convergence of AI and robotics\nAmazon deployed its millionth robot, and its DeepFleet AI coordinates the entire robot fleet, improving travel efficiency within warehouses by 10%.^5^ BMW’s factories have cars driving themselves through kilometer-long production routes.^6^ Intelligence isn’t confined to screens anymore; it’s embodied, autonomous, and solving real problems in the physical world.\n## The agentic reality check: Preparing for a silicon-based workforce\nOnly 11% of organizations have agents in production, despite 38% piloting them.\nThe gap between pilot to production tells you everything.\nForty-two percent are still developing their strategy, while 35% have no strategy at all.^7^ Gartner predicts that 40% of agentic projects will fail by 2027^8^—not because the technology doesn’t work, but because organizations are automating broken processes instead of redesigning operations.\n...\nThat’s the pattern separating success from failure.\n## The AI infrastructure reckoning: Optimizing compute strategy in the age of inference economics\nToken costs have dropped 280-fold in two years;^10^ yet some enterprises are seeing monthly bills in the tens of millions.\nUsage exploded faster than costs declined.\nOrganizations are discovering their existing infrastructure strategies aren't designed to scale AI to production-scale deployment.\nThey're shifting from cloud-first to strategic hybrid: cloud for elasticity, on-premises for consistency, and edge for immediacy.\n## The great rebuild: Architecting an AI-native tech organization\nAI is restructuring tech organizations, making them leaner, faster, and more strategic.\nOnly 1% of IT leaders surveyed by Deloitte reported that no major operating model changes were underway.^11^ Leaders are shifting from incremental IT management to orchestrating human-agent teams, with CIOs becoming AI evangelists.\nSuccess requires bold reimagination: modular architectures, embedded governance, and perpetual evolution as core capabilities.\n## The AI dilemma: Securing and leveraging AI for cyber defense\nThe technology meant to give businesses an advantage is becoming the target used against them.\nAT&T’s chief information security officer captured the challenge: “What we’re experiencing today is no different than what we’ve experienced in the past.\nThe only difference with AI is speed and impact.”^12^ Organizations must secure AI across four domains—data, models, applications, and infrastructure—but they also have the opportunity to use AI-powered defenses to fight threats operating at machine speed.",
+          "title": "Tech Trends 2025 | Deloitte Insights",
+          "url": "https://www.deloitte.com/us/en/insights/topics/technology-management/tech-trends.html?icid=disidenav_tech-trends",
+          "date": "2025-12-10",
+          "last_updated": "2026-03-05"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<div id="parameter-reference">
+  ## 参数参考
+</div>
+
+<div id="search_after_date_filter">
+  ### `search_after_date_filter`
+</div>
+
+* **类型**：字符串
+* **格式**：&quot;%m/%d/%Y&quot; (例如 &quot;3/1/2025&quot;) 
+* **说明**：过滤搜索结果，仅返回在该日期之后发布的内容
+* **是否可选**：是
+* **示例**：`"search_after_date_filter": "1/1/2025"`
+
+<div id="search_before_date_filter">
+  ### `search_before_date_filter`
+</div>
+
+* **类型**：字符串
+* **格式**：&quot;%m/%d/%Y&quot; (例如 &quot;3/1/2025&quot;) 
+* **说明**：筛选搜索结果，仅返回在该日期之前发布的内容
+* **可选**：是
+* **示例**：`"search_before_date_filter": "12/31/2025"`
+
+<div id="last_updated_after_filter">
+  ### `last_updated_after_filter`
+</div>
+
+* **类型**：字符串
+* **格式**：&quot;%m/%d/%Y&quot; (例如 &quot;07/01/2025&quot;) 
+* **说明**：仅返回最后更新时间晚于该日期的搜索结果
+* **可选**：是
+* **示例**：`"last_updated_after_filter": "07/01/2025"`
+
+<div id="last_updated_before_filter">
+  ### `last_updated_before_filter`
+</div>
+
+* **类型**：字符串
+* **格式**：&quot;%m/%d/%Y&quot; (例如 &quot;12/30/2025&quot;) 
+* **说明**：筛选搜索结果，仅返回最后更新时间早于该日期的内容
+* **可选**：是
+* **示例**：`"last_updated_before_filter": "12/30/2025"`
+
+<div id="search_recency_filter">
+  ### `search_recency_filter`
+</div>
+
+* **类型**：字符串
+* **允许的值**：&quot;hour&quot;、&quot;day&quot;、&quot;week&quot;、&quot;month&quot;、&quot;year&quot;
+* **说明**：仅返回相对于当前日期的指定时间范围内的搜索结果
+* **可选**：是
+* **示例**：`"search_recency_filter": "week"`
+
+<div id="best-practices">
+  ## 最佳实践
+</div>
+
+**日期格式**
+
+* 严格格式：日期必须完全符合 &quot;%m/%d/%Y&quot; 格式。例如 &quot;3/1/2025&quot; 或 &quot;03/01/2025&quot; 都可接受。
+* 保持一致：根据搜索需求，统一使用其中一个或两个日期过滤器。两者结合可明确界定时间范围。
+
+**过滤器选择**
+
+* 选择合适的过滤器类型：如果关注内容最初的创建时间，使用发布日期过滤器 (`search_after_date_filter`/`search_before_date_filter`) ；如果需要近期维护过的内容，使用最后更新过滤器 (`last_updated_after_filter`/`last_updated_before_filter`) ；如需快速按相对时间过滤，使用时效性过滤器 (`search_recency_filter`) 。
+* 时效性与精确日期：只想获取近期内容 (例如“过去一周”) 时，用 `search_recency_filter` 更为便捷；需要精确控制时间范围时，则使用具体的日期过滤器。
+* 组合使用过滤器：可以同时使用发布日期过滤器和最后更新过滤器，查找同时满足两类条件的内容 (例如 2024 年发布但近期有更新) 。请注意，`search_recency_filter` 不能与具体日期过滤器 (`search_after_date_filter`/`search_before_date_filter` 或 `last_updated_after_filter`/`last_updated_before_filter`) 组合使用。
+
+**客户端校验**
+
+* 正则校验：在客户端使用如下正则表达式校验日期字符串：
+
+<CodeGroup>
+  ```bash theme={null}
+  date_regex='^(0?[1-9]|1[0-2])/(0?[1-9]|[12][0-9]|3[01])/[0-9]{4}$'
+  ```
+
+  ```python theme={null}
+  date_regex = r'^(0?[1-9]|1[0-2])/(0?[1-9]|[12]\d|3[01])/\d{4}$'
+  ```
+</CodeGroup>
+
+这样可以确保在发送请求前日期符合所需格式。
+
+**性能考量**
+
+* 缩小搜索范围：使用日期范围过滤器通常会减少结果数量，从而有助于提升响应速度和结果相关性。
+* 避免过度限制：确保日期范围既不过窄 (导致有用结果被排除) ，也不过宽 (使过滤失去意义) 。
+
+<div id="advanced-usage-patterns">
+  ## 高级用法模式
+</div>
+
+**查找突发新闻**
+
+针对实时事件，可将 `search_recency_filter` 设为 `"hour"`；若要获取最新的突发新闻，则设为 `"day"`：
+
+```python theme={null}
+# 直播事件与实时数据
+response = client.search(
+    query="Apollo 11 moon landing mission overview",
+    max_results=5,
+    search_recency_filter="hour"
+)
+
+# 过去 24 小时内的突发新闻
+response = client.search(
+    query="breaking news technology",
+    max_results=5,
+    search_recency_filter="day"
+)
+```
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "1d212bdd-e54b-44de-8b21-b902c7dbf82b",
+    "results": [
+      {
+        "snippet": "The primary objective of Apollo 11 was to complete a national goal set by President John F. Kennedy on May 25, 1961: perform a crewed lunar landing and return to Earth.\nAdditional flight objectives included scientific exploration by the lunar module, or LM, crew; deployment of a television camera to transmit signals to Earth; and deployment of a solar wind composition experiment, seismic experiment package and a Laser Ranging Retroreflector.\nDuring the exploration, the two astronauts were to gather samples of lunar-surface materials for return to Earth.\nThey also were to extensively photograph the lunar terrain, the deployed scientific equipment, the LM spacecraft, and each other, both with still and motion picture cameras.\nThis was to be the last Apollo mission to fly a “free-return” trajectory, which would enable a return to Earth with no engine firing, providing a ready abort of the mission at any time prior to lunar orbit insertion.\n...\nApollo 11 launched from Cape Kennedy on July 16, 1969, carrying Commander Neil Armstrong, Command Module Pilot Michael Collins and Lunar Module Pilot Edwin “Buzz” Aldrin into an initial Earth-orbit of 114 by 116 miles.\nAn estimated 650 million people watched Armstrong’s televised image and heard his voice describe the event as he took “…one small step for a man, one giant leap for mankind” on July 20, 1969.\nTwo hours, 44 minutes and one-and-a-half revolutions after launch, the S-IVB stage reignited for a second burn of five minutes, 48 seconds, placing Apollo 11 into a translunar orbit.\nThe command and service module, or CSM, Columbia separated from the stage, which included the spacecraft-lunar module adapter, or SLA, containing the lunar module, or LM, Eagle.\n...\nPartially piloted manually by Armstrong, the Eagle landed in the Sea of Tranquility in Site 2 at 0 degrees, 41 minutes, 15 seconds north latitude and 23 degrees, 26 minutes east longitude.\n...\nAfter a flight of 195 hours, 18 minutes, 35 seconds – about 36 minutes longer than planned – Apollo 11 splashed down in the Pacific Ocean, 13 miles from the recovery ship USS Hornet.\nBecause of bad weather in the target area, the landing point was changed by about 250 miles.\nApollo 11 landed 13 degrees, 19 minutes north latitude and 169 degrees, nine minutes west longitude July 24, 1969.\n**Crew**\nNeil Armstrong, Commander\nEdwin E.\n“Buzz” Aldrin Jr., Lunar Module Pilot\nMichael Collins, Command Module Pilot\n**Backup Crew**\nJames A. Lovell, Commander\nFred W. Haise Jr., Lunar Module Pilot\nWilliam A. Anders, Command Module Pilot\n**Payload**",
+        "title": "Apollo 11 Mission Overview - NASA",
+        "url": "https://www.nasa.gov/history/apollo-11-mission-overview/",
+        "date": "2015-04-17",
+        "last_updated": "2026-05-13"
+      },
+      {
+        "snippet": "The primary objective of Apollo 11 was to complete a national goal set by President John F. Kennedy on May 25, 1961: perform a crewed lunar landing and return to Earth.\nMission Type\nLunar Landing\nastronauts\nNeil Armstrong, Buzz Aldrin, Michael Collins\nLaunch\nJuly 16, 1969\nSPLASHDOWN\nJuly 24, 1969\n...\n**First human to set foot on the Moon.**\nNeil A. Armstrong is probably best known as the commander for the Apollo 11 mission.\n...\nWatch highlights from the Apollo 11 mission including the launch on July 16, 1969, the landing of the lunar module, Neil Armstrong's first steps on the Moon, splashdown, and more.\n...\n20 July 1969—Astronaut Edwin E. Aldrin Jr., lunar module pilot, walks on the surface of the moon near the leg of the Lunar Module (LM) “Eagle” during the Apollo 11 extravehicular activity (EVA).\n...\nJOHNSON SPACE CENTER, HOUSTON, TEXAS – With a half-Earth in the background, the Lunar Module ascent stage with Moon-walking astronauts Neil Armstrong and Edwin Aldrin Jr. approaches for a rendezvous with the Apollo Command Module manned by Michael Collins.\nThe Apollo 11 liftoff from the Moon came early, ending a 22-hour stay on the Moon by Armstrong and Aldrin.\n...\nNeil Armstrong was the first person to walk on the moon.\nHe was an astronaut.\nHe flew on two space missions.\nOne was Apollo 11.",
+        "title": "Apollo 11 - NASA",
+        "url": "https://www.nasa.gov/mission/apollo-11/",
+        "date": "2023-03-08",
+        "last_updated": "2026-05-15"
+      },
+      {
+        "snippet": "",
+        "title": "Apollo 11 - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Apollo_11",
+        "date": "2001-09-24",
+        "last_updated": "2026-05-18"
+      },
+      {
+        "snippet": "Apollo 11 was launched on July 16, 1969, at 8:32 AM Central Daylight Time (CDT) with the goal of performing the first human landing on the Moon.\nCommander Neil Armstrong, Command Module Pilot Michael Collins, and Lunar Module Pilot Edwin “Buzz” Aldrin entered lunar orbit on the afternoon of July 19.\nThe following day, Armstrong and Aldrin begin their descent to the lunar surface in the Lunar Module, Eagle.\nThe planned landing site in the Sea of Tranquility was selected as a flat, safe location and had been surveyed by Apollo 10 at an elevation of 10 miles above the Moon.\nHowever, a navigation error earlier in the mission caused Eagle to be about 7 kilometers beyond the planned landing location.\nDuring the 12.6-minute-long powered descent, there were a total of five unexpected computer alarms.\nThese alarms all indicated that Eagle’s computer system was overloaded, but in each case, Mission Control concluded that it was safe to continue the landing.\n...\nBecause of the navigation error, the computer was guiding the spacecraft towards an unsafe touchdown point in the rugged, boulder-filled ejecta field surrounding West Crater.\nArmstrong took manual control and flew to a safe landing spot beyond the crater.\nAt 3:17 PM CDT, he announced their safe landing, “Houston, Tranquility Base.\nThe Eagle has landed.”\nAt the time of landing, Mission Control thought that the spacecraft had just 17 seconds of fuel left in the descent stage.\nHowever, post mission analysis showed that sloshing in the fuel tank during Armstrong’s search for a safe landing site caused the fuel gauge to give an inaccurate reading.\nEagle actually had about 45 seconds of fuel left when it touched down.\nAfter a checkout of Eagle’s systems, Armstrong and Aldrin prepared for their moonwalk.\nAt 9:56 PM CDT, Armstrong set foot on the lunar surface, “That’s one small step for man, one giant leap for mankind.”\nAldrin followed a short while later.\nThe duration of this first ever moonwalk was limited to just 2 hours and 31 minutes and the crew remained within 60 meters of Eagle.\nArmstrong and Aldrin collected 21.6 kilograms of samples and deployed a seismometer to measure moonquakes, a laser retroreflector to enable precise measurements of the distance between Earth and the Moon, and a device to collect a sample of the solar wind.\nThey also performed ceremonial duties, including setting up a United States flag, unveiling a commemorative plaque on the lunar module, and having a brief conversation with President Richard Nixon.\nDuring the moon landing, Collins remained in lunar orbit in the command module, Columbia.\nAfter just 21.6 hours on the Moon, Eagle’s ascent stage returned to lunar orbit and rejoined Columbia.\nAltogether, Apollo 11 spent 2.5 days in lunar orbit, circling the Moon 31 times.\nThe crew returned safely to Earth on July 24, landing in the Pacific Ocean southwest of Hawaii, after a flight of 8 days and 3 hours.\nAlthough scientists considered it unlikely that the Moon had life on it, the crew was kept in a biological quarantine for 21 days.\nPost-mission analysis showed that the Apollo 11 samples consisted of two primary rock types.\nBasalt is formed by the solidification of molten magma.\nThe Apollo 11 basalts formed 3.6 to 3.9 billion years ago and are unusually rich in the element titanium.\nBreccias are composed of fragments of other rocks.\nOn the Moon, breccias formed from rocks that are broken up by impacting objects.\nAnalysis of the lunar samples also confirmed that they were indeed lifeless and showed no evidence of water.",
+        "title": "Lunar - Missions - Apollo 11 Mission",
+        "url": "https://www.lpi.usra.edu/lunar/missions/apollo/apollo_11/",
+        "date": null,
+        "last_updated": "2025-07-28"
+      },
+      {
+        "snippet": "阿波罗11号是首次将人类送上月球的太空任务，于1969年7月16日发射升空。\n从发射到7月24日在太平洋溅落，阿波罗11号飞行的几乎每一个重要环节都通过电视被全球几乎各个角落的数亿人所目睹。\n...\n阿波罗11号的任务目标是让宇航员登陆月球并安全返回地球。\n1969年7月20日，它成功地将尼尔·阿姆斯特朗和巴兹·奥尔德林送上月球，实现了这一目标。\n...\n阿波罗11号的机组成员是指令长尼尔·阿姆斯特朗、登月舱驾驶员巴兹·奥尔德林和指令舱驾驶员迈克尔·柯林斯。\n...\n阿波罗11号任务的登月舱*鹰号*于1969年7月20日在月球着陆。\n尼尔·阿姆斯特朗和巴兹·奥尔德林成为首批登陆月球并在月面行走的人。\n...\n阿波罗11号达到的最快速度是每小时39,715公里（24,678英里），即1969年7月24日指令舱重返地球大气层之时。\n**\n**阿波罗11号**，美国载人航天飞行任务，1969年7月20日，指令长尼尔·阿姆斯特朗和登月舱驾驶员小埃德温（“巴兹”）·奥尔德林成为首批登陆月球并在月面行走的人。\n阿波罗11号是阿波罗计划的巅峰之作，也是美国为在载人登月上击败苏联而做出的巨大国家承诺。\n总计有24名阿波罗宇航员到访月球，其中12人在月面行走过。\n...\n7月20日美国东部夏令时晚上10点56分，阿姆斯特朗踏上月球土壤，并说道：“这是[一个]人的一小步，却是人类的一大步。”\n...\n在月面停留21小时38分钟后，宇航员使用*鹰号*的上升级将其发射回月球轨道。\n...\n7月24日，阿波罗11号在夏威夷以西约1,400公里（900英里）的太平洋上溅落。",
+        "title": "阿波罗11号 | 历史、任务、登陆、宇航员、图片 ...",
+        "url": "https://www.britannica.com/topic/Apollo-11",
+        "date": "2026-04-04",
+        "last_updated": "2026-04-06"
+      },
+      {
+        "snippet": "**1969年7月20日，人类首次在月球上行走。**\n**我们回顾人类在月球上迈出第一小步的历史遗产，并展望下一次伟大的飞跃。**\n...\n1961年4月12日，苏联将第一位人类尤里·加加林送入太空。\n在苏联取得这一成就的数天之内，约翰·F·肯尼迪总统就要求副总统林登·约翰逊找出一项“有望取得惊人成果、且我们能够获胜的太空计划”。\n一个多月后，即1961年5月25日，肯尼迪在国会两院联席会议上发表讲话，呼吁开展人类登月探索。\n...\n1969年7月16日\n## 升空！\n一枚载着三名阿波罗11号宇航员的土星五号火箭从肯尼迪角发射升空。\n超过一百万名观众前来观看发射，其中包括副总统斯皮罗·阿格纽和前总统林登·约翰逊。\n1969年7月20日\n## “鹰已着陆！”\n经过四天的奔月旅程，载着尼尔·阿姆斯特朗和巴兹·奥尔德林的登月舱*鹰号*在月球着陆。\n尼尔·阿姆斯特朗走出航天器，成为第一个在月球上行走的人类。\n在估计有6.5亿人观看的情况下，阿姆斯特朗宣告：“这是个人的一小步，却是人类的一大步。”\n迈克尔·柯林斯留在指令舱*哥伦比亚号*上，担任通信链路并拍摄月面照片。\n...\n## 静海 | Mare Tranquillitatis\n**北纬00.67408°，东经23.47297°**\n首次登月选择静海（Mare Tranquilitatis）作为着陆点，因为那里是一片相对平滑平坦的区域。\n然而，那里确实有一些陨石坑，在着陆前的最后几分钟，尼尔·阿姆斯特朗不得不手动驾驶登月舱，以避开一个名为West的边缘锐利的辐射纹陨石坑，其直径约180米，深约30米。\n登月舱安全着陆于距原定着陆点约6公里处，位于West陨石坑以西约400米、静海西南部Sabine D陨石坑西南偏南20公里处。\n着陆点的月面由碎屑物质构成，大小从细颗粒到约0.8米宽的岩块不等。\n...\n在月球上停留约两个半小时后，阿姆斯特朗和奥尔德林返回登月舱，开始返程旅途。\n三名宇航员于1969年7月24日在夏威夷溅落。\n随后他们隔离了三周，以防将污染物从月球带回，之后才开始举行欢迎他们回家的庆祝活动。\n...\n## 迈克尔·柯林斯\n...\n有三名宇航员被选为该乘组的替补：指令长小詹姆斯·A·洛弗尔；指令舱驾驶员威廉·A·安德斯；以及登月舱驾驶员弗雷德·W·海斯。\n这三名替补机组成员最终都执行了阿波罗任务。\n...\n7月20日，世界各地的人们聚集在电视机前观看登月。\n估计有6.5亿观众在收看。\n在美国，93%的电视机都调到了观看尼尔·阿姆斯特朗在月球上行走的频道。",
+        "title": "技术",
+        "url": "https://airandspace.si.edu/explore/stories/apollo-11-moon-landing",
+        "date": "2021-07-29",
+        "last_updated": "2026-05-20"
+      },
+      {
+        "snippet": "阿波罗11号（指令服务舱哥伦比亚号与登月舱鹰号）\n土星五号\n1969年7月16日至24日\n尼尔·A·阿姆斯特朗\n迈克尔·柯林斯\n小埃德温·E·\n“巴兹”·奥尔德林\n08天03小时18分钟\n首次载人登月任务及月面\n舱外活动。\n“休斯顿，这里是静海基地。\n鹰已着陆。”——7月20日，\n着陆点：静海。\n着陆坐标：北纬0.67409度，东经23.47298度\n（来源：国家空间科学数据中心）；LROC QuickMap\n1次舱外活动，历时02小时31分钟。\n部署了旗帜和仪器；在登月舱下降级上揭幕了一块铭牌，上面刻着：“来自地球行星的人类于此首次踏上月球。\n公元1969年7月。\n我们为全人类的和平而来。”\n月面停留时间21.6小时；在月球轨道上59.5小时，环绕30圈。\n登月舱上升级留在月球轨道上。\n采集了20公斤（44磅）物质。",
+        "title": "阿波罗11号月面日志：任务概览",
+        "url": "https://www.nasa.gov/history/alsj/a11/a11ov.html",
+        "date": null,
+        "last_updated": "2025-10-25"
+      },
+      {
+        "snippet": "Apollo 11 was the first mission to land humans on the Moon.\nIt fulfilled a 1961 goal set by President John F. Kennedy to send American astronauts to the surface and return them safely to Earth before the end of the decade.\nOn 21 July 1969 at 02:56:15 UTC, Neil Armstrong pressed his left foot onto the Moon and said, \"That's one small step for [a] man, one giant leap for mankind,\" as 530 million people watched live on television.\nThe mission returned 20 kilograms of rock and soil to Earth, and paved the way for 5 additional Moon landings that greatly advanced the field of lunar science.\nNeil Armstrong, Buzz Aldrin, and Michael Collins began their journey\nwith a launch aboard a Saturn V rocket on the morning of 16 July 1969.\nThree hours later, their rocket's upper stage blasted them out of Earth\norbit towards the Moon.\nThey arrived 3 days later on 19 July and entered\nan initial lunar orbit of 111 by 306 kilometers.\nA second engine burn\nlowered their orbit to 100 by 113 kilometers.\nOn 20 July, Armstrong and Aldrin boarded their lunar module, nicknamed Eagle, and undocked it from the command module, where Collins remained.\nAlmost the same as in the Apollo 10 rehearsal 2 months earlier, the astronauts fired Eagle’s descent engine, dropping to an orbit with a low point of 14.5 kilometers.\nRoughly an hour later, as the duo approached the Sea of Tranquility, they began a final powered descent to the surface.\n...\nThe official touchdown time was 20:17:39 UTC on 20 July 1969.\n...\nArmstrong and Aldrin's single moonwalk lasted two and a half hours.\nDuring that time, they deployed science and engineering experiments, photographed their surroundings, displayed an American flag, read an inscription plaque, collected rock and soil samples for return to Earth, and spoke with President Richard Nixon.\nThe astronauts verbally described their surroundings and progress for geologists, while cameras mounted inside and outside the lunar module documented some of their activities.\n...\nThe Apollo 11 lunar module landing coordinates are 0.67416 degrees N, 23.47314 E.",
+        "title": "Apollo 11 | The Planetary Society",
+        "url": "https://www.planetary.org/space-missions/apollo-11",
+        "date": "2019-05-31",
+        "last_updated": "2026-03-31"
+      },
+      {
+        "snippet": "",
+        "title": "Apollo 11 Mission Overview | NASA+",
+        "url": "https://plus.nasa.gov/video/apollo-11-mission-overview/",
+        "date": "2024-07-12",
+        "last_updated": "2026-05-17"
+      },
+      {
+        "snippet": "Overview of the Apollo 11 spaceflight in which U.S. astronauts became the first people to walk on the Moon.\n...\nThe mission that took U.S. astronauts to the Moon was Apollo 11, NASA’s fifth crewed Apollo mission.\nThe astronauts on board the spacecraft were Neil Armstrong, Edwin (“Buzz”) Aldrin, Jr., and Michael Collins.\nOn the morning of July 20, Armstrong and Aldrin crawled from the command module, Columbia, through a tunnel to the lunar module, Eagle.\nArmstrong and Aldrin piloted Eagle to the lunar surface, touching down in the Sea of Tranquility.\nAt 4:17 PM U.S. Eastern Daylight Time (EDT), Armstrong radioed, “Houston, Tranquility Base here.\nThe Eagle has landed.”\nAt 10:56 PM EDT on July 20, Armstrong stepped out onto the lunar soil with the words, “That’s one small step for [a] man, one giant leap for mankind.”\n(In the excitement of the moment, Armstrong skipped the “a” in the statement that he had prepared.)\nArmstrong and Aldrin set up a device to measure the composition of the solar wind reaching the Moon, a device to receive laser beams from astronomical observatories on Earth to determine the exact distance of the two bodies from one each other, and a passive seismometer to measure moonquakes and meteor impacts.\nThey also took about 23 kg (50 pounds) of rock and soil samples, took many photographs, and maintained constant communication with mission control in Houston, Texas.\nAfter 21 hours 38 minutes on the Moon’s surface, the astronauts used Eagle’s ascent stage to launch it back into lunar orbit.\nSplashdown of Apollo 11 occurred in the Pacific Ocean about 1,400 km (900 miles) southwest of Hawaii on July 24.\nAfter their return, the astronauts were quarantined for 21 days from the time Eagle had left the Moon.\nThey were checked for any diseases they might have brought back from the Moon.",
+        "title": "Apollo 11's Incredible Journey to the Moon | Britannica",
+        "url": "https://www.britannica.com/video/Just-the-facts-Apollo-11-moon-landing/-246490",
+        "date": "2023-12-06",
+        "last_updated": "2025-08-25"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+**历史研究**
+
+使用特定日期范围来研究历史事件或趋势：
+
+```python theme={null}
+response = client.search(
+    query="AI developments",
+    max_results=20,
+    search_after_date_filter="1/1/2023",
+    search_before_date_filter="12/31/2023"
+)
+```
+
+**查找近期维护过的内容**
+
+使用最后更新过滤器，查找近期更新或维护过的内容：
+
+```python theme={null}
+response = client.search(
+    query="React best practices",
+    max_results=10,
+    last_updated_after_filter="07/01/2025"
+)
+```
+
+**趋势分析**
+
+通过多次搜索对比不同时间段：
+
+```python theme={null}
+# 近期趋势
+recent = client.search(
+    query="machine learning trends",
+    search_recency_filter="month"
+)
+
+# 早期趋势，用于对比
+older = client.search(
+    query="machine learning trends",
+    search_after_date_filter="1/1/2023",
+    search_before_date_filter="1/31/2023"
+)
+```
+
+<div id="error-handling">
+  ## 错误处理
+</div>
+
+使用日期过滤器时，请针对无效的日期格式做好错误处理：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+  import re
+
+  def validate_date_format(date_string):
+      pattern = r'^(0?[1-9]|1[0-2])/(0?[1-9]|[12]\d|3[01])/\d{4}$'
+      return bool(re.match(pattern, date_string))
+
+  def search_with_date_filter(query, after_date=None, before_date=None):
+      client = Perplexity()
+      
+      # 校验日期格式
+      if after_date and not validate_date_format(after_date):
+          raise ValueError(f"Invalid date format: {after_date}")
+      if before_date and not validate_date_format(before_date):
+          raise ValueError(f"Invalid date format: {before_date}")
+      
+      try:
+          response = client.search(
+              query=query,
+              search_after_date_filter=after_date,
+              search_before_date_filter=before_date
+          )
+          return response
+      except Exception as e:
+          print(f"Search failed: {e}")
+          return None
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  function validateDateFormat(dateString: string): boolean {
+    const pattern = /^(0?[1-9]|1[0-2])\/(0?[1-9]|[12]\d|3[01])\/\d{4}$/;
+    return pattern.test(dateString);
+  }
+
+  async function searchWithDateFilter(
+    query: string, 
+    afterDate?: string, 
+    beforeDate?: string
+  ) {
+    const client = new Perplexity();
+    
+    // 校验日期格式
+    if (afterDate && !validateDateFormat(afterDate)) {
+      throw new Error(`Invalid date format: ${afterDate}`);
+    }
+    if (beforeDate && !validateDateFormat(beforeDate)) {
+      throw new Error(`Invalid date format: ${beforeDate}`);
+    }
+    
+    try {
+      const response = await client.search.create({
+        query,
+        search_after_date_filter: afterDate,
+        search_before_date_filter: beforeDate
+      });
+      return response;
+    } catch (error) {
+      console.error('Search failed:', error);
+      return null;
+    }
+  }
+  ```
+</CodeGroup>

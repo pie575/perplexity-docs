@@ -1,0 +1,198 @@
+---
+title: "在 LiteLLM 中使用 Perplexity"
+description: "通过 LiteLLM 的统一接口(Python SDK 与 代理)使用 Perplexity 的 Agent API 和 preset。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+[LiteLLM](https://litellm.ai) 是一个 Python SDK 和代理服务器，通过单一的 OpenAI 兼容接口即可对接 100 多家 LLM 提供商。Perplexity 的 [Agent API](/zh/docs/agent-api/quickstart) (可经由 Perplexity 路由 GPT-5、Claude、Gemini 等第三方 模型) 是 LiteLLM 中的一等提供商。
+
+<Info>
+  **LiteLLM** 让你无需改动代码即可切换提供商，还可运行自托管代理，用一个 API key 统一对接所有 模型，并按提供商跟踪支出、延迟和错误。详见 [litellm.ai](https://litellm.ai)。
+</Info>
+
+<div id="installation">
+  ## 安装
+</div>
+
+```bash theme={null}
+pip install litellm
+```
+
+<div id="api-key-setup">
+  ## API key 配置
+</div>
+
+LiteLLM 会从环境变量中读取你的 Perplexity API key：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="获取 API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 API 门户中生成你的 Perplexity API key。
+</Card>
+
+<div id="agent-api">
+  ## Agent API
+</div>
+
+使用 `litellm.responses` 调用 [Agent API](/zh/docs/agent-api/quickstart)：请求经 Perplexity 路由至第三方模型，并支持工具编排与 preset。
+
+<div id="presets">
+  ### Presets
+</div>
+
+```python theme={null}
+from litellm import responses
+import os
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+response = responses(
+    model="perplexity/preset/low",
+    input="What are the latest developments in AI?",
+    custom_llm_provider="perplexity",
+)
+
+print(response.output)
+```
+
+可用的 preset：`fast`、`low`、`medium`、`high`、`xhigh`。
+
+<div id="tool-use-web_search-and-fetch_url">
+  ### 工具调用 (`web_search` 与 `fetch_url`)
+</div>
+
+```python theme={null}
+from litellm import responses
+
+response = responses(
+    model="perplexity/openai/gpt-5.6-sol",
+    input="Research quantum computing breakthroughs and cite sources.",
+    custom_llm_provider="perplexity",
+    tools=[
+        {"type": "web_search"},
+        {"type": "fetch_url"},
+    ],
+    instructions="Use web_search and fetch_url to gather citations.",
+    max_output_tokens=1000,
+    temperature=0.7,
+)
+
+print(response.output)
+```
+
+<div id="structured-outputs">
+  ### 结构化输出
+</div>
+
+```python theme={null}
+from litellm import responses
+
+response = responses(
+    model="perplexity/preset/low",
+    input="Extract key facts about the Eiffel Tower.",
+    custom_llm_provider="perplexity",
+    text={
+        "format": {
+            "type": "json_schema",
+            "name": "facts",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "height_meters": {"type": "number"},
+                    "year_built": {"type": "integer"},
+                },
+                "required": ["name", "height_meters", "year_built"],
+            },
+            "strict": True,
+        }
+    },
+)
+```
+
+<div id="supported-third-party-models-via-agent-api">
+  ### 通过 Agent API 支持的第三方模型
+</div>
+
+为任意 Agent API 的 model ID 添加 `perplexity/` 前缀 (例如 `perplexity/openai/gpt-5.6-sol`) 。完整且最新的模型目录请参阅 [Agent API 模型列表](/zh/docs/agent-api/models)。
+
+<div id="litellm-proxy">
+  ## LiteLLM 代理
+</div>
+
+将 LiteLLM 作为自托管代理运行，通过统一的 OpenAI 兼容端点对外暴露 Perplexity (以及任何其他提供商) 。
+
+<div id="configyaml">
+  ### config.yaml
+</div>
+
+```yaml theme={null}
+model_list:
+  - model_name: perplexity-low
+    litellm_params:
+      model: perplexity/preset/low
+      api_key: os.environ/PERPLEXITY_API_KEY
+```
+
+<div id="start-the-proxy">
+  ### 启动代理服务
+</div>
+
+```bash theme={null}
+litellm --config /path/to/config.yaml
+```
+
+<div id="call-the-proxy">
+  ### 调用代理
+</div>
+
+```bash theme={null}
+curl http://0.0.0.0:4000/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer anything" \
+  -d '{
+    "model": "perplexity-low",
+    "input": "What are the latest developments in AI?",
+    "tools": [{"type": "web_search"}]
+  }'
+```
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="LiteLLM Perplexity 文档" icon="book" href="https://docs.litellm.ai/docs/providers/perplexity">
+    LiteLLM 中 Perplexity 提供商的官方文档。
+  </Card>
+
+  <Card title="LiteLLM 文档" icon="globe" href="https://docs.litellm.ai">
+    完整的 LiteLLM 文档。
+  </Card>
+
+  <Card title="Perplexity Agent API" icon="robot" href="/zh/docs/agent-api/quickstart">
+    Agent API 参考与 preset 说明。
+  </Card>
+
+  <Card title="Agent API 模型" icon="sparkles" href="/zh/docs/agent-api/models">
+    可用的 Agent API 模型。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中需要帮助？
+
+* 查阅 [LiteLLM 文档](https://docs.litellm.ai)
+* 参阅我们的[常见问题](/zh/docs/resources/faq)

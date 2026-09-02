@@ -1,0 +1,330 @@
+---
+title: "Limites de débit et paliers d'utilisation"
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<div id="what-are-usage-tiers">
+  ## Que sont les paliers d&#39;utilisation ?
+</div>
+
+Les paliers d&#39;utilisation déterminent vos **limites de débit** et votre accès aux **fonctionnalités en bêta** en fonction de vos dépenses cumulées sur l&#39;API. À mesure que vous dépensez en crédits API, vous accédez automatiquement à des paliers supérieurs, assortis de limites de débit plus élevées. Ces paliers autorisent nettement plus de requêtes par minute et, une fois un palier atteint, il vous est acquis définitivement, sans rétrogradation possible.
+
+<Info>
+  Vous pouvez consulter votre palier d&#39;utilisation actuel sur la [page Tarifs](https://console.perplexity.ai/project/pricing?tab=usage-tiers) de la console API.
+</Info>
+
+***
+
+<div id="tier-progression">
+  ## Progression des paliers
+</div>
+
+| Palier       | Total de crédits achetés | Statut                           |
+| ------------ | ------------------------ | -------------------------------- |
+| **Palier 0** | $0                       | Nouveaux comptes, accès limité   |
+| **Palier 1** | $50+                     | Usage léger, limites de base     |
+| **Palier 2** | $250+                    | Usage régulier                   |
+| **Palier 3** | $500+                    | Usage intensif                   |
+| **Palier 4** | $1,000+                  | Usage en production              |
+| **Palier 5** | $5,000+                  | Usage à l&#39;échelle entreprise |
+
+<Note>
+  Les paliers sont déterminés par les **achats cumulés** depuis la création de votre compte, et non par votre solde actuel.
+</Note>
+
+***
+
+<div id="router-api-rate-limits">
+  ## Limites de débit de l&#39;API Router
+</div>
+
+Les requêtes à l&#39;API Router sont soumises à des limites de débit. Lorsqu&#39;une requête est ainsi limitée, ou qu&#39;un modèle en amont est surchargé, l&#39;API renvoie un code `429` accompagné d&#39;un en-tête `Retry-After` : réessayez après l&#39;intervalle indiqué.
+
+<Note>
+  Les requêtes rejetées avec un code `429` ne sont pas facturées.
+</Note>
+
+***
+
+<div id="agent-api-rate-limits">
+  ## Limites de débit de l&#39;Agent API
+</div>
+
+L&#39;Agent API applique deux limites indépendantes à chaque requête : la limite de QPS applicable à l&#39;ensemble de l&#39;API et la limite de requêtes par minute (RPM) du modèle Agent. Une requête doit respecter ces deux limites. La valeur RPM ne découle pas de la valeur QPS.
+
+|   palier   | QPS (requêtes par seconde) | Requêtes par minute |
+| :--------: | :------------------------: | :-----------------: |
+| **palier 0** |            1 QPS           |        50/min       |
+| **palier 1** |            3 QPS           |       150/min       |
+| **palier 2** |            8 QPS           |       500/min       |
+| **palier 3** |           17 QPS           |      1 000/min      |
+| **palier 4** |           33 QPS           |      4 000/min      |
+| **palier 5** |           33 QPS           |      8 000/min      |
+
+***
+
+<div id="search-api-rate-limits">
+  ## Limites de débit de la Search API
+</div>
+
+La Search API dispose de limites de débit distinctes qui s&#39;appliquent à tous les paliers d&#39;utilisation :
+
+| Endpoint       | Limite de débit                  | Capacité de rafale   |
+| -------------- | -------------------------------- | -------------------- |
+| POST `/search` | 50 unités de requête par seconde | 50 unités de requête |
+
+**Comportement du limiteur de débit de la recherche :**
+
+* **Appel à requête unique** : consomme 1 unité de requête
+* **Appel multi-requêtes** : consomme 1 unité de requête pour chaque requête du tableau
+* **Rafale** : peut consommer 50 unités de requête instantanément
+* **Débit soutenu** : 50 unités de requête par seconde en moyenne
+
+<Info>
+  La facturation et la limitation de débit n&#39;utilisent pas les mêmes unités. Un appel réussi contenant cinq requêtes compte pour une seule requête facturable de la Search API, mais consomme cinq unités de limite de débit. Les limites de débit de la recherche sont indépendantes de votre palier d&#39;utilisation et s&#39;appliquent de manière uniforme à tous les comptes, selon le même algorithme du seau percé. Consultez la [tarification de la Search API](/fr/docs/getting-started/pricing#search-api-pricing) pour les détails de facturation.
+</Info>
+
+***
+
+<div id="sonar-api-rate-limits">
+  ## Limites de débit de la Sonar API
+</div>
+
+<SonarDeprecationNotice />
+
+La Sonar API applique des limites de débit qui varient selon votre palier d&#39;utilisation :
+
+<Tabs>
+  <Tab title="Palier 0">
+    | Modèle                             | Requêtes par minute (RPM) |
+    | ---------------------------------- | ------------------------- |
+    | `sonar-deep-research`              | 5                         |
+    | `sonar-reasoning-pro`              | 50                        |
+    | `sonar-pro`                        | 50                        |
+    | `sonar`                            | 50                        |
+    | POST `/v1/async/sonar`             | 5                         |
+    | GET `/v1/async/sonar`              | 3000                      |
+    | GET `/v1/async/sonar/{request_id}` | 6000                      |
+  </Tab>
+
+  <Tab title="Palier 1">
+    | Modèle                             | Requêtes par minute (RPM) |
+    | ---------------------------------- | ------------------------- |
+    | `sonar-deep-research`              | 10                        |
+    | `sonar-reasoning-pro`              | 150                       |
+    | `sonar-pro`                        | 150                       |
+    | `sonar`                            | 150                       |
+    | POST `/v1/async/sonar`             | 10                        |
+    | GET `/v1/async/sonar`              | 3000                      |
+    | GET `/v1/async/sonar/{request_id}` | 6000                      |
+  </Tab>
+
+  <Tab title="Palier 2">
+    | Modèle                             | Requêtes par minute (RPM) |
+    | ---------------------------------- | ------------------------- |
+    | `sonar-deep-research`              | 20                        |
+    | `sonar-reasoning-pro`              | 500                       |
+    | `sonar-pro`                        | 500                       |
+    | `sonar`                            | 500                       |
+    | POST `/v1/async/sonar`             | 20                        |
+    | GET `/v1/async/sonar`              | 3000                      |
+    | GET `/v1/async/sonar/{request_id}` | 6000                      |
+  </Tab>
+
+  <Tab title="Palier 3">
+    | Modèle                             | Requêtes par minute (RPM) |
+    | ---------------------------------- | ------------------------- |
+    | `sonar-deep-research`              | 40                        |
+    | `sonar-reasoning-pro`              | 1 000                     |
+    | `sonar-pro`                        | 1 000                     |
+    | `sonar`                            | 1 000                     |
+    | POST `/v1/async/sonar`             | 40                        |
+    | GET `/v1/async/sonar`              | 3000                      |
+    | GET `/v1/async/sonar/{request_id}` | 6000                      |
+  </Tab>
+
+  <Tab title="Palier 4">
+    | Modèle                             | Requêtes par minute (RPM) |
+    | ---------------------------------- | ------------------------- |
+    | `sonar-deep-research`              | 60                        |
+    | `sonar-reasoning-pro`              | 4 000                     |
+    | `sonar-pro`                        | 4 000                     |
+    | `sonar`                            | 4 000                     |
+    | POST `/v1/async/sonar`             | 60                        |
+    | GET `/v1/async/sonar`              | 3000                      |
+    | GET `/v1/async/sonar/{request_id}` | 6000                      |
+  </Tab>
+
+  <Tab title="Palier 5">
+    | Modèle                             | Requêtes par minute (RPM) |
+    | ---------------------------------- | ------------------------- |
+    | `sonar-deep-research`              | 100                       |
+    | `sonar-reasoning-pro`              | 4 000                     |
+    | `sonar-pro`                        | 4 000                     |
+    | `sonar`                            | 4 000                     |
+    | POST `/v1/async/sonar`             | 100                       |
+    | GET `/v1/async/sonar`              | 3000                      |
+    | GET `/v1/async/sonar/{request_id}` | 6000                      |
+  </Tab>
+</Tabs>
+
+***
+
+<div id="embeddings-api-rate-limits">
+  ## Limites de débit de l&#39;Embeddings API
+</div>
+
+L&#39;Embeddings API applique des limites de débit par palier, qui augmentent selon votre palier d&#39;utilisation. Ces limites sont plus élevées que celles des autres API, car chaque requête correspond à une seule passe avant sur un backend élastique.
+
+|      Palier     | QPS (requêtes par seconde) |
+| :-------------: | :------------------------: |
+|   **Palier 0**  |           85 QPS           |
+| **Paliers 1–3** |           170 QPS          |
+| **Paliers 4–5** |           335 QPS          |
+
+<div id="contextualized-embeddings">
+  ### Embeddings contextualisés
+</div>
+
+Les embeddings contextualisés disposent de limites distinctes et plus élevées (5× celles des paliers d&#39;embeddings standard) :
+
+|      Palier     | QPS (requêtes par seconde) |
+| :-------------: | :------------------------: |
+|   **Palier 0**  |           415 QPS          |
+| **Paliers 1–3** |           835 QPS          |
+| **Paliers 4–5** |          1 670 QPS         |
+
+<Note>
+  Les embeddings contextualisés sont limités en fonction du **nombre total de chunks**, et non du nombre de requêtes.
+</Note>
+
+***
+
+<div id="how-rate-limiting-works">
+  ## Fonctionnement de la limitation de débit
+</div>
+
+Notre système de limitation de débit repose sur un **algorithme du seau percé** (leaky bucket), qui tolère les pics de trafic tout en maintenant un contrôle strict du débit sur le long terme.
+
+<div id="technical-implementation">
+  ### Implémentation technique
+</div>
+
+<AccordionGroup>
+  <Accordion title="L'algorithme du seau percé expliqué">
+    L&#39;algorithme du seau percé fonctionne comme un seau muni d&#39;un petit trou au fond :
+
+    * **Capacité du seau** : nombre maximal de requêtes que vous pouvez envoyer instantanément (capacité de rafale)
+    * **Débit de fuite** : vitesse à laquelle les tokens s&#39;écoulent du seau (votre limite de débit)
+    * **Rechargement des tokens** : les tokens sont rechargés en continu, à intervalles réguliers, selon votre limite de débit
+
+    Cette conception autorise les rafales de trafic légitimes lorsque vous en avez besoin, empêche les abus prolongés et garantit une application prévisible et équitable des limites pour tous les utilisateurs.
+  </Accordion>
+
+  <Accordion title="Exemple de comportement du limiteur de débit">
+    Voyons ce que donnent **50 requêtes par seconde** en pratique. Avec une capacité de 50 tokens et un débit de fuite de 50 tokens par seconde, un token est rechargé toutes les 20 ms.
+
+    **Scénario 1 : trafic en rafale**
+
+    ```
+    Temps 0,0 s : seau plein (50 tokens)
+    → Envoi de 50 requêtes instantanément → TOUTES AUTORISÉES
+    → Envoi de la 51e requête → REJETÉE (seau vide)
+
+    Temps 0,020 s : 1 token rechargé
+    → Envoi d'1 requête → AUTORISÉE
+    → Envoi d'une 2e requête → REJETÉE
+
+    Temps 0,040 s : 1 token de plus rechargé
+    → Envoi d'1 requête → AUTORISÉE
+    ```
+
+    **Scénario 2 : 50 QPS constants**
+
+    ```
+    Une requête toutes les 20 ms :
+    Temps 0,0 s : requête → AUTORISÉE (50→49 tokens)
+    Temps 0,020 s : requête → AUTORISÉE (49+1-1=49 tokens)
+    Temps 0,040 s : requête → AUTORISÉE (49+1-1=49 tokens)
+    ... le niveau se maintient entre 49 et 50 tokens, toutes les requêtes passent
+    ```
+
+    **Scénario 3 : légèrement au-dessus de 50 QPS**
+
+    ```
+    Une requête toutes les 19 ms (≈52,6 QPS) :
+    → Les tokens finissent par s'épuiser plus vite qu'ils ne se rechargent
+    → Certaines requêtes commencent à être rejetées
+    → Le débit moyen atteint exactement 50 QPS
+    ```
+  </Accordion>
+
+  <Accordion title="Conséquences concrètes">
+    Grâce à la conception en seau percé, vous pouvez consommer instantanément la totalité de votre limite de débit, ce qui est idéal pour les traitements par lots ou les pics de trafic soudains. Inutile d&#39;espacer artificiellement vos requêtes lorsqu&#39;il vous reste de la capacité de rafale.
+
+    Le système applique strictement les limites de débit moyennes dans la durée tout en permettant une récupération rapide après une rafale. Vous obtenez ainsi des performances homogènes quels que soient les profils d&#39;utilisation, sans dépassement prolongé des limites et avec une allocation équitable des ressources.
+
+    Lorsque vous concevez votre application, tirez parti de la capacité de rafale pour les traitements par lots, surveillez vos profils d&#39;utilisation afin d&#39;optimiser le rythme des requêtes et mettez en place une gestion appropriée des erreurs pour les réponses 429.
+  </Accordion>
+</AccordionGroup>
+
+***
+
+<div id="what-happens-when-you-hit-rate-limits">
+  ## Que se passe-t-il lorsque vous atteignez les limites de débit ?
+</div>
+
+Lorsque vous dépassez vos limites de débit :
+
+1. **Erreur 429** — Votre requête est rejetée avec le message « Too Many Requests »
+2. **Rechargement continu** — Les tokens se rechargent en continu selon votre limite de débit
+3. **Reprise immédiate** — De nouvelles requêtes redeviennent possibles dès que les tokens se rechargent
+
+**Exemples de délais de reprise :**
+
+* **Limite de 50 QPS** : 1 token rechargé toutes les 20 ms
+* **Limite de 500 QPS** : 1 token rechargé toutes les 2 ms
+* **Limite de 1 000 QPS** : 1 token rechargé toutes les 1 ms
+
+<Tip>
+  **Bonnes pratiques :**
+
+  * Surveillez votre utilisation afin d&#39;anticiper le moment où vous aurez besoin d&#39;un palier supérieur
+  * Envisagez de passer à un palier supérieur de façon proactive pour vos applications en production
+  * Implémentez un backoff exponentiel avec gigue dans votre code
+  * Tirez parti de la capacité de rafale pour les traitements par lots
+  * N&#39;espacez pas artificiellement vos requêtes si vous disposez encore de capacité de rafale
+</Tip>
+
+***
+
+<div id="upgrading-your-tier">
+  ## Passer à un palier supérieur
+</div>
+
+<Steps>
+  <Step title="Vérifier votre palier actuel">
+    Ouvrez [Usage tiers](https://console.perplexity.ai/project/pricing?tab=usage-tiers) dans la console API pour consulter votre palier actuel ainsi que le seuil d&#39;achat de chaque palier.
+  </Step>
+
+  <Step title="Acheter des crédits supplémentaires">
+    Ajoutez des crédits à votre compte depuis la section facturation. Votre palier est automatiquement relevé dès que vous atteignez le seuil de dépenses.
+  </Step>
+
+  <Step title="Vérifier le changement de palier">
+    Vos nouvelles limites de débit prennent effet immédiatement après le passage au palier supérieur. Consultez votre page de paramètres pour le vérifier.
+  </Step>
+
+  <Step title="Besoin de limites encore plus élevées ?">
+    Si vous avez besoin de limites de débit personnalisées au-delà du palier 5, [remplissez notre formulaire de demande d&#39;augmentation des limites de débit](https://perplexity.typeform.com/to/yctmfyVT) : nous étudierons votre cas d&#39;usage afin de répondre à vos besoins.
+  </Step>
+</Steps>
+
+<Check>
+  Les paliers supérieurs améliorent nettement votre expérience de l&#39;API grâce à des limites de débit plus élevées, un point particulièrement important pour les applications en production.
+</Check>
+
+<Card title="Besoin de limites de débit plus élevées ?" icon="file-pencil" iconType="solid" href="https://perplexity.typeform.com/to/yctmfyVT">
+  Vous avez besoin de limites de débit personnalisées au-delà de votre palier actuel ? Remplissez notre formulaire de demande d&#39;augmentation des limites de débit : nous étudierons votre cas d&#39;usage afin de répondre à vos besoins.
+</Card>

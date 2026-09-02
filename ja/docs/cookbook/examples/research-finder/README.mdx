@@ -1,0 +1,140 @@
+---
+title: "学術研究検索CLI"
+description: "Perplexity の Sonar API を使って学術文献を検索・要約するコマンドラインツール"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="academic-research-finder-cli">
+  # 学術研究検索CLI
+</div>
+
+PerplexityのSonar APIを使用して、指定した質問やトピックに関連する学術文献(研究論文、記事など)を検索・要約するコマンドラインツールです。
+
+<div id="features">
+  ## 機能
+</div>
+
+* 自然言語による質問やトピックを入力として受け取ります。学術的な調査に特に適しています。
+* Perplexity Sonar API を活用し、学術的な情報源 (学術誌、会議録、学術データベースなど) を優先するよう設計された専用プロンプトで制御します。
+* 学術文献から得られた知見に基づく簡潔な要約を出力します。
+* 使用した主要な学術情報源を一覧表示し、可能な場合は著者、発行年、タイトル、掲載媒体、DOI/リンクなどの詳細も含めます。
+* 複数の Perplexity モデル に対応しています (デフォルトは `sonar-pro`) 。
+* 結果を JSON 形式で出力できます。
+
+<div id="installation">
+  ## インストール
+</div>
+
+<div id="1-install-required-dependencies">
+  ### 1. 必要な依存関係をインストールする
+</div>
+
+スクリプトの実行に使用する Python 環境で作業していることを確認してください (例: `python3.10` を使う場合はその環境) 。
+
+```bash theme={null}
+# requirements ファイルからインストール（推奨）
+pip install -r requirements.txt
+
+# または手動でインストール
+pip install requests
+```
+
+<div id="2-make-the-script-executable-optional">
+  ### 2. スクリプトに実行権限を付与する (任意) 
+</div>
+
+```bash theme={null}
+chmod +x research_finder.py
+```
+
+また、`python3 research_finder.py ...` のようにしてスクリプトを実行することもできます。
+
+<div id="api-key-setup">
+  ## APIキー の設定
+</div>
+
+このツールを利用するには、Perplexity の APIキー (`PPLX_API_KEY`) が必要です。次のいずれかの方法で指定できます (記載の順に確認されます) :
+
+1. **コマンドライン引数として指定する:**
+   ```bash theme={null}
+   python3 research_finder.py "Your query" --api-key YOUR_API_KEY
+   ```
+2. **環境変数として指定する:**
+   ```bash theme={null}
+   export PPLX_API_KEY=YOUR_API_KEY
+   python3 research_finder.py "Your query"
+   ```
+3. **ファイルに記述する:** *スクリプトと同じディレクトリ*または*現在の作業ディレクトリ*に、`pplx_api_key`、`.pplx_api_key`、`PPLX_API_KEY`、`.PPLX_API_KEY` のいずれかの名前でファイルを作成し、APIキー だけを記述します。
+   ```bash theme={null}
+   echo "YOUR_API_KEY" > .pplx_api_key
+   chmod 600 .pplx_api_key # 任意: パーミッションを制限する
+   python3 research_finder.py "Your query"
+   ```
+
+<div id="usage">
+  ## 使い方
+</div>
+
+`sonar-use-cases/research_finder` ディレクトリからスクリプトを実行するか、フルパスを指定してください。
+
+```bash theme={null}
+# 基本的な使い方
+python3 research_finder.py "What are the latest advancements in quantum computing?"
+
+# 特定のモデルを指定する場合
+python3 research_finder.py "Explain the concept of Large Language Models" --model sonar-small-online
+
+# 出力をJSONで取得する場合
+python3 research_finder.py "Summarize the plot of Dune Part Two" --json
+
+# カスタムのシステムプロンプトファイルを使う場合
+python3 research_finder.py "Benefits of renewable energy" --prompt-file /path/to/your/custom_prompt.md
+
+# 引数でAPIキーを指定する場合
+python3 research_finder.py "Who won the last FIFA World Cup?" --api-key sk-...
+
+# 実行ファイルとして実行する場合（chmod +x 済みのとき）
+./research_finder.py "Latest news about Mars exploration"
+```
+
+<div id="arguments">
+  ### 引数
+</div>
+
+* `query`: (必須) 調査する質問またはトピック (スペースを含む場合は引用符で囲みます) 。
+* `-m`, `--model`: 使用する Perplexity のモデルを指定します (デフォルト: `sonar-pro`) 。
+* `-k`, `--api-key`: API キーを直接指定します。
+* `-p`, `--prompt-file`: カスタムシステムプロンプトファイルへのパス。
+* `-j`, `--json`: 結果を JSON 形式で出力します。
+
+<div id="example-output-human-readable-note-actual-output-depends-heavily-on-the-query-and-api-results">
+  ## 出力例 (人間が読みやすい形式 - *注: 実際の出力はクエリと API の結果によって大きく異なります*) 
+</div>
+
+```
+クエリ「Recent studies on transformer models in NLP」のリサーチアシスタントを初期化しています...
+リサーチを実行中...
+
+✅ リサーチ完了！
+
+📝 要約:
+自然言語処理（NLP）におけるTransformerモデルに関する近年の研究では、アーキテクチャの改良、効率の最適化、新たな応用の探求が続いています。主な領域としては、より長い系列を効率的に扱うためのアテンション機構の改良（疎アテンション、線形アテンションなど）、モデル圧縮や知識蒸留の手法、さらにコンピュータビジョンやマルチモーダルタスクといったテキスト以外への応用が挙げられます。また、大規模Transformerモデルの内部動作や限界の解明にも研究の焦点が置かれています。
+
+🔗 出典:
+  1. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., ... & Polosukhin, I. (2017). Attention is all you need. Advances in neural information processing systems, 30. (arXiv:1706.03762)
+  2. Tay, Y., Dehghani, M., Bahri, D., & Metzler, D. (2020). Efficient transformers: A survey. arXiv preprint arXiv:2009.06732.
+  3. Beltagy, I., Peters, M. E., & Cohan, A. (2020). Longformer: The long-document transformer. arXiv preprint arXiv:2004.05150.
+  4. Rogers, A., Kovaleva, O., & Rumshisky, A. (2020). A primer in bertology: What we know about how bert works. Transactions of the Association for Computational Linguistics, 8, 842-866. (arXiv:2002.12327)
+```
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+* Sonar APIが特定の学術データベースを一貫して優先・参照できるか、また詳細な引用情報 (DOIなど) を抽出できるかは、状況によって異なります。品質はAPIの検索能力と参照元Webサイトの構造に左右されます。
+* このスクリプトは要約とソースを分離するための基本的な解析を行いますが、複雑なAPIレスポンスや通常とは異なる形式のレスポンスは正しく解析されない場合があります。問題が発生した場合は生のレスポンスを確認してください。
+* 範囲が広すぎるクエリや学術検索に適さないクエリでは、関連性の低い結果が返ることがあります。
+* APIのレート制限や個別のAPIエラーに対するエラーハンドリングは、より細かく実装する余地があります。

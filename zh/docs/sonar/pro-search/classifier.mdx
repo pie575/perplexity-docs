@@ -1,0 +1,648 @@
+---
+title: "Pro Search 分类器"
+description: "自动将查询分流到 Pro Search 或 Fast Search 模式，优化成本与性能"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+Pro Search 分类器是一套智能系统，可自动判断某个查询是需要 Pro Search 的高级多步工具调用，还是用标准的 Fast Search 即可有效作答。借助这一优化，你可以在性能需求与成本效率之间取得平衡。
+
+<Info>
+  你无需在 `"pro"` 和 `"fast"` 两种搜索类型之间手动选择，只需使用 `"auto"`，即可让分类器为每个查询做出最优决策。
+</Info>
+
+<div id="how-it-works">
+  ## 工作原理
+</div>
+
+当你设置 `search_type: "auto"` 时，分类器会从多个维度分析你的查询：
+
+<Steps>
+  <Step title="查询复杂度分析">
+    分类器会评估：
+
+    * 子问题或涉及方面的数量
+    * 是否需要进行对比分析
+    * 是否需要多步推理
+    * 所需信息综合的复杂程度
+
+    ```json theme={null}
+    {
+      "web_search_options": {
+        "search_type": "auto"  // 交由分类器决定
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="分类决策">
+    分类器会根据分析结果，将查询路由到以下两者之一：
+
+    * **Pro Search**：适用于需要多步工具调用的复杂、多层面查询
+    * **Fast Search**：适用于简单直接的信息检索
+
+    该决策会在响应元数据中透明呈现。
+  </Step>
+
+  <Step title="执行">
+    所选的搜索模式会处理你的查询：
+
+    * **Pro Search**：自动使用内置工具 (web&#95;search、fetch&#95;url&#95;content)
+    * **Fast Search**：执行经过优化的单轮搜索与信息综合
+
+    无论使用哪种模式，你都会得到同样高质量的响应格式。
+  </Step>
+</Steps>
+
+<div id="classification-patterns">
+  ## 分类模式
+</div>
+
+<div id="queries-classified-as-pro-search">
+  ### 被归类为 Pro Search 的查询
+</div>
+
+适合通过多步工具调用来处理的复杂查询会被自动路由到 Pro Search：
+
+<AccordionGroup>
+  <Accordion title="多部分问题">
+    **示例查询：**
+    “React、Vue 和 Angular 在性能、学习曲线和生态系统方面有哪些差异？对于大型企业级应用，我应该选择哪一个？”
+
+    **为何使用 Pro Search：**
+
+    * 需要三个不同框架的相关信息
+    * 需要跨多个维度进行对比分析
+    * 涉及收集专家观点与建议
+    * 需要综合多方来源的信息
+
+    **工具调用：**
+
+    * 针对每个框架进行多次网络搜索
+    * 抓取 URL 以获取基准测试数据和官方文档
+  </Accordion>
+
+  <Accordion title="研究综述">
+    **示例查询：**
+    “总结关于间歇性断食对减重和代谢健康效果的最新同行评审研究，并包含样本量和研究局限性。”
+
+    **为何使用 Pro Search：**
+
+    * 需要查找多篇研究论文
+    * 需要获取论文全文，而不仅是摘要
+    * 涉及提取特定数据 (样本量、局限性)
+    * 需要综合多项研究的结论
+
+    **工具调用：**
+
+    * 网络搜索近期的同行评审论文
+    * 使用 `fetch_url_content` 阅读论文全文
+    * 信息提取与综合
+  </Accordion>
+
+  <Accordion title="时效性强的复杂分析">
+    **示例查询：**
+    “分析美联储最近一次利率决议对股市的影响，包括对不同板块的影响以及专家对下一季度的预测。”
+
+    **为何使用 Pro Search：**
+
+    * 需要非常新的信息
+    * 需要多来源交叉验证
+    * 涉及逐个板块的分析
+    * 需要汇总专家观点
+
+    **工具调用：**
+
+    * 多次有针对性的网络搜索
+    * 抓取 URL 以获取金融分析报告
+    * 综合多方专家观点
+  </Accordion>
+</AccordionGroup>
+
+<div id="queries-classified-as-fast-search">
+  ### 被归类为 Fast Search 的查询
+</div>
+
+无需多步推理的简单查询可由 Fast Search 高效处理：
+
+<AccordionGroup>
+  <Accordion title="简单事实性问题">
+    **示例查询：**
+    “法国的首都是哪里？”
+
+    **为何使用 Fast Search：**
+
+    * 单一且公认的事实
+    * 无需计算或分析
+    * 信息可直接从搜索摘要中获取
+
+    **处理过程：**
+
+    * 单次网络搜索
+    * 直接从搜索结果给出答案
+    * 无需多步推理
+  </Accordion>
+
+  <Accordion title="简单的信息检索">
+    **示例查询：**
+    “iPhone 15 Pro 的主要功能有哪些？”
+
+    **为何使用 Fast Search：**
+
+    * 单一产品查询
+    * 信息可在产品说明中找到
+    * 无需对比分析
+    * 无需计算
+
+    **处理过程：**
+
+    * 搜索产品规格
+    * 提取并列出功能
+    * 基于搜索结果整合信息
+  </Accordion>
+
+  <Accordion title="单一主题查询">
+    **示例查询：**
+    “解释什么是机器学习。”
+
+    **为何使用 Fast Search：**
+
+    * 单一概念的定义
+    * 无需多方面分析
+    * 常规信息可直接获取
+
+    **处理过程：**
+
+    * 搜索机器学习的相关解释
+    * 整合出清晰的定义
+    * 引用可靠来源补充背景信息
+  </Accordion>
+
+  <Accordion title="基础定义类请求">
+    **示例查询：**
+    “API 是什么的缩写，它有什么用途？”
+
+    **为何使用 Fast Search：**
+
+    * 简单的定义请求
+    * 无需复杂分析
+    * 信息可直接获取
+
+    **处理过程：**
+
+    * 快速搜索 API 的定义
+    * 解释该缩写及其基本用途
+    * 给出清晰简洁的答案
+  </Accordion>
+</AccordionGroup>
+
+<div id="cost-implications">
+  ## 成本影响
+</div>
+
+了解成本差异有助于你优化 API 使用：
+
+<div>
+  <div>
+    <h4>归类为 Pro Search</h4>
+
+    <ul>
+      <li>包含多个子问题的复杂提问</li>
+      <li>需要计算或分析的请求</li>
+      <li>跨多个来源的对比研究</li>
+      <li>时效性强的信息需求</li>
+    </ul>
+
+    <div>
+      <span>按 Pro Search 费率计费</span>
+    </div>
+  </div>
+
+  <div>
+    <h4>归类为 Fast Search</h4>
+
+    <ul>
+      <li>简单的事实性问题</li>
+      <li>直接的信息检索</li>
+      <li>单一主题的查询</li>
+      <li>基础的定义类请求</li>
+    </ul>
+
+    <div>
+      <span>按标准 Sonar Pro 费率计费</span>
+    </div>
+  </div>
+</div>
+
+<div id="pricing-comparison">
+  ### 价格对比
+</div>
+
+**Pro Search 费率：**
+
+* 输入：$3 / 100 万 token
+* 输出：$15 / 100 万 token
+* 请求费用：$14-$22 / 1,000 次请求 (取决于上下文大小)
+
+**Fast Search 费率：**
+
+* 输入：$3 / 100 万 token
+* 输出：$15 / 100 万 token
+* 请求费用：$6-$14 / 1,000 次请求 (取决于上下文大小，与标准 Sonar Pro 相同)
+
+<Tip>
+  自动分类器仅在确实需要 Pro Search 的高级能力时才会启用它，从而帮你节省成本，同时确保复杂查询依然能获得完整的多步工具调用。
+</Tip>
+
+<div id="usage-examples">
+  ## 使用示例
+</div>
+
+<div id="using-automatic-classification">
+  ### 使用自动分类
+</div>
+
+<CodeGroup>
+  ```python Python SDK theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+  # 交由分类器决定
+  response = client.chat.completions.create(
+      model="sonar-pro",
+      messages=[
+          {
+              "role": "user",
+              "content": "Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data."
+          }
+      ],
+      stream=True,
+      web_search_options={
+          "search_type": "auto"  # 自动分类
+      }
+  )
+
+  for chunk in response:
+      if chunk.choices[0].delta.content:
+          print(chunk.choices[0].delta.content, end="")
+  ```
+
+  ```typescript Typescript SDK theme={null}
+  import { Perplexity } from '@perplexity-ai/sdk';
+
+  const client = new Perplexity();
+
+  // 交由分类器决定
+  const response = await client.chat.completions.create({
+    model: 'sonar-pro',
+    messages: [
+      {
+        role: 'user',
+        content: 'Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data.'
+      }
+    ],
+    stream: true,
+    web_search_options: {
+      search_type: 'auto'  // 自动分类
+    }
+  });
+
+  for await (const chunk of response) {
+    if (chunk.choices[0]?.delta?.content) {
+      process.stdout.write(chunk.choices[0].delta.content);
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/v1/sonar \
+    --header "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "model": "sonar-pro",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data."
+        }
+      ],
+      "stream": true,
+      "web_search_options": {
+        "search_type": "auto"
+      }
+    }' --no-buffer
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "cab71ad3-867d-4139-997e-c36ce805351b",
+    "results": [
+      {
+        "snippet": "下表比较了美国环保署（EPA）对2015、2016、2017和2023车型年量产纯电动乘用车的官方燃油经济性评级（插电式电动车采用等效每加仑汽油行驶英里数，mpg-e 或 MPGe），并与2016车型年中被EPA评为效率最高的插电式混合动力车型（雪佛兰Volt——第二代）、汽油-电力混合动力车型（丰田普锐斯Eco——第四代）以及该车型年新车平均水平（燃油经济性为25 mpg~‑US~（9.4 L/100 km；30 mpg~‑imp~））进行对比。\nEPA评级数据取自制造商依据联邦法律规定的一系列测试对自家车辆进行的测试。\n...\n真实世界的电动车效率也可用每千瓦时行驶英里数（mi/kWh）表示，它将EPA的MPGe数值换算为直接的电能消耗，从而可在电动车与汽油车之间进行交叉比较。\n...\n|车辆|车型年|EPA评定燃油经济性|EPA评定燃油经济性|EPA评定燃油经济性|备注| | |\n...\n|丰田普锐斯 HEV|2023|57 mpg|57 mpg|56 mpg|(9)| | |\n|现代 Ioniq 6 长续航后驱 配18英寸轮毂|2023|140 mpg‑e 24.1 kWh/100 mi; 15.0 kWh/100 km|153 mpg‑e 22.0 kWh/100 mi; 13.7 kWh/100 km|127 mpg‑e 26.5 kWh/100 mi; 16.5 kWh/100 km|(1)| | |\n...\n|特斯拉 Model Y 四驱|2023|123 mpg‑e 27.4 kWh/100 mi; 17.0 kWh/100 km|129 mpg‑e 26.1 kWh/100 mi; 16.2 kWh/100 km|116 mpg‑e 29.1 kWh/100 mi; 18.1 kWh/100 km|(1)| | |\n|特斯拉 Model 3 标准续航|2020|141 mpg‑e 23.9 kWh/100 mi; 14.9 kWh/100 km|148 mpg‑e 22.8 kWh/100 mi; 14.2 kWh/100 km|132 mpg‑e 25.5 kWh/100 mi; 15.9 kWh/100 km|(1)| | |\n...\n|特斯拉 Model 3 长续航四驱|2020|121 mpg‑e 27.9 kWh/100 mi; 17.3 kWh/100 km|124 mpg‑e 27.2 kWh/100 mi; 16.9 kWh/100 km|116 mpg‑e 29.1 kWh/100 mi; 18.1 kWh/100 km|(1)| | |\n|雪佛兰 Bolt EV|2017|119 mpg‑e 28.3 kWh/100 mi; 17.6 kWh/100 km|121 mpg‑e 27.9 kWh/100 mi; 17.3 kWh/100 km|110 mpg‑e 30.6 kWh/100 mi; 19.0 kWh/100 km| | | |\n...\n|日产 Leaf（24 kW-h）|2013/14/15/16|114 mpg‑e 29.6 kWh/100 mi; 18.4 kWh/100 km|126 mpg‑e 26.8 kWh/100 mi; 16.6 kWh/100 km|101 mpg‑e 33.4 kWh/100 mi; 20.7 kWh/100 km|(1) (6)| | |\n...\n|日产 Leaf（30 kW-h）|2016|112 mpg‑e 30.1 kWh/100 mi; 18.7 kWh/100 km|124 mpg‑e 27.2 kWh/100 mi; 16.9 kWh/100 km|101 mpg‑e 33.4 kWh/100 mi; 20.7 kWh/100 km|(1)| | |",
+        "title": "电动汽车 EPA 燃油经济性 - 维基百科",
+        "url": "https://en.wikipedia.org/wiki/Electric_car_EPA_fuel_economy",
+        "date": "2015-04-30",
+        "last_updated": "2026-05-05"
+      },
+      {
+        "snippet": "我们不关注电池容量或总续航里程，而是关注**能耗（每100英里千瓦时）**和**MPGe**，即EPA的等效每加仑英里数指标。\n...\n**方法**：Recurrent 评选的2026年最高效电动车是根据向EPA报告的综合效率（kWh/100英里）确定的。\n...\n## 3.\n特斯拉 Model 3\n**效率：** 25 kWh/100 英里\n**MPGe：** 134.8\n**车身形式：** 紧凑型轿车\n...\n## 5.\n特斯拉 Model Y\n**效率：** 26 kWh/100 英里\n**MPGe：** 129.6\n**车身形式：** 紧凑型跨界SUV\n...\n## 6.\n日产 LEAF\n**效率：** 28 kWh/100 英里\n**MPGe：** 120.4\n**车身形式：** 紧凑型跨界车（改款）",
+        "title": "根据测试得出的2026年各级别最高效电动车 - Recurrent",
+        "url": "https://www.recurrentauto.com/research/most-efficient-ev",
+        "date": "2026-03-02",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "|EPA MPG MPGe：等效每加仑英里数 1加仑汽油=33.7 kWh 关于纯电动汽车|电力 综合 MPG：111 MPGe 城市 MPG：123 高速 MPG：99 30 kWh/100 英里|",
+        "title": "查找与比较车辆",
+        "url": "https://www.fueleconomy.gov/feg/noframes/48400.shtml",
+        "date": "2023-01-01",
+        "last_updated": "2024-10-03"
+      },
+      {
+        "snippet": "MPGe 是美国环境保护署（EPA）使用的一种计量单位，用于以与汽油车通用的单位表示电动车的燃油经济性，其中33.7千瓦时电量相当于一加仑汽油所含的能量。\n在这17款车型中，共有37种不同配置达到了100 MPGe 或更高。\n后轮驱动配置的特斯拉 Model 3 以132 MPGe 获得2022车型年的最高评级。\n||\n|--|\n|||\n|特斯拉 Model 3|132|\n|Lucid Air|131|\n|特斯拉 Model Y|129|\n|雪佛兰 Bolt EV|120|\n|现代 Kona Electric|120|\n|特斯拉 Model S|120|\n|起亚 EV6|117|\n|雪佛兰 Bolt EUV|115|\n|现代 Ioniq 5|114|\n|起亚 Niro Electric|112|\n|日产 Leaf|111|\n|MINI Cooper SE|110|\n|宝马 i4 Gran Coupe|109|\n|极星 2|107|\n|大众 ID.4|107|\n|福特 Mustang Mach-E|103|\n|特斯拉 Model X|102|\n...\n**来源：**美国能源部与美国环境保护署燃油经济性网站，电动汽车并排比较。\n数据获取日期：2022年8月24日。",
+        "title": "FOTW #1257，2022年9月26日：十七款电动车型达成……",
+        "url": "https://www.energy.gov/eere/vehicles/articles/fotw-1257-september-26-2022-seventeen-ev-models-achieved-epa-combined-rating",
+        "date": "2022-09-26",
+        "last_updated": "2025-10-09"
+      },
+      {
+        "snippet": "Nevertheless, the efficiency and range varies a lot from EV to EV.\nTo help you choose which electric car is more suitable for you, I made the table below with EPA efficiency and range figures – for different driving scenarios (city, highway and mixed/combined).\nElectric car range and efficiency (EPA)\n|Electric car\n|City\nrange\n|Combined\nrange\n|Highway\nrange\n|City\nefficiency\n|Combined\nefficiency\n|Highway\nefficiency\n|2019 Tesla Model 3 Long Range (RWD)\n|340 miles\n547 km\n|325 miles\n523 km\n|307 miles\n494 km\n|24,8 kWh/100 miles\n15,4 kWh/100 km\n|25,9 kWh/100 miles\n16,1 kWh/100 km\n|27,4 kWh/100 miles\n17 kWh/100 km\n|2019 Tesla Model 3 Long Range (AWD)\n|320 miles\n515 km\n|310 miles\n499 km\n|297 miles\n478 km\n|28,1 kWh/100 miles\n17,5 kWh/100 km\n|29,1 kWh/100 miles\n18,1 kWh/100 km\n|30,1 kWh/100 miles\n18,7 kWh/100 km\n|2019 Tesla Model 3 Standard Range Plus\n|253 miles\n407 km\n|240 miles\n386 km\n|224 miles\n361 km\n|24,1 kWh/100 miles\n15 kWh/100 km\n|25,3 kWh/100 miles\n15,7 kWh/100 km\n|27,2 kWh/100 miles\n16,9 kWh/100 km\n|2019 Tesla Model S Long Range\n|382 miles\n614 km\n|370 miles\n595 km\n|356 miles\n573 km\n|29,3 kWh/100 miles\n18,2 kWh/100 km\n|30,4 kWh/100 miles\n18,9 kWh/100 km\n|31,5 kWh/100 miles\n19,6 kWh/100 km\n|2019 Tesla Model X Long Range\n...\n22,5 kWh/100 km\n...\n|2017-2019 Chevrolet Bolt EV\n|255 miles\n411 km\n|238 miles\n383 km\n|217 miles\n350 km\n|26,3 kWh/100 miles\n16,4 kWh/100 km\n|28,3 kWh/100 miles\n17,6 kWh/100 km\n|30,6 kWh/100 miles\n19 kWh/100 km\n|2020 Chevrolet Bolt EV\n|279 miles\n449 km\n|259 miles\n417 km\n|237 miles\n381 km\n|26,5 kWh/100 miles\n16,5 kWh/100 km\n|28,6 kWh/100 miles\n17,7 kWh/100 km\n|31,2 kWh/100 miles\n19,4 kWh/100 km",
+        "title": "Electric car range and efficiency (EPA) - 🔋PushEVs",
+        "url": "https://pushevs.com/electric-car-range-efficiency-epa/",
+        "date": null,
+        "last_updated": "2024-02-21"
+      },
+      {
+        "snippet": "An efficient EV is simply a car that uses fewer kilowatt-hours of electricity to go the same distance.\n...\n53–140 MPGe\nEPA spread\nModel‑year 2024 EVs range from about 53 to 140 miles‑per‑gallon‑equivalent, nearly a 3x difference in efficiency.\n1.5–4.2 mi/kWh\nEnergy use\nOn the same test cycle, some EVs travel less than 1.5 miles per kWh while the best creep above 4 miles per kWh.\n...\nMPGe, or **miles per gallon equivalent**, is the EPA’s attempt to put EVs in gas‑car language.\nOne “gallon” of gasoline is treated as 33.7 kWh of energy.\nIf an EV uses 25 kWh to travel 100 miles, the math works out to roughly 135 MPGe.\n...\nElectricity is billed in **kilowatt‑hours** (kWh).\nSo the most honest unit is simply: how many kWh do you burn to go 100 miles?\n- **kWh/100 mi**: lower is better (like L/100 km)\n- **mi/kWh**: higher is better (like MPG)\nExample: a car that uses 25 kWh/100 mi delivers 4.0 mi/kWh.\nAt $0.15/kWh, those 100 miles cost about $3.75.\n...\nTake the EPA’s kWh/100‑mile number, divide by 100, and multiply by your home rate.\n...\nThat’s why EPA ratings show 2024 EVs spanning roughly 53–140 MPGe while gasoline cars live between 9–57 MPG for the same model year.\n...\nRecent EPA data and independent testing put a handful of EVs at the sharp end of the efficiency spear, especially in sedan form.\n### Sample of highly efficient EVs on sale (2024–2025)\nRepresentative trims; always confirm the exact configuration’s window sticker, as wheels, motors, and options change the numbers.\n|Model & year|Type|Energy use (kWh/100 mi)*|Approx. mi/kWh|EPA combined MPGe*|Notable trait|\n|--|--|--|--|--|--|\n|Lucid Air Pure (2025 RWD)|Sedan|≈23–24|≈4.2–4.3|High 130s–140s|Luxury sedan that somehow drinks like a subcompact.|\n|Hyundai Ioniq 6 SE (2024–2025 RWD)|Sedan|≈24–25|≈4.0–4.2|Around 140|Super‑slippery aero and efficient 800‑V platform.|\n|Tesla Model 3 Long Range RWD (2025)|Sedan|≈25|≈4.0|Low‑to‑mid 130s|The efficiency benchmark among mass‑market sedans.|\n|Tesla Model Y Long Range RWD (2025)|SUV|≈27–28|≈3.6–3.7|Mid‑120s|Roomier crossover form factor, small aero penalty.|\n|Lexus RZ 300e (2024–2025)|SUV|≈27|≈3.7|Mid‑120s|Luxury compact SUV that surprised everyone with its frugality.|\n|Kia EV6 / Hyundai Kona Electric / Kia Niro EV (2024–2025 RWD)|Crossovers|≈28–29|≈3.4–3.6|High teens/low 120s|The efficient heartland of the EV market.|\n|GMC Hummer EV Pickup/SUV|Truck/SUV|≈70+|≈1.4–1.5|Under 50|Off‑the‑charts consumption; think of it as a rolling coal plant with a conscience.|\n...\n### Sedans & hatchbacks\n- **Typical energy use:** ~24–30 kWh/100 mi\n- **Examples:** Hyundai Ioniq 6, Tesla Model 3, Lucid Air, Chevy Bolt (used)\n...\n#### 1.\nStart with kWh/100 mi, not just range\nRange is a product of pack size; kWh/100 mi is the diet.\n...\n#### 2.\nNormalize for body style and mission\nCompare sedans to sedans, crossovers to crossovers, trucks to trucks.\n...\nWhen you compare electric cars, focus less on the billboard range number and more on **kWh per 100 miles, body style, and real battery health**.\n- Use kWh/100 miles (or mi/kWh) as your primary yardstick; MPGe is just the translation into gas‑car language.",
+        "title": "Electric Car Efficiency Comparison: 2025 Buyer's Guide - Recharged",
+        "url": "https://recharged.com/articles/electric-car-efficiency-comparison-guide",
+        "date": "2025-11-17",
+        "last_updated": "2026-05-26"
+      },
+      {
+        "snippet": "With an EPA-rated efficiency of 111 MPGe, it’s middle-of-the-road in efficiency, far below the Tesla but way above the 2021 Ford Mustang Mach-E GT’s 84 MPGe.\n...\nRecent figures from the U.S. Environmental Protection Agency (EPA) show that the 2021 Tesla Model 3 Standard Range Plus RWD stands at the top of the efficiency range, boasting a combined 142 MPGe—the electrical equivalent of a gallon of fuel.\n...\nEV testing and analysis firm Recurrent crunched the numbers on a set of 99 cars—half Tesla Model 3s and half Nissan Leafs—and their 500,000 data points of efficiency metrics were logged between November 2021 and March 2022.\nUsing an EPA figure-based mile per kWh (mi/kWh) measurement as opposed to MPGe, the Tesla range was calculated from 3.33 to 4.17 mi/kWh, and the Nissan Leaf was 2.94 to 3.45 mi/kWh.\nTherefore, even bargain standard Model 3s will achieve greater road efficiency than the best Leaf.\nHowever, the EPA ratings weren’t what was measured when real-world driving conditions were considered.\nOver the four-month timeframe, Recurrent revealed the median observed efficiency for each vehicle as the Tesla Model 3 having 3.39 mi/kWh and the Nissan Leaf having 3.71 mi/kWh.",
+        "title": "Is the Nissan Leaf More Efficient Than the Tesla Model 3? Here's What 1 Study Found",
+        "url": "https://www.motorbiscuit.com/nissan-leaf-more-efficient-tesla-model-3-what-study-found/",
+        "date": "2022-08-11",
+        "last_updated": "2025-06-25"
+      },
+      {
+        "snippet": "Compare USA EV efficiency by kWh/100 mi and MPGe, with EPA and charging metrics across all models and trims.\nUpdated monthly (2026).",
+        "title": "Most Efficient EVs in the USA (kWh/100 mi) - BEV Database",
+        "url": "https://bev-database.com/cars-list-usa/most-efficient-electric-cars",
+        "date": "2026-02-28",
+        "last_updated": "2026-02-28"
+      },
+      {
+        "snippet": ",\nModel Year 2022 EVs Achieving EPA Combined Rating of 100 MPGe or more,\nMake and Model,Highest MPGe For Base Model\nTesla Model 3,132\nLucid Air,131\nTesla Model Y,129\nChevrolet Bolt EV,120\nHyundai Kona Electric,120\nTesla Model S,120\nKia EV6,117\nChevrolet Bolt EUV,115\nHyundai Ioniq 5,114\nKia Niro Electric,112\nNissan Leaf,111\nMINI Cooper SE,110\nBMW i4 Gran Coupe,109\nPolestar 2,107\nVolkswagen ID.4,107\nFord Mustang Mach-E,103\nTesla Model X,102\n,\n...\nEVs include only all-electric vehicles.,\n...\nOnly the base model names are shown and only the highest MPGe values are shown for each model name.\nSome models listed have configurations that fall below 100 MPGe.,\n...\n,\n\"Source: U.S. Department of Energy and U.S. Environmental Protection Agency’s Fuel Economy Website, Compare Electric Vehicles Side-by-Side.\nData accessed August 24, 2022.\",\n,\n,\nhttps://www.fueleconomy.gov/feg/evSelect.jsp,",
+        "title": "FOTW_1257_web.xlsx",
+        "url": "https://www.energy.gov/sites/default/files/2022-09/FOTW_1257_web.xlsx",
+        "date": null,
+        "last_updated": "2025-03-28"
+      },
+      {
+        "snippet": ",\nModel Year 2022 EVs Achieving EPA Combined Rating of 100 MPGe or more,\nMake and Model,Highest MPGe For Base Model\nTesla Model 3,132\nLucid Air,131\nTesla Model Y,129\nChevrolet Bolt EV,120\nHyundai Kona Electric,120\nTesla Model S,120\nKia EV6,117\nChevrolet Bolt EUV,115\nHyundai Ioniq 5,114\nKia Niro Electric,112\nNissan Leaf,111\nMINI Cooper SE,110\nBMW i4 Gran Coupe,109\nPolestar 2,107\nVolkswagen ID.4,107\nFord Mustang Mach-E,103\nTesla Model X,102\n,\n...\nEVs include only all-electric vehicles.,\n...\nOnly the base model names are shown and only the highest MPGe values are shown for each model name.\nSome models listed have configurations that fall below 100 MPGe.,\n...\n,\n\"Source: U.S. Department of Energy and U.S. Environmental Protection Agency’s Fuel Economy Website, Compare Electric Vehicles Side-by-Side.\nData accessed August 24, 2022.\",\n,\n,\nhttps://www.fueleconomy.gov/feg/evSelect.jsp,",
+        "title": "[XLS] FOTW #1257 - Energy.gov",
+        "url": "https://www.energy.gov/documents/fotw1257webxlsx",
+        "date": null,
+        "last_updated": "2026-03-05"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<div id="manual-override">
+  ### 手动覆盖
+</div>
+
+当你明确知道自己需要什么时，仍然可以手动指定搜索类型：
+
+<Tabs>
+  <Tab title="强制使用 Pro Search">
+    当你确定需要多步工具调用时使用：
+
+    ```python theme={null}
+    response = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "Your complex query"}],
+        stream=True,
+        web_search_options={
+            "search_type": "pro"  # 强制使用 Pro Search
+        }
+    )
+    ```
+
+    **手动指定 Pro 的适用场景：**
+
+    * 你确定该查询需要多步推理
+    * 自动分类结果为 Fast，但你需要更深入的分析
+    * 关键查询，希望获得最强能力
+  </Tab>
+
+  <Tab title="强制使用 Fast Search">
+    当你希望优化速度与成本时使用：
+
+    ```python theme={null}
+    response = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "Your simple query"}],
+        stream=True,
+        web_search_options={
+            "search_type": "fast"  # 强制使用 Fast Search（也可省略，fast 为默认值）
+        }
+    )
+    ```
+
+    **手动指定 Fast 的适用场景：**
+
+    * 简单查询，使用 Pro Search 属于大材小用
+    * 对成本敏感的应用
+    * 响应速度至关重要的场景
+  </Tab>
+</Tabs>
+
+<div id="best-practices">
+  ## 最佳实践
+</div>
+
+<Steps>
+  <Step title="默认使用自动分类">
+    对于大多数应用，建议使用 `search_type: "auto"`，交由分类器自动优化：
+
+    ```python theme={null}
+    web_search_options={"search_type": "auto"}
+    ```
+
+    这样既能为每个查询匹配合适的工具，又能控制成本。
+  </Step>
+
+  <Step title="监控分类模式">
+    跟踪哪些查询被归类为 Pro、哪些被归类为 Fast，以了解自身的使用模式：
+
+    * 复查那些始终走 Pro Search 的查询
+    * 找出可在适当情况下改写为适合 Fast Search 的查询
+    * 了解哪些用户问题确实需要高级能力
+
+    这有助于优化应用中的查询设计。
+  </Step>
+
+  <Step title="有策略地使用手动覆盖">
+    仅在以下情况下覆盖分类器：
+
+    * 有特定的性能要求
+    * 需要测试并对比 Pro 与 Fast 的结果
+    * 构建复杂度已知的功能
+
+    **示例：**
+
+    ```python theme={null}
+    # 已知为复杂分析——强制使用 Pro
+    if query_requires_calculations(user_query):
+        search_type = "pro"
+    else:
+        search_type = "auto"
+    ```
+  </Step>
+
+  <Step title="有效地设计查询">
+    合理组织查询结构，帮助分类器做出最优判断：
+
+    **不够理想：**
+    “介绍一下电动汽车”
+
+    **更好：**
+    “电动汽车的平均续航里程是多少？” (适合 Fast Search)
+
+    **或者：**
+    “对比 Tesla Model 3、Chevrolet Bolt 和 Nissan Leaf 五年内的总拥有成本，包括折旧、电费和维护费用” (适合 Pro Search)
+
+    查询越清晰具体，分类效果越好。
+  </Step>
+</Steps>
+
+<div id="classification-transparency">
+  ## 分类透明度
+</div>
+
+你可以在响应元数据中查看并验证分类决策：
+
+```json theme={null}
+{
+  "id": "12345",
+  "model": "sonar-pro",
+  "search_metadata": {
+    "search_type_used": "pro",  // 或 "fast"
+    "classification_reason": "Multi-part comparative analysis with calculations"
+  },
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 150,
+    "total_tokens": 175
+  }
+}
+```
+
+<Info>
+  这种透明性有助于你了解查询为何被归入某一类别，从而优化后续查询。
+</Info>
+
+<div id="when-to-use-each-mode">
+  ## 各模式的适用场景
+</div>
+
+<CardGroup cols={3}>
+  <Card title="Auto（推荐）" icon="wand">
+    **适用于：** 绝大多数应用
+
+    交由分类器自动优化，根据查询复杂度在成本与能力之间自动取得平衡。
+  </Card>
+
+  <Card title="手动 Pro" icon="brain">
+    **适用于：** 已知的复杂任务
+
+    在确定需要多步工具调用时使用：计算、多来源信息综合、深度分析等。
+  </Card>
+
+  <Card title="手动 Fast" icon="bolt">
+    **适用于：** 简单检索
+
+    适用于查询简单事实或定义，或希望在简单查询上优化速度与成本的场景。
+  </Card>
+</CardGroup>
+
+<div id="common-questions">
+  ## 常见问题
+</div>
+
+<AccordionGroup>
+  <Accordion title="分类器的准确度如何？">
+    分类器基于数千种查询模式训练而成，准确度很高。遇到任何模棱两可的情况时，它会倾向于选择 Pro Search，确保不会牺牲功能。
+
+    不过，如果你发现分类持续出错：
+
+    * 将查询改写得更具体
+    * 对这类查询使用手动覆盖
+    * 结合自身用例的具体需求进行权衡
+  </Accordion>
+
+  <Accordion title="我能查看实际使用了哪种模式吗？">
+    可以，响应中的元数据会显示：
+
+    * 使用了哪种搜索类型
+    * 做出该分类的原因 (使用 auto 时)
+    * 按搜索类型划分的费用明细
+
+    这有助于你了解并优化自己的使用方式。
+  </Accordion>
+
+  <Accordion title="自动分类会增加延迟吗？">
+    不会。分类在查询处理开始前的几毫秒内即可完成，不会对响应时间产生实质影响。分类器针对实时决策做了专门优化。
+  </Accordion>
+
+  <Accordion title="如果我不认同分类结果怎么办？">
+    你随时可以使用手动覆盖：
+
+    ```python theme={null}
+    web_search_options={"search_type": "pro"}  # 强制使用你偏好的模式
+    ```
+
+    如果你经常不认同分类结果，可以考虑：
+
+    * 让查询更加具体
+    * 对这类查询使用手动覆盖
+    * 重新评估你的用例是否需要固定使用 Pro 或 Fast 模式
+  </Accordion>
+</AccordionGroup>
+
+<div id="related-resources">
+  ## 相关资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="快速开始" icon="rocket" href="/zh/docs/sonar/pro-search/quickstart">
+    从 Pro Search 基础用法入门
+  </Card>
+
+  <Card title="内置工具能力" icon="tool" href="/zh/docs/sonar/pro-search/tools">
+    了解 Pro Search 的内置工具与能力
+  </Card>
+
+  <Card title="定价指南" icon="currency-dollar" href="/zh/docs/getting-started/pricing">
+    了解 Pro Search 与 Fast Search 的定价
+  </Card>
+
+  <Card title="API 参考" icon="book" href="/zh/api-reference/sonar-post">
+    完整的 API 文档
+  </Card>
+</CardGroup>

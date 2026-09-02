@@ -1,0 +1,91 @@
+---
+title: "メモリ管理"
+description: "LlamaIndex を活用した高度な会話メモリソリューションで、永続的かつコンテキストを意識したアプリケーションを構築する"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="memory-management-with-llamaindex-and-perplexity-sonar-api">
+  # LlamaIndex と Perplexity Sonar API によるメモリ管理
+</div>
+
+<div id="overview">
+  ## 概要
+</div>
+
+本記事では、大規模言語モデル (LLM) を活用したアプリケーションで会話メモリを保持するための高度な手法を解説します。目的は、モデルのtoken制限がある中でも、やり取りをまたいでコンテキストを維持し、一貫性のあるマルチターン会話を実現することです。
+
+<div id="problem-statement">
+  ## 課題
+</div>
+
+LLM のコンテキストウィンドウには制限があるため、長期的な会話メモリを維持するのは容易ではありません。メモリ管理が適切でないと、フォローアップの質問が文脈から外れたり、無関係な回答をハルシネーションしたりする可能性があります。
+
+<div id="approaches">
+  ## アプローチ
+</div>
+
+LlamaIndex を用いて、この課題を解決するための 2 つの異なる手法を実装しました。
+
+<div id="1-chat-summary-memory-buffer">
+  ### 1. **Chat Summary Memory Buffer**
+</div>
+
+* **目的**: 重要なコンテキストを保持しつつ、古いメッセージを要約してtoken制限内に収めます。
+* **アプローチ**:
+  * LlamaIndexの`ChatSummaryMemoryBuffer`を使用し、会話履歴を動的に切り詰めて要約します。
+  * 以前のやり取りの重要な情報をコンパクトな形で保持します。
+* **ユースケース**: メモリ効率が重要となる短期的な会話に最適です。
+* **実装**: [完全なガイドを見る →](/ja/docs/cookbook/articles/memory-management/chat-summary-memory-buffer/README)
+
+<div id="2-persistent-memory-with-lancedb">
+  ### 2. **LanceDB による永続メモリ**
+</div>
+
+* **目的**: セッションをまたいだ長期的なメモリの永続化を実現します。
+* **アプローチ**:
+  * 会話履歴をベクトル埋め込みとして LanceDB に保存します。
+  * セマンティック検索とメタデータフィルターを使って、関連する過去のコンテキストを取得します。
+  * 取得したコンテキストをもとに応答を生成するため、Perplexity の Sonar API を統合します。
+* **ユースケース**: 長期的なメモリの保持とコンテキストの呼び出しが求められるアプリケーションに適しています。
+* **実装**: [完全なガイドを見る →](/ja/docs/cookbook/articles/memory-management/chat-with-persistence/README)
+
+<div id="directory-structure">
+  ## ディレクトリ構成
+</div>
+
+```
+articles/memory-management/
+├── chat-summary-memory-buffer/   # 要約ベースのメモリの実装
+├── chat-with-persistence/        # LanceDB による永続メモリの実装
+```
+
+<div id="getting-started">
+  ## はじめに
+</div>
+
+1. リポジトリをクローンします。
+   ```bash theme={null}
+   git clone https://github.com/ppl-ai/api-cookbook.git
+   cd api-cookbook/articles/memory-management
+   ```
+2. セットアップ手順と使用例については、各サブディレクトリの README を参照してください。
+
+<div id="key-benefits">
+  ## 主なメリット
+</div>
+
+* **コンテキストウィンドウ管理**: 要約によりtoken使用量を43%削減
+* **会話の継続性**: セッションをまたいでコンテキストを92%保持
+* **API互換性**: Perplexityのメッセージスキーマで成功率100%
+* **本番環境対応**: エンタープライズ用途に耐えるスケーラブルなアーキテクチャ
+
+<div id="contributions">
+  ## コントリビューション
+</div>
+
+LlamaIndex を使って同じ課題に取り組む別の方法を見つけた場合は、ぜひ PR を作成してください！詳しいガイドラインは [CONTRIBUTING.md](https://github.com/ppl-ai/api-cookbook/blob/main/CONTRIBUTING.md) をご覧ください。
+
+***

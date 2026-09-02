@@ -1,0 +1,257 @@
+---
+title: "Personalizar presets"
+---
+
+Los modelos, las herramientas y las capacidades cambian rápido. Mantener el código de tu agente actualizado con las configuraciones ideales para tu caso de uso puede convertirse en un trabajo de tiempo completo. Justamente eso es lo que los presets de Perplexity ayudan a resolver.
+
+<div id="start-from-a-preset">
+  ## Empieza desde un preset
+</div>
+
+Un preset es un paquete de ajustes de la Agent API mantenido por Perplexity que reúne un model, la configuración de búsqueda, los pasos de razonamiento, el system prompt y las herramientas disponibles. Perplexity actualiza las configuraciones subyacentes a medida que mejoran las evaluaciones, y tus llamadas reciben esas actualizaciones sin que tengas que modificar tu código.
+
+¿Y si el preset elegido no cubre del todo tus necesidades? Imagina, por ejemplo, que encontraste una configuración de preset que se ajusta casi a la perfección a lo que buscas, salvo por uno o dos campos que te gustaría afinar. Puedes indicar tu preset por su nombre y modificar únicamente los campos que necesiten ajustes. Todos los demás campos del preset seguirán usando sus valores predeterminados.
+
+<div id="check-the-prerequisites">
+  ## Comprueba los requisitos previos
+</div>
+
+Necesitas Python 3.10 o posterior, la biblioteca `perplexityai` instalada y una API key exportada como `PERPLEXITY_API_KEY`. Crea la clave en [console.perplexity.ai/group/keys](https://console.perplexity.ai/group/keys). Si nunca has hecho una llamada a la API, sigue primero la [guía de inicio rápido de Perplexity API](https://docs.perplexity.ai/docs/getting-started/quickstart).
+
+```bash theme={null}
+pip install perplexityai
+export PERPLEXITY_API_KEY="pplx-..."
+```
+
+<div id="run-a-basic-example">
+  ## Ejecutar un ejemplo básico
+</div>
+
+Todos los ejemplos de este tutorial usan el preset `low`, salvo que se indique lo contrario. Empieza invocándolo únicamente con un prompt.
+
+```python theme={null}
+from perplexity import Perplexity
+
+client = Perplexity()
+
+response = client.responses.create(
+    preset="low",
+    input="Summarize the current Perplexity Agent API pricing page.",
+)
+
+print("model:", response.model)
+print(response.output_text)
+```
+
+El preset `low` proporciona el model, la configuración de búsqueda, los pasos de razonamiento, el system prompt y las herramientas disponibles. Tu solicitud solo añade la entrada.
+
+<div id="customize-a-preset-in-two-moves">
+  ## Personaliza un preset en dos pasos
+</div>
+
+Dos técnicas cubren casi cualquier personalización real: sobrescribir un campo de nivel superior y ajustar las opciones de una herramienta. En la última sección se explica cómo inspeccionar lo que se ejecutó.
+
+<div id="1-override-one-parameter">
+  ### 1. Sobrescribe un parámetro
+</div>
+
+Sobrescribe un parámetro cuando el preset casi encaja, pero hay que cambiar un campo. Envía ese campo en la solicitud; todos los demás conservan su valor predeterminado.
+
+`low` documenta un valor predeterminado bajo de `max_steps` (consulta la documentación de presets para conocer el valor actual). Eleva ese límite cuando una tarea requiera más iteraciones de razonamiento o de uso de herramientas:
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input="Summarize this week's Agent API changelog.",
+    max_steps=8,
+)
+
+print("model:", response.model)
+print("status:", response.status)
+print("tool invocations:", response.usage.tool_calls_details)
+```
+
+<div id="2-adjust-options-for-one-tool">
+  ### 2. Ajustar las opciones de una herramienta
+</div>
+
+Ajusta las opciones de una herramienta cuando el conjunto de herramientas del preset sea el adecuado para la tarea, pero una de ellas necesite ajustes. Pasa una entrada parcial para esa herramienta y las demás herramientas del preset se mantendrán activas.
+
+`low` invoca `fetch_url` de forma predeterminada cuando un prompt menciona una URL. Pasa una anulación parcial de `web_search` y `fetch_url` se seguirá ejecutando:
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input=(
+        "Read https://docs.perplexity.ai/docs/agent-api/presets "
+        "and list the preset names on that page."
+    ),
+    tools=[{
+        "type": "web_search",
+        "max_tokens": 6000,
+        "max_tokens_per_page": 1200,
+    }],
+)
+
+print("model:", response.model)
+print("tools ran:", list(response.usage.tool_calls_details.keys()))
+```
+
+Ejecución real del 19 de agosto de 2026 con `perplexityai==0.43.3`:
+
+```text theme={null}
+model: openai/gpt-5.6-luna
+tools ran: ['fetch_url']
+```
+
+La solicitud ajustó `web_search`, pero lo que realmente se ejecutó fue `fetch_url`, porque el prompt pedía leer una URL y `fetch_url` es la herramienta indicada para esa tarea. La prueba está en `usage.tool_calls_details`: `fetch_url` aparece ahí aunque la solicitud nunca incluyó una entrada `fetch_url`. Eso es la fusión de herramientas. Para ajustar también `fetch_url`, agrega una entrada `fetch_url` en `tools`, junto con `web_search`.
+
+<div id="put-both-moves-together-an-evidence-based-rollout-decision">
+  ## Combina ambas acciones: una decisión de despliegue basada en evidencia
+</div>
+
+Juntemos estos conceptos. Supongamos que el responsable de rendimiento de un servicio limitado por CPU debe decidir si prueba la compilación sin GIL de Python 3.14. `low` es una buena base de partida, pero esta tarea exige más margen de razonamiento (una anulación) y un contexto más profundo de dos páginas técnicas concretas (una combinación de herramientas).
+
+```python theme={null}
+from perplexity import Perplexity
+
+client = Perplexity()
+
+response = client.responses.create(
+    preset="low",
+    input=(
+        "You are the performance lead for a CPU-bound fraud-scoring service. "
+        "The team proposes piloting Python 3.14's free-threaded build in "
+        "production. Create an adoption brief of at most 450 words with exactly "
+        "these Markdown headings: ## Decision, ## Three technical risks, "
+        "## Five benchmark gates, and ## Two stop conditions. Make each list "
+        "match the number in its heading. For every risk, separate the "
+        "documented behavior from its implication for this service. Use only "
+        "the sources allowed by the web_search tool. Cite factual claims inline "
+        "using numeric result IDs, one source per bracket, like [1][2]. Never "
+        "invent citation IDs. Do not include shell commands."
+    ),
+    max_steps=8,
+    tools=[{
+        "type": "web_search",
+        "search_context_size": "high",
+        "filters": {
+            "search_domain_filter": [
+                "docs.python.org/3.14/whatsnew/3.14.html",
+                "docs.python.org/3/howto/free-threading-python.html",
+            ],
+        },
+    }],
+)
+
+print(response.output_text)
+
+print("\n--- Observed run ---")
+print("model:      ", response.model)
+print("status:     ", response.status)
+print("tools:      ", response.usage.tool_calls_details)
+print("total cost: $", response.usage.cost.total_cost)
+```
+
+Cada pieza de la llamada cumple una función:
+
+| Aspecto                                                                                           | Proporcionado por                                                     |
+| ------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| Modelo mantenido, system prompt, razonamiento, valores predeterminados y herramientas no listadas | preset `low`                                                          |
+| Tarea de la aplicación y contrato de salida                                                       | `input`                                                               |
+| Margen adicional de razonamiento                                                                  | Anulación con `max_steps=8`                                           |
+| Extracción de evidencia más profunda                                                              | Combinación de herramientas con `search_context_size="high"`          |
+| Política de fuentes de confianza                                                                  | Combinación de herramientas con `search_domain_filter` a nivel de URL |
+| Evidencia en tiempo de ejecución                                                                  | Metadatos de la respuesta                                             |
+
+Una ejecución real representativa del 19 de agosto de 2026 con `perplexityai==0.43.3` generó este informe (`response.output_text`):
+
+```markdown theme={null}
+## Decisión
+
+Probar la compilación sin GIL (free-threaded) de Python 3.14 en producción solo como un canario de alcance muy acotado, no como entorno de ejecución predeterminado. Python 3.14 admite oficialmente la ejecución sin GIL, pero sigue siendo opcional; la compatibilidad de las extensiones de terceros y el escalado según la carga de trabajo continúan siendo incertidumbres importantes. [1][2] Exigir una vía de reversión con GIL habilitado, controles de capacidad idénticos y los umbrales de rendimiento indicados abajo antes de ampliar el tráfico.
+
+## Tres riesgos técnicos
+
+1. **Comportamiento documentado:** La ejecución sin GIL añade una sobrecarga en un solo hilo: aproximadamente entre el 1 % y el 8 % en `pyperformance`, según la plataforma y el hardware. [2] **Implicación:** Una solicitud de detección de fraude que sea mayormente Python en serie puede volverse más lenta o requerir más CPU, incluso si mejora el rendimiento con múltiples hilos.
+
+2. **Comportamiento documentado:** Algunas extensiones en C no están preparadas para operar sin GIL y pueden volver a habilitarlo automáticamente al importarse; se emite una advertencia. [2] **Implicación:** Los trabajadores supuestamente paralelos del servicio podrían serializarse de forma silenciosa, lo que haría engañosos los resultados de rendimiento y de latencia de cola. Audita cada dependencia y da por fallido el piloto si el GIL se rehabilita de forma inesperada.
+
+3. **Comportamiento documentado:** Los contenedores integrados ofrecen protecciones parecidas al comportamiento de la era del GIL, pero los iteradores compartidos por lo general no son seguros para hilos, y el acceso concurrente a marcos de pila puede provocar el fallo del intérprete. [2] **Implicación:** Las suposiciones existentes del tipo "es seguro gracias al GIL" en la extracción de características, el almacenamiento en caché o la infraestructura del modelo pueden producir condiciones de carrera, resultados corruptos o caídas de procesos. Trata todo estado mutable compartido como algo que requiere sincronización explícita.
+
+## Cinco umbrales de rendimiento
+
+1. **Corrección:** Ejecuta una reproducción representativa de producción contra la compilación con GIL; exige decisiones de fraude, puntuaciones, clasificaciones de errores y registros de auditoría idénticos.
+
+2. **Rendimiento:** Con la asignación de núcleos objetivo y un número realista de hilos, exige al menos 1,20x de solicitudes por segundo sostenidas frente a la compilación con GIL.
+
+3. **Latencia:** En p50, p95 y p99 bajo carga máxima, exige que no haya una regresión superior al 5 %, sin incumplir ningún objetivo de nivel de servicio.
+
+4. **Eficiencia de CPU:** Exige al menos un 10 % menos de segundos de CPU por solicitud puntuada con el mismo tráfico; mide por separado el escalado a medida que aumentan los trabajadores, ya que la ejecución sin GIL no beneficia automáticamente a todos los programas. [2]
+
+5. **Seguridad operativa:** Realiza pruebas de resistencia durante 24 horas con las versiones de dependencias de producción; exige cero caídas, bloqueos mutuos, condiciones de carrera de datos, advertencias inesperadas de rehabilitación del GIL o crecimiento de memoria por encima del presupuesto acordado para la compilación con GIL. Las compilaciones sin GIL suelen consumir más memoria. [2]
+
+## Dos condiciones de detención
+
+1. **Reversión inmediata:** Detén el piloto y vuelve a la compilación con GIL si la corrección difiere, se incumple el SLO, se produce una caída o un bloqueo mutuo, o alguna dependencia rehabilita el GIL en la ruta de producción.
+
+2. **No continuar tras el piloto:** No amplíes más allá del canario si falla cualquier umbral de rendimiento, en especial si las mejoras de rendimiento no compensan la sobrecarga documentada en un solo hilo, o si el coste de memoria/capacidad supera el presupuesto aprobado.
+```
+
+Y este bloque de ejecución observada:
+
+```text theme={null}
+model:       openai/gpt-5.6-luna
+status:      completed
+tools:       {'search_web': ToolCallDetailsOutput(invocation=2)}
+total cost:  $0.00672
+```
+
+El informe resultó de 410 palabras, respetó todos los encabezados y recuentos de listas solicitados, usó citas numéricas válidas y se basó únicamente en las dos páginas oficiales de Python permitidas. Las verificaciones puntuales confirmaron sus afirmaciones sobre la ejecución en paralelo, la reactivación del GIL provocada por extensiones, la seguridad de los iteradores, el soporte oficial de Python 3.14 y la penalización de rendimiento documentada en un solo hilo.
+
+El resultado variará de una ejecución a otra. Las recomendaciones de despliegue generadas siguen siendo un borrador: valida los identificadores de las citas frente a los resultados de búsqueda de la respuesta y revisa las recomendaciones de mayor impacto antes de usarlas en producción.
+
+<div id="inspect-what-actually-ran">
+  ## Inspecciona qué se ejecutó realmente
+</div>
+
+Necesitas una forma de comprobar qué devolvió realmente la API. Consulta `response.model` para conocer el model subyacente, `response.usage.tool_calls_details` para ver las herramientas que se ejecutaron y `response.usage.cost.total_cost` para el importe facturado. La respuesta no expone el system prompt efectivo, `max_steps`, el razonamiento ni el conjunto completo de herramientas heredadas, así que considéralo una inspección de la ejecución observada y no de la configuración del preset.
+
+```python theme={null}
+def inspect(preset: str, prompt: str) -> None:
+    response = client.responses.create(preset=preset, input=prompt)
+    print(f"preset={preset}")
+    print(f"  model:       {response.model}")
+    print(f"  status:      {response.status}")
+    print(f"  invocations: {response.usage.tool_calls_details}")
+    print(f"  total_cost:  ${response.usage.cost.total_cost}")
+
+inspect("low", "Summarize the current Perplexity Agent API pricing page.")
+```
+
+Tus cifras serán distintas. Ejecución real del 19 de agosto de 2026 con `perplexityai==0.43.3`:
+
+```text theme={null}
+preset=low
+  model:       openai/gpt-5.6-luna
+  status:      completed
+  invocations: {'fetch_url': ToolCallDetailsOutput(invocation=1), 'search_web': ToolCallDetailsOutput(invocation=1)}
+  total_cost:  $0.01812
+```
+
+Inspecciona qué se ejecutó en cualquier solicitud en la que la exactitud o el costo sean importantes. Te permite ver qué model atendió la llamada, qué herramientas se ejecutaron y el costo de la llamada.
+
+<div id="summary">
+  ## Resumen
+</div>
+
+Los presets te ofrecen una configuración mantenida de la Agent API que puedes invocar por nombre. Sobrescribe un solo campo para cambiar una cosa sin perder los demás valores predeterminados. Combina las opciones de una herramienta para ajustarla sin desvincular las demás herramientas disponibles del preset. Consulta `response.model` y `response.usage.tool_calls_details` para inspeccionar tus llamadas.
+
+<div id="resources">
+  ## Recursos
+</div>
+
+* [Presets de la Agent API](https://docs.perplexity.ai/docs/agent-api/presets)
+* [Inicio rápido de la Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart)
+* [Web Search](https://docs.perplexity.ai/docs/agent-api/tools/web-search)
+* [Precios de la Perplexity API](https://docs.perplexity.ai/docs/getting-started/pricing)

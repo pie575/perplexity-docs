@@ -1,0 +1,136 @@
+---
+title: "Pipedream で Perplexity を使う"
+description: "3,000 種類を超える他のアプリと組み合わせて Perplexity を Pipedream のワークフローに統合し、コードとノーコードのステップでリサーチ、要約、根拠に基づく応答を自動化します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[Pipedream](https://pipedream.com) は、3,000 以上の構築済みアプリ連携を備えたワークフロー自動化プラットフォームです。Perplexity アプリを使えば、一度認証するだけで、任意の Pipedream ワークフローから Perplexity の Agent API と Search エンドポイントを呼び出せます。トリガーはメール、Webhook、RSS フィード、Slack メッセージ、Google スプレッドシートの更新、スケジュール実行など自由に選べます。
+
+<Info>
+  **Pipedream** は、同一ワークフロー内でノーコードのビジュアルステップと、Node.js / Python によるフルコードステップの両方をサポートします。詳しくは [pipedream.com](https://pipedream.com) をご覧ください。
+</Info>
+
+<div id="authentication">
+  ## 認証
+</div>
+
+<Steps>
+  <Step title="API キーを取得する">
+    [API ポータル](https://console.perplexity.ai/project/keys)で Perplexity API キーを生成します。
+  </Step>
+
+  <Step title="Pipedream で Perplexity を接続する">
+    Pipedream で任意のワークフローを開き、ステップに **Perplexity** アプリを追加します。**Connect new account** をクリックし、API キーを貼り付けます。Pipedream はキーを安全に保管し、以降のすべてのステップで `$auth.api_key` として参照します。
+  </Step>
+</Steps>
+
+<Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  API ポータルで Perplexity API キーを生成します。
+</Card>
+
+<div id="built-in-action-create-response">
+  ## 組み込みアクション: Create Response
+</div>
+
+Perplexity アプリには、Agent API リクエストを実行する **Create Response (Agent API)** アクションが用意されており、コードを書く必要はありません。
+
+* **エンドポイント**: `POST /v1/agent`
+* **入力**: preset または モデル、入力、ツール (`web_search`、`fetch_url`) 、および任意の指示。
+* **出力**: `status`、`output`、使用量を含む Agent API のレスポンス。
+
+ステップピッカーで **Perplexity → Create Response (Agent API)** を検索して追加してください。
+
+<div id="custom-code-step">
+  ## カスタムコードステップ
+</div>
+
+新しいモデルを統合する場合は、Pipedream の **Node.js コードステップ** を使用して、保存済みの Perplexity 接続で Agent API を呼び出します。
+
+```javascript theme={null}
+import { axios } from "@pipedream/platform";
+
+export default defineComponent({
+  props: {
+    perplexity: {
+      type: "app",
+      app: "perplexity",
+    },
+  },
+  async run({ steps, $ }) {
+    return await axios($, {
+      method: "POST",
+      url: "https://api.perplexity.ai/v1/agent",
+      headers: {
+        Authorization: `Bearer ${this.perplexity.$auth.api_key}`,
+        "Content-Type": "application/json",
+        "X-Pplx-Integration": "pipedream/1.0",
+      },
+      data: {
+        preset: "low",
+        input: "Summarize this week's AI research.",
+      },
+    });
+  },
+});
+```
+
+URLを差し替えることで、任意の[Perplexity APIエンドポイント](/ja/api-reference)を呼び出せます。
+
+* `/v1/agent` — サードパーティのモデルやpresetを利用できるAgent API
+* `/search` — ランキング済みの生のウェブ検索結果
+* `/v1/embeddings` — ベクトル埋め込み
+
+<div id="example-workflows">
+  ## ワークフローの例
+</div>
+
+Pipedream 上で Perplexity を活用する代表的なパターンは次のとおりです。
+
+* **カスタマーサポートの自動化** — 受信メールをトリガーに Perplexity Agent API のステップが返信文を下書きし、その会話を CRM に記録します。
+* **ニュースフィードの要約** — RSS トリガーで取得した新着記事を Perplexity が要約し、引用付きで Slack チャンネルに投稿します。
+* **ブランドモニタリング** — ソーシャルメディア上の言及を Perplexity に渡して感情分析とエンティティ抽出を行い、その結果を Google スプレッドシートに書き込みます。
+* **日次リサーチダイジェスト** — スケジュール設定した cron が Perplexity へのクエリをトリガーし、毎朝その結果をメールで送信するか、チャットチャンネルに投稿します。
+
+<div id="security-credentials">
+  ## セキュリティと認証情報
+</div>
+
+Pipedream は Perplexity API キー を暗号化して保存し、`$auth` オブジェクト経由で各ステップに渡します。キーがステップの UI やログに表示されることはありません。キーはアカウントの **Connected Accounts** ページからいつでもローテーションできます。
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Pipedream Perplexity アプリ" icon="plug" href="https://pipedream.com/apps/perplexity">
+    Pipedream 上の公式 Perplexity アプリ。
+  </Card>
+
+  <Card title="Pipedream ドキュメント" icon="book" href="https://pipedream.com/docs">
+    Pipedream の完全なドキュメント。
+  </Card>
+
+  <Card title="Perplexity API リファレンス" icon="code" href="/ja/api-reference">
+    Perplexity API の完全なリファレンス。
+  </Card>
+
+  <Card title="Agent API のモデル" icon="cpu" href="/ja/docs/agent-api/models">
+    Agent API で利用できるモデルを比較します。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+連携に関してお困りですか？
+
+* [Pipedream のドキュメント](https://pipedream.com/docs)を参照する
+* [FAQ](/ja/docs/resources/faq) を確認する

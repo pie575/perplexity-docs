@@ -1,0 +1,521 @@
+---
+title: "Serveur MCP Perplexity Computer"
+sidebarTitle: "MCP Perplexity Computer"
+description: "Permettez aux assistants IA d'accomplir des tâches concrètes avec Perplexity Computer via le Model Context Protocol (MCP)."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Le serveur MCP Perplexity Computer connecte les assistants IA à [Perplexity Computer](https://www.perplexity.ai), un agent IA polyvalent capable d&#39;accomplir pratiquement n&#39;importe quelle tâche à votre place. Grâce au Model Context Protocol, votre client MCP peut déléguer à Computer des tâches complexes en plusieurs étapes et en recevoir des résultats structurés.
+
+<Note>
+  Cette intégration est distincte du [serveur MCP Perplexity API](/fr/docs/getting-started/integrations/mcp-server), qui est dédié aux API Search et Completion de Perplexity.
+</Note>
+
+Computer peut :
+
+* **Rechercher et naviguer** sur le web pour obtenir des informations en temps réel, y compris sur des pages nécessitant une connexion
+* **Écrire et exécuter du code** dans un sandbox Linux interactif avec Python, Node et les outils Unix standards
+* **Créer des documents et des médias** : PDF, présentations, feuilles de calcul, images et vidéos
+* **Lire et envoyer des e-mails** via Gmail et Outlook, et planifier des événements d&#39;agenda
+* **Gérer des tâches** dans GitHub, Linear, Jira, Asana, Slack, Notion, et bien d&#39;autres
+* **Analyser des données** issues de Snowflake, Databricks, Google Sheets, Salesforce et d&#39;autres sources
+* **Créer et déployer des sites web** sur une URL publique en quelques minutes
+* **Se connecter à plus de 400 services** grâce à un framework de connecteurs managés avec OAuth en un clic
+
+<div id="authentication">
+  ## Authentification
+</div>
+
+Le Computer MCP Server authentifie les utilisateurs via **OAuth 2.0** avec votre compte Perplexity. Aucune API key n&#39;est nécessaire.
+
+À la première utilisation, les clients MCP compatibles ouvrent une fenêtre de navigateur pour dérouler automatiquement le flux d&#39;autorisation.
+
+<Info>
+  L&#39;utilisation de Computer est facturée sur les crédits de votre compte Perplexity. Si votre solde est insuffisant, Computer renvoie `insufficient_credits` accompagné d&#39;un lien pour gérer la facturation.
+</Info>
+
+<div id="installation">
+  ## Installation
+</div>
+
+<Steps>
+  <Step title="Étape 1 : installer le serveur">
+    Ajoutez le serveur Computer MCP à votre client.
+
+    <Tabs>
+      <Tab title="Claude Code">
+        ```bash theme={null}
+        claude mcp add perplexity-computer --transport http https://www.perplexity.ai/rest/computer/mcp
+        ```
+      </Tab>
+
+      <Tab title="Codex">
+        ```bash theme={null}
+        codex mcp add perplexity-computer --url https://www.perplexity.ai/rest/computer/mcp
+        ```
+      </Tab>
+
+      <Tab title="Cursor">
+        Ajoutez ceci à votre `mcp.json` :
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="VS Code">
+        Ajoutez ceci à votre `.vscode/mcp.json` :
+
+        ```json theme={null}
+        {
+          "servers": {
+            "perplexity-computer": {
+              "type": "http",
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Windsurf">
+        Ajoutez ceci à votre `~/.codeium/windsurf/mcp_config.json` :
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "serverUrl": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Claude Desktop">
+        Ajoutez ceci à votre `claude_desktop_config.json` :
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Autres clients">
+        Tout client MCP compatible avec le transport HTTP peut se connecter via l&#39;URL du serveur :
+
+        ```
+        https://www.perplexity.ai/rest/computer/mcp
+        ```
+
+        Consultez la documentation de votre client pour connaître le format de configuration à utiliser.
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Étape 2 : s'authentifier auprès de Perplexity Computer">
+    Après l&#39;installation, vous devrez vous authentifier avec votre compte Perplexity : une fenêtre de navigateur s&#39;ouvrira pour finaliser le flux OAuth.
+
+    <img src="https://mintcdn.com/perplexity/ar3swoyOvYqPFvZd/docs/assets/images/computer_mcp/oauth.png?fit=max&auto=format&n=ar3swoyOvYqPFvZd&q=85&s=33f1ecbab4a6fbadd97840e3b0aec64c" alt="Écran OAuth de Perplexity pour Computer MCP" />
+  </Step>
+
+  <Step title="Étape 3 : commencer à utiliser Computer MCP">
+    Une fois authentifié, vous pouvez commencer à déléguer des tâches à Perplexity Computer depuis votre client MCP.
+
+    Lancez un court enchaînement pour tester la connexion et voir Computer à l&#39;œuvre :
+
+    ```text theme={null}
+    Résume les 5 principales actualités de Hacker News en ce moment.
+    ```
+
+    Puis enchaînez dans la même conversation :
+
+    ```text theme={null}
+    Transforme cela en rapport PDF.
+    ```
+  </Step>
+</Steps>
+
+<div id="conversation-threading">
+  ## Enchaînement des conversations
+</div>
+
+Computer conserve le contexte du premier message et s&#39;appuie dessus. Pour que les prompts de suivi restent dans le même workflow, votre client MCP doit transmettre le `thread_id` de la réponse précédente.
+
+Le premier appel crée un nouveau fil de discussion et renvoie un `thread_id`. Réutilisez ce `thread_id` lors des appels suivants pour poursuivre la même session.
+
+```
+1. call_perplexity_computer(message: "Summarize the top 5 stories on Hacker News right now")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174000", event: "complete", text: "Here are today's top stories..." }
+
+2. call_perplexity_computer(message: "Turn that into a PDF report", thread_id: "123e4567-e89b-12d3-a456-426614174000")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174000", event: "complete", text: "Here's the report.\n\n[report.pdf](https://...)" }
+```
+
+Cela s&#39;applique également aux événements interactifs. Si Computer doit se connecter à un service en cours de tâche, il renvoie un événement `auth_required` ; une fois l&#39;authentification effectuée, la conversation reprend sur le même thread :
+
+```
+1. call_perplexity_computer(message: "Email me a summary of my unread Slack messages")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174001", event: "auth_required", interactive: { type: "auth_required", connector: "slack", auth_url: "https://..." } }
+
+2. notify_connected(thread_id: "123e4567-e89b-12d3-a456-426614174001", message: "Slack connected")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174001", event: "complete", text: "Done! Sent the summary to your email." }
+```
+
+<div id="status-and-progress-updates">
+  ## Statut et mises à jour de progression
+</div>
+
+Les tâches Computer peuvent prendre plusieurs minutes lorsqu&#39;elles impliquent de la navigation web, l&#39;authentification d&#39;un connecteur, l&#39;exécution de code ou la génération de fichiers. L&#39;appel d&#39;outil MCP reste ouvert jusqu&#39;à ce que Computer atteigne un état final ou un point de contrôle nécessitant une action.
+
+Utilisez le champ `event` de chaque réponse comme statut actuel de la tâche. Cette même réponse contient également le `thread_id` nécessaire aux appels de suivi :
+
+```
+{
+  "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+  "event": "complete",
+  "text": "Finished the report."
+}
+```
+
+Lorsque Computer a besoin d&#39;une saisie pour pouvoir continuer, la réponse contient un événement actionnable et un objet `interactive` :
+
+```
+{
+  "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+  "event": "ask_user_question",
+  "text": "Which format should I use?\n1. PDF\n2. DOCX",
+  "interactive": {
+    "type": "ask_user_question",
+    "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+    "respond_with_tool": "answer_question"
+  }
+}
+```
+
+Gérez ces points de contrôle en appelant l&#39;outil de suivi indiqué avec le même `thread_id` :
+
+| Événement            | Suivi                                                                                          |
+| -------------------- | ---------------------------------------------------------------------------------------------- |
+| `ask_user_question`  | Appelez `answer_question` avec la réponse de l&#39;utilisateur.                                |
+| `confirm_action`     | Appelez `confirm_action_approve` ou `confirm_action_deny`.                                     |
+| `auth_required`      | Ouvrez l&#39;URL OAuth, puis appelez `notify_connected`.                                       |
+| `sleep` ou `waiting` | Appelez `call_perplexity_computer` avec le même `thread_id` lorsque vous souhaitez poursuivre. |
+
+<Info>
+  Le serveur MCP Computer envoie des mises à jour de statut sous forme de notifications de progression MCP pendant l&#39;exécution d&#39;une tâche. Votre client doit inclure un token de progression et prendre en charge les notifications de progression pour pouvoir les afficher. Ces mises à jour correspondent à des statuts de tâche, et non à une diffusion en streaming de la réponse token par token.
+</Info>
+
+Si l&#39;outil renvoie `timeout`, c&#39;est que le serveur MCP n&#39;a pas reçu de point de contrôle avant l&#39;expiration de sa fenêtre d&#39;attente. La tâche est peut-être toujours en cours. Conservez le `thread_id` et rappelez `call_perplexity_computer` avec ce même `thread_id` pour poursuivre ou obtenir le statut le plus récent.
+
+<div id="file-uploads">
+  ## Téléversement de fichiers
+</div>
+
+Computer peut travailler sur les fichiers que vous fournissez. Pour joindre un fichier à une tâche, demandez une enveloppe S3 présignée avec `create_attachment_upload`, téléversez les octets directement vers S3, puis transmettez l&#39;URL renvoyée dans `attachment_urls` lors de votre prochain appel d&#39;outil. Le serveur MCP ne voit jamais le contenu du fichier : les téléversements peuvent donc porter sur de gros binaires sans passer par le worker.
+
+La taille maximale est de **200 Mo** par pièce jointe.
+
+<Steps>
+  <Step title="Étape 1 : demander une enveloppe de téléversement">
+    Appelez `create_attachment_upload` en indiquant les valeurs `filename`, `mime_type` et `size_bytes` du fichier. Le serveur renvoie une requête POST S3 présignée, utilisable pendant quelques minutes.
+
+    ```
+    create_attachment_upload(
+      filename: "report.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 482190,
+    )
+    -> {
+      attachment_url: "https://bucket.s3.amazonaws.com/uploads/<uuid>/report.pdf",
+      upload_url: "https://bucket.s3.amazonaws.com",
+      upload_fields: { "key": "uploads/<uuid>/report.pdf", "policy": "...", ... },
+    }
+    ```
+  </Step>
+
+  <Step title="Étape 2 : envoyer les octets vers S3 en POST">
+    Envoyez une requête POST `multipart/form-data` non authentifiée vers `upload_url`. Incluez chaque clé de `upload_fields` comme champ de formulaire, puis ajoutez le fichier dans une partie `file`.
+
+    ```bash theme={null}
+    curl -X POST "$UPLOAD_URL" \
+      -F "key=$KEY" \
+      -F "policy=$POLICY" \
+      -F "x-amz-signature=$SIGNATURE" \
+      -F "file=@./report.pdf"
+    ```
+
+    En cas de succès, S3 renvoie `204 No Content`. Le fichier est désormais accessible à l&#39;adresse `attachment_url`.
+  </Step>
+
+  <Step title="Étape 3 : référencer le fichier dans une tâche">
+    Transmettez `attachment_url` à n&#39;importe quel outil de tâche via le tableau `attachment_urls`. Vous pouvez joindre des fichiers à une nouvelle tâche ou à une relance dans un fil existant.
+
+    ```
+    call_perplexity_computer(
+      message: "Summarize this report and pull out the key risks.",
+      attachment_urls: ["https://bucket.s3.amazonaws.com/uploads/<uuid>/report.pdf"],
+    )
+    ```
+  </Step>
+</Steps>
+
+<div id="create_attachment_upload">
+  ### `create_attachment_upload`
+</div>
+
+Demande une requête POST S3 présignée pour un fichier unique. Renvoie une enveloppe que votre client utilise pour téléverser les octets directement vers S3.
+
+| Paramètre    | Type    | Requis | Description                                                          |
+| ------------ | ------- | ------ | -------------------------------------------------------------------- |
+| `filename`   | string  | Oui    | Nom du fichier, extension incluse (par ex. `report.pdf`).            |
+| `mime_type`  | string  | Oui    | Type de contenu du fichier (par ex. `application/pdf`, `image/png`). |
+| `size_bytes` | integer | Oui    | Taille du fichier en octets. Ne doit pas dépasser 200 Mo.            |
+
+Renvoie :
+
+| Champ            | Type   | Description                                                                          |
+| ---------------- | ------ | ------------------------------------------------------------------------------------ |
+| `attachment_url` | string | À renvoyer dans `attachment_urls` lors d&#39;un appel d&#39;outil ultérieur.         |
+| `upload_url`     | string | Le point de terminaison S3 auquel envoyer le fichier via POST.                       |
+| `upload_fields`  | object | Champs de formulaire à inclure aux côtés de la partie `file` dans le POST multipart. |
+
+<div id="capabilities">
+  ## Fonctionnalités
+</div>
+
+<div id="browser-control">
+  ### Contrôle du navigateur
+</div>
+
+Computer inclut un navigateur cloud complet pour les tâches qui vont au-delà de la recherche. Lorsqu&#39;une tâche nécessite d&#39;interagir avec un site web, de remplir des formulaires ou d&#39;accéder à du contenu protégé par une authentification, Computer lance automatiquement une session de navigateur.
+
+| Fonctionnalité       | Description                                                                                                                      |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Navigation           | Accéder à n&#39;importe quelle URL, cliquer sur des éléments, remplir des formulaires et extraire des données structurées.       |
+| Authentification     | Gérer les flux de connexion en plusieurs étapes et les sessions authentifiées.                                                   |
+| Captures d&#39;écran | Réaliser des captures d&#39;écran haute fidélité de n&#39;importe quelle page web.                                               |
+| Traitement par lots  | Exécuter des tâches de navigation sur des dizaines d&#39;URL en parallèle et regrouper les résultats dans une sortie structurée. |
+| Rendu JavaScript     | Accéder au contenu de pages dynamiques et riches en JavaScript, indisponible via de simples requêtes HTTP.                       |
+
+<div id="code-execution">
+  ### Exécution de code
+</div>
+
+Computer exécute du code dans une VM Linux en sandbox dotée d&#39;un espace de travail de fichiers persistant. Python, Node.js, ffmpeg et les outils Unix standard sont préinstallés, et des paquets supplémentaires peuvent être installés à la volée.
+
+| Capacité              | Description                                                                                                 |
+| --------------------- | ----------------------------------------------------------------------------------------------------------- |
+| Exécution interactive | Écrire et exécuter des scripts Python ou Node en temps réel, en itérant sur les résultats.                  |
+| Traitement de données | Traiter des fichiers CSV, JSON, Excel, PDF, images, audio et vidéo.                                         |
+| Commandes shell       | Exécuter des commandes shell pour les opérations système, le traitement de données et l&#39;automatisation. |
+| Visualisations        | Générer des graphiques, des tracés et des résultats d&#39;analyse de données.                               |
+| Espace de travail     | Répertoire persistant où les fichiers sont créés, lus et gérés tout au long de la session.                  |
+
+<div id="connected-services">
+  ### Services connectés
+</div>
+
+Computer se connecte à **plus de 400 services externes** via un framework de connecteurs géré. Les utilisateurs s&#39;authentifient une seule fois via OAuth, et Computer utilise les tokens de manière sécurisée pour lire des données, effectuer des actions et lancer des recherches sur l&#39;ensemble des services.
+
+| Catégorie             | Services                                                               |
+| --------------------- | ---------------------------------------------------------------------- |
+| Communication         | Slack, Gmail, Outlook, Microsoft Teams                                 |
+| Agenda                | Google Calendar, Outlook Calendar                                      |
+| Documents             | Notion, Google Docs, Google Sheets, Dropbox, OneDrive, SharePoint, Box |
+| Gestion de projet     | Linear, Jira, Asana, Confluence, Trello                                |
+| CRM et ventes         | HubSpot, Salesforce                                                    |
+| Développement         | GitHub, GitLab, Vercel, Supabase                                       |
+| Données et analytique | Snowflake, Databricks, Airtable, Google Sheets                         |
+| Finance               | Stripe, Ramp, Plaid                                                    |
+| Recherche             | CB Insights, PitchBook, Statista, SEC EDGAR                            |
+| Et bien plus          | Des centaines d&#39;autres connecteurs, toutes catégories confondues   |
+
+Lorsqu&#39;une tâche requiert un service qui n&#39;est pas encore connecté, Computer fournit un lien OAuth. Authentifiez-vous dans votre navigateur et le connecteur devient immédiatement disponible.
+
+<div id="available-tools">
+  ## Outils disponibles
+</div>
+
+<CardGroup cols={2}>
+  <Card
+    title="call_perplexity_computer"
+    icon={
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+<path d="M10.2 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M13.8 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M3 19.2H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17.4 4.8H6.6C5.606 4.8 4.8 5.606 4.8 6.6V13.8C4.8 14.794 5.606 15.6 6.6 15.6H17.4C18.394 15.6 19.2 14.794 19.2 13.8V6.6C19.2 5.606 18.394 4.8 17.4 4.8Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+}
+  >
+    Envoyez un message à Perplexity Computer pour démarrer ou poursuivre une tâche. C&#39;est l&#39;outil principal que vous utiliserez pour toutes vos interactions.
+
+    **Idéal pour :** démarrer de nouvelles tâches, envoyer des instructions complémentaires et reprendre des conversations mises en pause.
+  </Card>
+
+  <Card title="answer_question" icon="message">
+    Transmet vos réponses lorsque Computer demande des informations supplémentaires. Les clients qui prennent en charge l&#39;élicitation MCP peuvent gérer cet échange directement dans l&#39;appel en cours.
+
+    **Déclenché par :** les événements `ask_user_question`.
+  </Card>
+
+  <Card title="confirm_action_approve / deny" icon="shield-check">
+    Approuve ou refuse une action sensible, comme l&#39;envoi d&#39;un e-mail ou le déploiement de code. Les clients qui prennent en charge l&#39;élicitation MCP peuvent gérer cet échange directement dans l&#39;appel en cours.
+
+    **Déclenché par :** les événements `confirm_action`.
+  </Card>
+
+  <Card title="notify_connected" icon="plug">
+    Reprend une tâche une fois que vous avez terminé le flux OAuth d&#39;un service tiers.
+
+    **Déclenché par :** les événements `auth_required`.
+  </Card>
+
+  <Card title="create_attachment_upload" icon="paperclip">
+    Crée une enveloppe de téléversement S3 présignée pour un fichier que vous souhaitez faire utiliser par Computer.
+
+    **Idéal pour :** joindre des fichiers sans faire transiter leurs octets par le serveur MCP.
+  </Card>
+</CardGroup>
+
+<div id="call_perplexity_computer">
+  ### `call_perplexity_computer`
+</div>
+
+L&#39;outil principal. Envoyez un message pour démarrer une nouvelle tâche ou poursuivre une conversation existante.
+
+| Paramètre         | Type     | Requis | Description                                                                                              |
+| ----------------- | -------- | ------ | -------------------------------------------------------------------------------------------------------- |
+| `message`         | chaîne   | Non    | La description de la tâche ou le message de relance.                                                     |
+| `thread_id`       | chaîne   | Non    | ID du fil permettant de poursuivre une conversation existante. Omettez-le pour en démarrer une nouvelle. |
+| `attachment_urls` | chaîne[] | Non    | URL issues de `create_attachment_upload` pour les fichiers à joindre à ce tour.                          |
+
+<Info>
+  Les clients qui prennent en charge l&#39;élicitation MCP peuvent gérer `ask_user_question` et `confirm_action` directement dans l&#39;appel d&#39;outil actif. Sinon, utilisez les outils suivants pour reprendre la tâche après un événement interactif.
+</Info>
+
+<div id="answer_question">
+  ### `answer_question`
+</div>
+
+Transmet les réponses lorsque Computer émet un événement `ask_user_question`.
+
+| Paramètre         | Type     | Requis | Description                                                                           |
+| ----------------- | -------- | ------ | ------------------------------------------------------------------------------------- |
+| `thread_id`       | string   | Oui    | L&#39;identifiant du fil de la conversation active.                                   |
+| `answers`         | object   | Oui    | Paires clé-valeur associant chaque question à votre réponse.                          |
+| `attachment_urls` | string[] | Non    | URL issues de `create_attachment_upload` pour les fichiers à joindre à cette réponse. |
+
+<div id="confirm_action_approve">
+  ### `confirm_action_approve`
+</div>
+
+Approuve une action en attente issue d&#39;un événement `confirm_action`.
+
+| Paramètre         | Type     | Requis | Description                                                                               |
+| ----------------- | -------- | ------ | ----------------------------------------------------------------------------------------- |
+| `thread_id`       | string   | Oui    | L&#39;identifiant du fil de la conversation active.                                       |
+| `result`          | string   | Oui    | Motif ou message accompagnant l&#39;approbation.                                          |
+| `attachment_urls` | string[] | Non    | URL issues de `create_attachment_upload` pour les fichiers à joindre à cette approbation. |
+
+<div id="confirm_action_deny">
+  ### `confirm_action_deny`
+</div>
+
+Refuse une action en attente issue d&#39;un événement `confirm_action`.
+
+| Paramètre         | Type     | Requis | Description                                                                      |
+| ----------------- | -------- | ------ | -------------------------------------------------------------------------------- |
+| `thread_id`       | string   | Oui    | L&#39;identifiant du fil de la conversation active.                              |
+| `result`          | string   | Oui    | Motif du refus de l&#39;action.                                                  |
+| `attachment_urls` | string[] | Non    | URL issues de `create_attachment_upload` pour les fichiers à joindre à ce refus. |
+
+<div id="notify_connected">
+  ### `notify_connected`
+</div>
+
+Reprend une tâche une fois que vous avez terminé un flux OAuth déclenché par un événement `auth_required`.
+
+| Paramètre         | Type     | Requis | Description                                                                              |
+| ----------------- | -------- | ------ | ---------------------------------------------------------------------------------------- |
+| `thread_id`       | string   | Oui    | L&#39;identifiant de thread de la conversation active.                                   |
+| `message`         | string   | Oui    | Message concernant la connexion établie.                                                 |
+| `attachment_urls` | string[] | Non    | URL issues de `create_attachment_upload` pour les fichiers à joindre lors de la reprise. |
+
+<div id="response-format">
+  ## Format de réponse
+</div>
+
+Les outils de tâche renvoient un objet JSON comportant les champs suivants. `create_attachment_upload` renvoie à la place l&#39;enveloppe de téléversement décrite dans [Téléversements de fichiers](#file-uploads).
+
+| Champ         | Type   | Description                                                                                                                                     |
+| ------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `thread_id`   | chaîne | L&#39;UUID de la conversation. Renvoyez-le pour poursuivre la conversation. Omis lorsqu&#39;une requête échoue avant le démarrage d&#39;un fil. |
+| `event`       | chaîne | Le type d&#39;événement indiquant ce qui s&#39;est produit. Voir [Événements](#events).                                                         |
+| `text`        | chaîne | Texte de réponse au format Markdown.                                                                                                            |
+| `interactive` | objet  | Présent uniquement pour les événements interactifs nécessitant une action de suivi.                                                             |
+
+<div id="events">
+  ## Événements
+</div>
+
+Chaque réponse inclut un champ `event` décrivant le résultat :
+
+| Événement              | Description                                                                                              | Action requise                                                                                             |
+| ---------------------- | -------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `complete`             | La tâche s&#39;est terminée avec succès.                                                                 | Aucune.                                                                                                    |
+| `error`                | La tâche a échoué.                                                                                       | Consultez le message d&#39;erreur.                                                                         |
+| `cancelled`            | La tâche a été annulée avant son achèvement.                                                             | Démarrez une nouvelle tâche ou poursuivez le fil avec de nouvelles instructions.                           |
+| `sleep`                | L&#39;agent se met en pause en cours de tâche.                                                           | Appelez `call_perplexity_computer` avec le même `thread_id` pour reprendre.                                |
+| `waiting`              | L&#39;agent attend une condition externe ou l&#39;écoulement d&#39;un délai supplémentaire.              | Conservez le `thread_id` et poursuivez le fil le moment venu.                                              |
+| `ask_user_question`    | L&#39;agent a besoin d&#39;informations supplémentaires.                                                 | Appelez `answer_question` avec vos réponses.                                                               |
+| `confirm_action`       | L&#39;agent souhaite effectuer une action sensible.                                                      | Appelez `confirm_action_approve` ou `confirm_action_deny`.                                                 |
+| `auth_required`        | Un service tiers requiert une authentification.                                                          | Ouvrez l&#39;`auth_url` fournie dans un navigateur, puis appelez `notify_connected`.                       |
+| `two_factor_required`  | Un connecteur ou un site requiert une authentification à deux facteurs.                                  | Suivez les instructions du champ `text`, puis poursuivez avec le même `thread_id`.                         |
+| `insufficient_credits` | Le compte ne dispose pas de crédits suffisants.                                                          | Rechargez vos crédits ou ajustez votre limite de dépenses.                                                 |
+| `access_denied`        | Computer n&#39;est pas disponible pour ce compte.                                                        | Si vous appartenez à une organisation, demandez à son administrateur d&#39;activer l&#39;accès à Computer. |
+| `timeout`              | Le serveur MCP n&#39;a pas reçu de point de contrôle avant l&#39;expiration de la fenêtre d&#39;attente. | Réessayez avec le même `thread_id` pour continuer ou demandez l&#39;état actuel.                           |
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card
+    title="Perplexity Computer"
+    icon={
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+<path d="M10.2 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M13.8 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M3 19.2H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17.4 4.8H6.6C5.606 4.8 4.8 5.606 4.8 6.6V13.8C4.8 14.794 5.606 15.6 6.6 15.6H17.4C18.394 15.6 19.2 14.794 19.2 13.8V6.6C19.2 5.606 18.394 4.8 17.4 4.8Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+}
+    href="https://www.perplexity.ai"
+  >
+    Découvrez Perplexity Computer, le travailleur numérique capable d&#39;accomplir n&#39;importe quelle tâche à votre place.
+  </Card>
+
+  <Card title="Serveur MCP de la Perplexity API" icon="search" href="/fr/docs/getting-started/integrations/mcp-server">
+    Donnez à vos agents la puissance des API de Perplexity pour la recherche et la génération d&#39;informations en temps réel.
+  </Card>
+</CardGroup>

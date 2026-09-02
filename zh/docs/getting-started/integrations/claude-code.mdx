@@ -1,0 +1,342 @@
+---
+title: "Perplexity 与 Claude Code"
+description: "在 Claude Code 中使用 Perplexity——通过官方 TypeScript SDK 在项目代码中调用 API、使用兼容 OpenAI 的 base URL，或接入托管的 Perplexity Docs MCP，在编辑器内直接查阅文档。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+[Claude Code](https://docs.claude.com/en/docs/claude-code) 是 Anthropic 推出的智能体编码工具，可在终端、IDE 和 CI 中运行。它能够编辑文件、执行命令，并在工作流中调用 Model Context Protocol (MCP) 服务器。本指南介绍集成 Perplexity 的三种方式：
+
+<CardGroup cols={3}>
+  <Card title="官方 TypeScript SDK" icon="code">
+    让 Claude Code 编写并运行直接调用 Perplexity API 的应用代码。**推荐。**
+  </Card>
+
+  <Card title="OpenAI 兼容 SDK" icon="plug">
+    把现有 OpenAI 客户端的 `baseURL` 指向 `https://api.perplexity.ai/v1`，即可直接复用。
+  </Card>
+
+  <Card title="Claude Code MCP" icon="book">
+    使用 `claude mcp add` 注册托管的 Perplexity Docs MCP，让 Claude Code 在你工作时随时查阅 Perplexity 文档。
+  </Card>
+</CardGroup>
+
+<Info>
+  **推荐方式：** 让 Claude Code 使用官方 SDK (或 OpenAI 兼容 SDK) 基于你的项目代码开发功能，并注册 Perplexity Docs MCP，以便在编辑器内查阅文档。Claude Code 官方**不**支持将其底层模型替换为 Perplexity API —— 参见[替换 Claude Code 的模型 (不推荐) ](#replacing-claude-codes-model-not-recommended)。
+</Info>
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+* 已安装 Claude Code —— 参见 [Claude Code 快速入门](https://docs.claude.com/en/docs/claude-code/quickstart)
+* 运行 TypeScript 示例需要 Node.js 18+
+* 一个 Perplexity API key
+
+<Card title="获取 API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="获取 Key" href="https://console.perplexity.ai/project/keys">
+  在 Perplexity API 门户中生成 key。
+</Card>
+
+<div id="api-key-handling">
+  ## API key 处理
+</div>
+
+切勿将 API key 硬编码在源文件中，也不要提交到代码仓库。请将其保存在环境变量中，并在运行时读取：
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title=".env（项目本地）">
+    在项目根目录下创建 `.env` 文件，并将其加入 `.gitignore`：
+
+    ```bash theme={null}
+    # .env
+    PERPLEXITY_API_KEY=your_api_key_here
+    ```
+
+    在启动时加载 (例如使用 [`dotenv`](https://www.npmjs.com/package/dotenv)) ：
+
+    ```typescript theme={null}
+    import "dotenv/config";
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  请像对待密码一样对待 `PERPLEXITY_API_KEY`。不要将其粘贴到提示词中、分享给 Claude Code，也不要提交到版本控制系统。一旦 key 泄露，请立即[轮换密钥](https://console.perplexity.ai/project/keys)。
+</Warning>
+
+***
+
+<div id="path-1-official-typescript-sdk-recommended">
+  ## 路径 1：官方 TypeScript SDK (推荐)
+</div>
+
+让 Claude Code 使用官方 SDK 生成并修改调用 Perplexity API 的代码。这是最可靠的方式，可提供完整的类型安全、preset 支持，并能使用全部 API 功能。
+
+<div id="install">
+  ### 安装
+</div>
+
+```bash theme={null}
+npm install @perplexity-ai/perplexity_ai
+```
+
+<Tip>
+  `pnpm` 和 `yarn` 的用法相同：`pnpm add @perplexity-ai/perplexity_ai` / `yarn add @perplexity-ai/perplexity_ai`。
+</Tip>
+
+<div id="agent-api-with-low">
+  ### 搭配 `low` 使用 Agent API
+</div>
+
+对于大多数应用，推荐使用 Agent API。使用 `low` preset 即可基于网络信息生成回答，并采用合理的默认配置：
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity(); // 从环境变量中读取 PERPLEXITY_API_KEY
+
+const response = await client.responses.create({
+  preset: "low",
+  input: "Summarize the latest changes to the Perplexity Agent API.",
+});
+
+console.log(`Model used: ${response.model}`);
+console.log(response.output_text);
+```
+
+<Accordion title="Python 等效代码">
+  ```python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()  # 从环境变量读取 PERPLEXITY_API_KEY
+
+  response = client.responses.create(
+      preset="low",
+      input="Summarize the latest changes to the Perplexity Agent API.",
+  )
+
+  print(f"Model used: {response.model}")
+  print(response.output_text)
+  ```
+</Accordion>
+
+<div id="add-web-search">
+  ### 添加网页搜索
+</div>
+
+启用 `web_search` 工具，以显式控制何时使用搜索：
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity();
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "What are the latest developments in AI inference hardware?",
+  tools: [{ type: "web_search" }],
+  instructions:
+    "You have access to a web_search tool. Use it for questions about current events, news, or recent developments.",
+});
+
+if (response.status === "completed") {
+  console.log(response.output_text);
+}
+```
+
+<Tip>
+  可以让 Claude Code 帮你搭建这些调用代码 —— 例如：*&quot;添加一个 `summarize.ts` 脚本，使用 `@perplexity-ai/perplexity_ai` 和 `low` preset，并从环境变量中读取 `PERPLEXITY_API_KEY`。&quot;* Claude Code 会编辑文件、安装依赖包并运行它。
+</Tip>
+
+更多 preset、工具和配置选项，请参阅 [Agent API 快速开始](/zh/docs/agent-api/quickstart)和 [SDK 概览](/zh/docs/sdk/overview)。
+
+***
+
+<div id="path-2-openai-compatible-sdk">
+  ## 路径 2：OpenAI 兼容 SDK
+</div>
+
+如果你的项目已经在使用 OpenAI 客户端，只需将 `baseURL` 指向 `https://api.perplexity.ai/v1` 即可继续沿用。Perplexity 支持将 `POST /v1/responses` 作为 Agent API 的别名。
+
+<div id="install-2">
+  ### 安装
+</div>
+
+```bash theme={null}
+npm install openai
+```
+
+<div id="use-it">
+  ### 使用方法
+</div>
+
+```typescript theme={null}
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  baseURL: "https://api.perplexity.ai/v1",
+});
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "Explain the key differences between REST and GraphQL APIs.",
+});
+
+console.log(response.output_text);
+```
+
+<Accordion title="Python 等效代码">
+  ```python theme={null}
+  import os
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Explain the key differences between REST and GraphQL APIs.",
+  )
+
+  print(response.output_text)
+  ```
+</Accordion>
+
+<Info>
+  请使用 `baseURL` (TypeScript) 或 `base_url` (Python) ——两者都必须包含 `/v1` 后缀。有关受支持参数的完整列表，以及通过此路径可使用的 Perplexity 功能，请参阅 [OpenAI 兼容性指南](/zh/docs/agent-api/openai-compatibility)。
+</Info>
+
+***
+
+<div id="path-3-claude-code-mcp-for-docs-lookup">
+  ## 路径 3：用于查阅文档的 Claude Code MCP
+</div>
+
+Claude Code 支持 Model Context Protocol (MCP) 。托管在 `https://docs.perplexity.ai/mcp` 的 **Perplexity Docs MCP** 可让 Claude Code 直接搜索并阅读 Perplexity 文档——无需切换到浏览器即可让代码建议以权威文档为依据，非常实用。
+
+<div id="add-the-server">
+  ### 添加服务器
+</div>
+
+Claude Code 可以使用 `claude mcp add` 命令并加上 `--transport http` 标志，注册基于 HTTP 的远程 MCP 服务器：
+
+<Tabs>
+  <Tab title="项目范围">
+    仅为当前项目添加该服务器 (写入仓库根目录的 `.mcp.json`) ：
+
+    ```bash theme={null}
+    claude mcp add --transport http --scope project perplexity-docs https://docs.perplexity.ai/mcp
+    ```
+  </Tab>
+
+  <Tab title="用户范围">
+    为本机上的所有项目添加该服务器：
+
+    ```bash theme={null}
+    claude mcp add --transport http --scope user perplexity-docs https://docs.perplexity.ai/mcp
+    ```
+  </Tab>
+</Tabs>
+
+<Tip>
+  如果你不想运行 CLI，也可以直接编辑项目的 `.mcp.json`：
+
+  ```json theme={null}
+  {
+    "mcpServers": {
+      "perplexity-docs": {
+        "type": "http",
+        "url": "https://docs.perplexity.ai/mcp"
+      }
+    }
+  }
+  ```
+
+  对于项目范围的服务器，Claude Code 会读取仓库根目录下的 `.mcp.json`。如需查看规范的 schema 定义以及更新的传输选项，请参阅 [Claude Code MCP 文档](https://docs.claude.com/en/docs/claude-code/mcp)。
+</Tip>
+
+<div id="verify-and-use">
+  ### 验证并使用
+</div>
+
+<Steps>
+  <Step title="确认服务器已注册">
+    运行 `claude mcp list`，检查输出中是否出现 `perplexity-docs`。
+  </Step>
+
+  <Step title="重启 Claude Code">
+    退出并重新启动 Claude Code (或在会话中运行 `/mcp`) ，以便加载新的服务器。
+  </Step>
+
+  <Step title="在提示词中使用">
+    可以这样询问 Claude Code：*“使用 Perplexity docs MCP，告诉我如何在 Agent API 中启用 `low`。”* Claude Code 会调用该 MCP 服务器，并基于最新文档作答。
+  </Step>
+</Steps>
+
+<Info>
+  Docs MCP 为只读，无需 API key——它仅提供 Perplexity 文档。若要让 Claude Code 使用 Perplexity 的**搜索与推理**工具 (而不仅仅是文档) ，请安装 [Perplexity MCP Server](/zh/docs/getting-started/integrations/mcp-server)，它基于 `@perplexity-ai/mcp-server`，并需要 `PERPLEXITY_API_KEY`。
+</Info>
+
+***
+
+<div id="replacing-claude-codes-model-not-recommended">
+  ## 替换 Claude Code 的模型 (不推荐)
+</div>
+
+Claude Code 专为在 Anthropic 的 Claude 模型上运行而设计，其智能体的工具调用、提示词和编辑行为均针对这些模型做过调优。把 Claude Code CLI 指向 Perplexity API、将其作为替代的模型提供方，**并非官方支持的配置**。
+
+推荐做法：
+
+* **在项目代码中调用 Perplexity** (路径 1 或路径 2) 。Claude Code 完全可以编写、编辑并运行调用 Perplexity 的代码，从而获得基于网络实时信息的回答、研究和搜索结果。
+* **添加 Perplexity Docs MCP** (路径 3) ，让 Claude Code 能在会话中直接查阅 Perplexity 文档。
+
+这样的组合既能发挥 Claude Code 在编辑和编排上的优势，又能用上 Perplexity 基于搜索的回答，同时不必依赖未在文档中说明的模型覆盖行为。
+
+***
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 快速开始" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    了解上述示例所用到的 preset、工具以及 Agent API 的完整功能。
+  </Card>
+
+  <Card title="Perplexity SDK 概览" icon="code-circle" href="/zh/docs/sdk/overview">
+    安装、配置并使用官方 Python 与 TypeScript SDK。
+  </Card>
+
+  <Card title="OpenAI 兼容性" icon="plug" href="/zh/docs/agent-api/openai-compatibility">
+    无缝替换的兼容细节、支持的参数以及迁移技巧。
+  </Card>
+
+  <Card title="Perplexity MCP 服务器" icon="server" href="/zh/docs/getting-started/integrations/mcp-server">
+    为 Claude Code 及其他 MCP 客户端添加 Perplexity 的 search、ask、research 和 reason 工具。
+  </Card>
+</CardGroup>
+
+<Info>
+  需要帮助？欢迎加入 [Perplexity 开发者社区](https://community.perplexity.ai)获取支持并参与讨论。
+</Info>

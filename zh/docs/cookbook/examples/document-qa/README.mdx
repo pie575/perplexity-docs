@@ -1,0 +1,251 @@
+---
+title: "基于嵌入向量的文档问答"
+description: "一个自包含的 RAG 系统：导入文档、生成上下文化嵌入，并通过 Agent API 回答问题"
+---
+
+<div id="document-qa-with-embeddings">
+  # 基于嵌入的文档问答
+</div>
+
+一个独立完整的检索增强生成 (RAG) 系统：导入文档，生成上下文化嵌入以支持语义搜索，并通过 Agent API 给出有据可依的答案。
+
+<div id="features">
+  ## 功能特性
+</div>
+
+* 导入纯文本文档并自动切分为分块
+* 使用 `pplx-embed-context-v1-4b` 生成具备文档感知能力的嵌入
+* 基于内存的向量存储，配合 numpy 余弦相似度检索
+* 通过 Agent API 调用 `anthropic/claude-sonnet-4-6` 生成答案
+* 完整可运行的流程：加载、分块、嵌入、查询、作答
+
+<div id="architecture">
+  ## 架构
+</div>
+
+**索引：** 加载文档，切分为相互重叠的分块，使用上下文化嵌入生成向量，并存储在内存中。
+
+**查询：** 对用户问题生成嵌入，计算余弦相似度，检索 top-k 分块，再通过 Agent API 生成答案。
+
+<Info>
+  对于文档分块而言，上下文化嵌入比标准嵌入生成的表示质量更高，因为模型能够理解这些分块同属一篇文档。
+</Info>
+
+<div id="installation">
+  ## 安装
+</div>
+
+```bash theme={null}
+pip install perplexityai numpy
+```
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## 用法
+</div>
+
+将下面的完整代码保存为 `document_qa.py` 并运行：
+
+```bash theme={null}
+python document_qa.py
+```
+
+交互模式：
+
+```bash theme={null}
+python document_qa.py --interactive
+```
+
+<div id="full-code">
+  ## 完整代码
+</div>
+
+```python theme={null}
+import base64
+import sys
+import numpy as np
+from perplexity import Perplexity
+
+client = Perplexity()
+
+# --- 分块 ---
+
+def chunk_text(text, chunk_size=300, overlap=50):
+    """Split text into overlapping chunks by word count."""
+    words = text.split()
+    chunks, start = [], 0
+    while start < len(words):
+        chunks.append(" ".join(words[start : start + chunk_size]))
+        start += chunk_size - overlap
+    return chunks
+
+# --- 嵌入辅助函数 ---
+
+def decode_embedding(b64_string):
+    """Decode a base64-encoded int8 embedding to float32."""
+    return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+def cosine_similarity(a, b):
+    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+# --- 构建索引 ---
+
+def build_index(documents, chunk_size=300, overlap=50):
+    """Chunk documents and generate contextualized embeddings."""
+    all_doc_chunks, metadata = [], []
+    for doc in documents:
+        chunks = chunk_text(doc["content"], chunk_size, overlap)
+        all_doc_chunks.append(chunks)
+        metadata.append({"title": doc["title"], "chunks": chunks})
+
+    print(f"Embedding {sum(len(c) for c in all_doc_chunks)} chunks...")
+    response = client.contextualized_embeddings.create(
+        input=all_doc_chunks,
+        model="pplx-embed-context-v1-4b"
+    )
+
+    index = []
+    for doc_obj in response.data:
+        meta = metadata[doc_obj.index]
+        for chunk_obj in doc_obj.data:
+            index.append({
+                "text": meta["chunks"][chunk_obj.index],
+                "embedding": decode_embedding(chunk_obj.embedding),
+                "doc_title": meta["title"],
+            })
+    print(f"Index built: {len(index)} chunks.")
+    return index
+
+# --- 检索 ---
+
+def retrieve(index, query_text, top_k=3):
+    """Embed the query and return the top-k most similar chunks."""
+    qr = client.contextualized_embeddings.create(
+        input=[[query_text]], model="pplx-embed-context-v1-4b"
+    )
+    q_emb = decode_embedding(qr.data[0].data[0].embedding)
+    scored = sorted(
+        [{**item, "score": float(cosine_similarity(q_emb, item["embedding"]))} for item in index],
+        key=lambda x: x["score"], reverse=True,
+    )
+    return scored[:top_k]
+
+# --- 生成回答 ---
+
+def generate_answer(query_text, chunks):
+    """Send retrieved context to the Agent API for answer generation."""
+    context = "\n\n".join(
+        f"[Source {i}: {c['doc_title']}]\n{c['text']}" for i, c in enumerate(chunks, 1)
+    )
+    response = client.responses.create(
+        model="anthropic/claude-sonnet-4-6",
+        input=[{
+            "role": "user",
+            "content": (
+                f"Answer the following question based ONLY on the provided context. "
+                f"If the context does not contain enough information, say so.\n\n"
+                f"Context:\n{context}\n\nQuestion: {query_text}"
+            ),
+        }],
+        instructions=(
+            "You are a precise document Q&A assistant. Answer using only the "
+            "provided context. Cite source numbers. Be concise."
+        ),
+        max_output_tokens=1024,
+    )
+    return response.output_text
+
+# --- 完整流程 ---
+
+def query(index, query_text, top_k=3):
+    print(f"\nQuery: {query_text}")
+    retrieved = retrieve(index, query_text, top_k)
+    for r in retrieved:
+        print(f"  [{r['doc_title']}] score={r['score']:.4f}: {r['text'][:70]}...")
+    return generate_answer(query_text, retrieved)
+
+# --- 示例文档 ---
+
+sample_documents = [
+    {
+        "title": "Introduction to Transformers",
+        "content": (
+            "The Transformer architecture was introduced in the paper Attention Is All "
+            "You Need by Vaswani et al. in 2017. It replaced recurrent layers with "
+            "self-attention mechanisms, enabling parallel processing of input sequences. "
+            "The key innovation is multi-head attention, which allows the model to attend "
+            "to information from different representation subspaces. Transformers consist "
+            "of an encoder and decoder with stacked layers of multi-head attention and "
+            "feed-forward sub-layers. The architecture has become the foundation for "
+            "modern language models including BERT, GPT, and T5."
+        ),
+    },
+    {
+        "title": "Retrieval-Augmented Generation",
+        "content": (
+            "Retrieval-Augmented Generation (RAG) combines information retrieval with "
+            "text generation. Instead of relying solely on knowledge stored in model "
+            "parameters, RAG systems retrieve relevant documents from an external "
+            "knowledge base and use them as context. This reduces hallucination because "
+            "the model grounds its responses in retrieved evidence. A typical RAG "
+            "pipeline has three stages: indexing, retrieval, and generation. During "
+            "indexing, documents are chunked and embedded into a vector store. At query "
+            "time, the question is embedded and compared against stored vectors. The "
+            "most relevant chunks are prepended to the prompt for answer generation."
+        ),
+    },
+]
+
+if __name__ == "__main__":
+    index = build_index(sample_documents)
+    if "--interactive" in sys.argv:
+        print("\nInteractive mode. Type 'quit' to exit.\n")
+        while True:
+            q = input("Question: ").strip()
+            if q.lower() in ("quit", "exit", "q"):
+                break
+            if q:
+                print(f"\nAnswer:\n{query(index, q)}\n")
+    else:
+        answer = query(index, "How does RAG reduce hallucination?")
+        print(f"\nAnswer:\n{answer}")
+```
+
+<div id="example-output">
+  ## 示例输出
+</div>
+
+```
+正在对 2 个文档中的 4 个分块进行嵌入...
+索引已构建：4 个分块。
+
+查询：RAG 如何减少幻觉？
+  [Retrieval-Augmented Generation] score=0.8432: Retrieval-Augmented Generation (RAG) combines information retrieval w...
+  [Retrieval-Augmented Generation] score=0.7891: most relevant chunks are prepended to the prompt for answer generatio...
+  [Introduction to Transformers] score=0.6104: The Transformer architecture was introduced in the paper Attention Is...
+
+回答：
+RAG 将模型的回复锚定在检索到的证据上，而非仅依赖模型参数中存储的知识，
+从而减少幻觉 [Source 1]。最相关的文档分块会被置于提示词前部，
+因此语言模型的回答基于知识库中确凿的文本证据 [Source 2]。
+```
+
+<Tip>
+  在生产环境中，请将内存中的 numpy 索引替换为专用的向量数据库，例如 Pinecone、Weaviate 或 Qdrant。嵌入与检索逻辑保持不变。
+</Tip>
+
+<Warning>
+  上下文化嵌入要求同一文档内的分块按原始先后顺序发送。打乱分块顺序会降低嵌入质量。
+</Warning>
+
+<div id="limitations">
+  ## 局限性
+</div>
+
+* 内存存储适合原型验证，但无法扩展到大规模集合。生产环境请使用向量数据库。
+* 分块大小和重叠度可能需要针对你的文档进行调优。分块越短，精确度越高；分块越长，保留的上下文越完整。
+* `pplx-embed-context-v1-4b` 模型对每个文档的上下文窗口为 32K token。
+* 回答质量取决于检索质量。如果检索到的分块不对，回答也会随之出现偏差。

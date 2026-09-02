@@ -1,0 +1,521 @@
+---
+title: "Perplexity Computer MCP サーバー"
+sidebarTitle: "Perplexity Computer MCP"
+description: "Model Context Protocol (MCP) を介して Perplexity Computer を利用し、AI アシスタントに実世界のタスクを実行する能力を与えます。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+Perplexity Computer MCP サーバー は、AI アシスタントを [Perplexity Computer](https://www.perplexity.ai) に接続します。Perplexity Computer は、ユーザーに代わってほぼあらゆるタスクを遂行できる汎用 AI エージェントです。Model Context Protocol を介して、MCP クライアントは複雑な複数ステップの作業を Computer に委任し、構造化された結果を受け取れます。
+
+<Note>
+  この統合は、Perplexity の Search API および Completion API を対象とした [Perplexity API MCP Server](/ja/docs/getting-started/integrations/mcp-server) とは別のものです。
+</Note>
+
+Computer でできること:
+
+* ログインが必要なページも含め、リアルタイムの情報を Web で**検索・閲覧**する
+* Python、Node、標準的な Unix ツールを備えた対話型 Linux sandbox で**コードを記述・実行**する
+* PDF、スライド資料、スプレッドシート、画像、動画などの**ドキュメントやメディアを作成**する
+* Gmail や Outlook で**メールを読み、送信**し、カレンダーの予定を登録する
+* GitHub、Linear、Jira、Asana、Slack、Notion などをまたいで**タスクを管理**する
+* Snowflake、Databricks、Google Sheets、Salesforce などのソースの**データを分析**する
+* **Web サイトを構築**し、数分で公開 URL に**デプロイ**する
+* ワンクリック OAuth に対応したマネージドコネクタ基盤を通じて、**400 以上のサービスに接続**する
+
+<div id="authentication">
+  ## 認証
+</div>
+
+Computer MCP サーバー は、Perplexity アカウントを使用した **OAuth 2.0** でユーザーを認証します。API key は不要です。
+
+初回利用時には、対応する MCP クライアントがブラウザウィンドウを開き、認可フローを自動的に完了します。
+
+<Info>
+  Computer の利用料は Perplexity アカウントのクレジットから請求されます。残高が不足している場合、Computer は `insufficient_credits` を返し、請求情報を管理するためのリンクを提示します。
+</Info>
+
+<div id="installation">
+  ## インストール
+</div>
+
+<Steps>
+  <Step title="ステップ 1: サーバーをインストールする">
+    Computer MCP サーバーをクライアントに追加します。
+
+    <Tabs>
+      <Tab title="Claude Code">
+        ```bash theme={null}
+        claude mcp add perplexity-computer --transport http https://www.perplexity.ai/rest/computer/mcp
+        ```
+      </Tab>
+
+      <Tab title="Codex">
+        ```bash theme={null}
+        codex mcp add perplexity-computer --url https://www.perplexity.ai/rest/computer/mcp
+        ```
+      </Tab>
+
+      <Tab title="Cursor">
+        `mcp.json` に次を追加します。
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="VS Code">
+        `.vscode/mcp.json` に次を追加します。
+
+        ```json theme={null}
+        {
+          "servers": {
+            "perplexity-computer": {
+              "type": "http",
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Windsurf">
+        `~/.codeium/windsurf/mcp_config.json` に次を追加します。
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "serverUrl": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="Claude Desktop">
+        `claude_desktop_config.json` に次を追加します。
+
+        ```json theme={null}
+        {
+          "mcpServers": {
+            "perplexity-computer": {
+              "url": "https://www.perplexity.ai/rest/computer/mcp"
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="その他のクライアント">
+        HTTP トランスポートに対応している MCP クライアントであれば、次のサーバー URL で接続できます。
+
+        ```
+        https://www.perplexity.ai/rest/computer/mcp
+        ```
+
+        正しい設定形式については、お使いのクライアントのドキュメントを参照してください。
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="ステップ 2: Perplexity Computer で認証する">
+    インストール後、Perplexity アカウントでの認証を求められ、OAuth フローを完了するためにブラウザのウィンドウが開きます。
+
+    <img src="https://mintcdn.com/perplexity/ar3swoyOvYqPFvZd/docs/assets/images/computer_mcp/oauth.png?fit=max&auto=format&n=ar3swoyOvYqPFvZd&q=85&s=33f1ecbab4a6fbadd97840e3b0aec64c" alt="Perplexity OAuth screen for Computer MCP" />
+  </Step>
+
+  <Step title="ステップ 3: Computer MCP を使い始める">
+    認証が完了すれば、MCP クライアントから Perplexity Computer にタスクを任せる準備は完了です。
+
+    簡単なフローを実行して接続を確認し、Computer の動作を試してみましょう。
+
+    ```text theme={null}
+    Summarize the top 5 stories on Hacker News right now.
+    ```
+
+    続けて、同じ会話で次のように指示します。
+
+    ```text theme={null}
+    Turn that into a PDF report.
+    ```
+  </Step>
+</Steps>
+
+<div id="conversation-threading">
+  ## 会話スレッド
+</div>
+
+Computer は最初のメッセージのコンテキストを記憶し、それを踏まえて処理を続けます。後続のプロンプトを同じワークフロー内に保つには、MCP クライアントから前回のレスポンスの `thread_id` を渡す必要があります。
+
+最初の呼び出しでは新しいスレッドが作成され、`thread_id` が返されます。以降の呼び出しでその `thread_id` を再利用すれば、同じセッションを継続できます。
+
+```
+1. call_perplexity_computer(message: "Summarize the top 5 stories on Hacker News right now")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174000", event: "complete", text: "Here are today's top stories..." }
+
+2. call_perplexity_computer(message: "Turn that into a PDF report", thread_id: "123e4567-e89b-12d3-a456-426614174000")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174000", event: "complete", text: "Here's the report.\n\n[report.pdf](https://...)" }
+```
+
+これはインタラクティブなイベントにも当てはまります。Computer がタスクの途中でサービスへの接続を必要とする場合は `auth_required` イベントを返し、認証後は同じスレッド上で会話が再開されます。
+
+```
+1. call_perplexity_computer(message: "Email me a summary of my unread Slack messages")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174001", event: "auth_required", interactive: { type: "auth_required", connector: "slack", auth_url: "https://..." } }
+
+2. notify_connected(thread_id: "123e4567-e89b-12d3-a456-426614174001", message: "Slack connected")
+   -> { thread_id: "123e4567-e89b-12d3-a456-426614174001", event: "complete", text: "Done! Sent the summary to your email." }
+```
+
+<div id="status-and-progress-updates">
+  ## ステータスと進捗の更新
+</div>
+
+Computer のタスクは、ブラウジング、コネクタ認証、コード実行、ファイル生成などを伴う場合、完了までに数分かかることがあります。MCP ツール呼び出しは、Computer が最終状態または対応が必要なチェックポイントに到達するまで開いたままになります。
+
+タスクの現在のステータスは、各レスポンスの `event` フィールドで確認してください。同じレスポンスには、後続の呼び出しに必要な `thread_id` も含まれています。
+
+```
+{
+  "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+  "event": "complete",
+  "text": "Finished the report."
+}
+```
+
+Computer が処理を続行するために入力を必要とする場合、レスポンスには対応が必要なイベントと `interactive` オブジェクトが含まれます。
+
+```
+{
+  "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+  "event": "ask_user_question",
+  "text": "Which format should I use?\n1. PDF\n2. DOCX",
+  "interactive": {
+    "type": "ask_user_question",
+    "thread_id": "123e4567-e89b-12d3-a456-426614174000",
+    "respond_with_tool": "answer_question"
+  }
+}
+```
+
+これらのチェックポイントは、同じ `thread_id` を指定して該当のフォローアップツールを呼び出すことで処理します。
+
+| イベント                  | フォローアップ                                                              |
+| --------------------- | -------------------------------------------------------------------- |
+| `ask_user_question`   | ユーザーの回答を添えて `answer_question` を呼び出します。                               |
+| `confirm_action`      | `confirm_action_approve` または `confirm_action_deny` を呼び出します。          |
+| `auth_required`       | OAuth URL を開き、その後 `notify_connected` を呼び出します。                        |
+| `sleep` または `waiting` | 続行したいタイミングで、同じ `thread_id` を指定して `call_perplexity_computer` を呼び出します。 |
+
+<Info>
+  Computer MCP サーバーは、タスクの実行中に MCP の進捗通知としてステータス更新を送信します。これらを表示するには、クライアント側で進捗トークンを含め、進捗通知に対応している必要があります。これらの更新はタスクのステータスを示すものであり、token 単位の応答ストリーミングではありません。
+</Info>
+
+ツールが `timeout` を返した場合、MCP サーバーが待機時間内にチェックポイントを受信できなかったことを意味します。タスクはまだ実行中の可能性があります。`thread_id` を保持しておき、同じ `thread_id` を指定して `call_perplexity_computer` を再度呼び出すことで、処理を続行するか最新のステータスを確認してください。
+
+<div id="file-uploads">
+  ## ファイルのアップロード
+</div>
+
+Computer は、ユーザーが提供したファイルを扱えます。タスクにファイルを添付するには、`create_attachment_upload` で署名付き S3 エンベロープを取得し、バイト列を直接 S3 にアップロードしたうえで、返された URL を次のツール呼び出しの `attachment_urls` に渡します。MCP サーバーがファイルの内容を参照することはないため、ワーカーを経由せずに大容量のバイナリまで扱えます。
+
+添付ファイル 1 件あたりの最大サイズは **200 MB** です。
+
+<Steps>
+  <Step title="ステップ 1: アップロードエンベロープを取得する">
+    ファイルの `filename`、`mime_type`、`size_bytes` を指定して `create_attachment_upload` を呼び出します。サーバーは、数分間有効な署名付き S3 POST を返します。
+
+    ```
+    create_attachment_upload(
+      filename: "report.pdf",
+      mime_type: "application/pdf",
+      size_bytes: 482190,
+    )
+    -> {
+      attachment_url: "https://bucket.s3.amazonaws.com/uploads/<uuid>/report.pdf",
+      upload_url: "https://bucket.s3.amazonaws.com",
+      upload_fields: { "key": "uploads/<uuid>/report.pdf", "policy": "...", ... },
+    }
+    ```
+  </Step>
+
+  <Step title="ステップ 2: バイト列を S3 に POST する">
+    認証なしの `multipart/form-data` POST を `upload_url` に送信します。`upload_fields` のすべてのキーをフォームフィールドとして含め、さらにファイルを `file` パートとして追加します。
+
+    ```bash theme={null}
+    curl -X POST "$UPLOAD_URL" \
+      -F "key=$KEY" \
+      -F "policy=$POLICY" \
+      -F "x-amz-signature=$SIGNATURE" \
+      -F "file=@./report.pdf"
+    ```
+
+    成功すると S3 は `204 No Content` を返します。これでファイルは `attachment_url` からアクセスできるようになります。
+  </Step>
+
+  <Step title="ステップ 3: タスク内でファイルを参照する">
+    `attachment_urls` 配列を使って、任意のタスクツールに `attachment_url` を渡します。ファイルは新しいタスクにも、既存スレッドのフォローアップにも添付できます。
+
+    ```
+    call_perplexity_computer(
+      message: "Summarize this report and pull out the key risks.",
+      attachment_urls: ["https://bucket.s3.amazonaws.com/uploads/<uuid>/report.pdf"],
+    )
+    ```
+  </Step>
+</Steps>
+
+<div id="create_attachment_upload">
+  ### `create_attachment_upload`
+</div>
+
+単一ファイル用の署名付き S3 POST をリクエストします。クライアントが S3 へ直接バイトデータをアップロードする際に使用するエンベロープを返します。
+
+| パラメータ        | 型       | 必須 | 説明                                                 |
+| ------------ | ------- | -- | -------------------------------------------------- |
+| `filename`   | string  | はい | 拡張子を含むファイル名 (例: `report.pdf`) 。                    |
+| `mime_type`  | string  | はい | ファイルのコンテンツタイプ (例: `application/pdf`、`image/png`) 。 |
+| `size_bytes` | integer | はい | ファイルサイズ (バイト単位) 。200 MB を超えることはできません。              |
+
+戻り値:
+
+| フィールド            | 型      | 説明                                         |
+| ---------------- | ------ | ------------------------------------------ |
+| `attachment_url` | string | 後続のツール呼び出しで `attachment_urls` に指定します。      |
+| `upload_url`     | string | ファイルを POST する S3 エンドポイント。                  |
+| `upload_fields`  | object | マルチパート POST で `file` パートとともに送信するフォームフィールド。 |
+
+<div id="capabilities">
+  ## 機能
+</div>
+
+<div id="browser-control">
+  ### ブラウザ操作
+</div>
+
+Computer には、検索だけでは対応できないタスクのために、フル機能のクラウドブラウザが備わっています。Web サイトの操作、フォームの入力、ログインが必要なコンテンツへのアクセスが求められるタスクでは、Computer が自動的にブラウザセッションを起動します。
+
+| 機能                | 説明                                                          |
+| ----------------- | ----------------------------------------------------------- |
+| ナビゲーション           | 任意の URL への移動、要素のクリック、フォームの入力、構造化データの抽出を行います。                |
+| 認証                | 複数段階のログインフローや認証済みセッションに対応します。                               |
+| スクリーンショット         | 任意の Web ページの高精細なスクリーンショットを取得します。                            |
+| バッチ処理             | 数十件の URL にまたがるブラウザタスクを並列実行し、結果を構造化された出力にまとめます。              |
+| JavaScript レンダリング | 単純な HTTP リクエストでは取得できない、JavaScript を多用する動的ページのコンテンツにアクセスします。 |
+
+<div id="code-execution">
+  ### Code Execution
+</div>
+
+Computer は、永続的なファイルワークスペースを備えた sandbox 化された Linux VM 上でコードを実行します。Python、Node.js、ffmpeg、標準的な Unix ツールがプリインストールされており、追加のパッケージもその場でインストールできます。
+
+| 機能          | 説明                                                |
+| ----------- | ------------------------------------------------- |
+| インタラクティブ実行  | Python や Node のスクリプトをリアルタイムに記述・実行し、結果を見ながら反復できます。 |
+| データ処理       | CSV、JSON、Excel、PDF、画像、音声、動画の各ファイルを処理します。          |
+| シェルコマンド     | システム操作、データ処理、自動化のためのシェルコマンドを実行します。                |
+| 可視化         | グラフ、プロット、データ分析の出力を生成します。                          |
+| ファイルワークスペース | セッションをまたいでファイルの作成・読み取り・管理を行う永続的なディレクトリです。         |
+
+<div id="connected-services">
+  ### 連携サービス
+</div>
+
+Computer は、マネージド型のコネクタフレームワークを通じて **400 以上の外部サービス**に接続します。ユーザーは OAuth で一度認証するだけで、あとは Computer が token を安全に使ってデータの読み取り、アクションの実行、サービス横断の検索を行います。
+
+| カテゴリ      | サービス                                                                   |
+| --------- | ---------------------------------------------------------------------- |
+| コミュニケーション | Slack, Gmail, Outlook, Microsoft Teams                                 |
+| カレンダー     | Google Calendar, Outlook Calendar                                      |
+| ドキュメント    | Notion, Google Docs, Google Sheets, Dropbox, OneDrive, SharePoint, Box |
+| プロジェクト管理  | Linear, Jira, Asana, Confluence, Trello                                |
+| CRM・セールス  | HubSpot, Salesforce                                                    |
+| 開発        | GitHub, GitLab, Vercel, Supabase                                       |
+| データ・分析    | Snowflake, Databricks, Airtable, Google Sheets                         |
+| 金融        | Stripe, Ramp, Plaid                                                    |
+| リサーチ      | CB Insights, PitchBook, Statista, SEC EDGAR                            |
+| その他       | カテゴリを横断する数百種類の追加コネクタ                                                  |
+
+タスクに未接続のサービスが必要な場合、Computer が OAuth リンクを提示します。ブラウザで認証すると、そのコネクタはすぐに利用できるようになります。
+
+<div id="available-tools">
+  ## 利用可能なツール
+</div>
+
+<CardGroup cols={2}>
+  <Card
+    title="call_perplexity_computer"
+    icon={
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+<path d="M10.2 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M13.8 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M3 19.2H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17.4 4.8H6.6C5.606 4.8 4.8 5.606 4.8 6.6V13.8C4.8 14.794 5.606 15.6 6.6 15.6H17.4C18.394 15.6 19.2 14.794 19.2 13.8V6.6C19.2 5.606 18.394 4.8 17.4 4.8Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+}
+  >
+    Perplexity Computer にメッセージを送信して、タスクを開始または継続します。すべてのやり取りの起点となる、中心的なツールです。
+
+    **主な用途:** 新しいタスクの開始、追加指示の送信、一時停止した会話の再開。
+  </Card>
+
+  <Card title="answer_question" icon="message">
+    Computer が追加情報を求めてきた際に、回答を中継します。MCP の elicitation に対応するクライアントであれば、実行中の呼び出し内で処理できます。
+
+    **トリガー:** `ask_user_question` イベント。
+  </Card>
+
+  <Card title="confirm_action_approve / deny" icon="shield-check">
+    メールの送信やコードのデプロイなど、慎重な扱いが必要なアクションを承認または拒否します。MCP の elicitation に対応するクライアントであれば、実行中の呼び出し内で処理できます。
+
+    **トリガー:** `confirm_action` イベント。
+  </Card>
+
+  <Card title="notify_connected" icon="plug">
+    サードパーティサービスの OAuth フロー完了後に、タスクを再開します。
+
+    **トリガー:** `auth_required` イベント。
+  </Card>
+
+  <Card title="create_attachment_upload" icon="paperclip">
+    Computer に使わせたいファイル用に、署名付きの S3 アップロードエンベロープを作成します。
+
+    **主な用途:** ファイルの実データを MCP サーバー経由で送らずに添付する場合。
+  </Card>
+</CardGroup>
+
+<div id="call_perplexity_computer">
+  ### `call_perplexity_computer`
+</div>
+
+中心となるツールです。メッセージを送信して新しいタスクを開始するか、既存の会話を継続します。
+
+| パラメータ             | 型        | 必須  | 説明                                                         |
+| ----------------- | -------- | --- | ---------------------------------------------------------- |
+| `message`         | string   | いいえ | タスクの説明、またはフォローアップのメッセージ。                                   |
+| `thread_id`       | string   | いいえ | 既存の会話を継続する場合のスレッド ID。新規に開始する場合は省略します。                      |
+| `attachment_urls` | string[] | いいえ | このターンに添付するファイルの URL (`create_attachment_upload` で取得したもの) 。 |
+
+<Info>
+  MCP のエリシテーションに対応しているクライアントでは、実行中のツール呼び出しの中で `ask_user_question` と `confirm_action` を処理できます。対応していない場合は、インタラクティブイベントの後にタスクを再開するために以下のツールを使用してください。
+</Info>
+
+<div id="answer_question">
+  ### `answer_question`
+</div>
+
+Computer が `ask_user_question` イベントを返したときに、回答を中継します。
+
+| パラメータ             | 型        | 必須  | 説明                                                        |
+| ----------------- | -------- | --- | --------------------------------------------------------- |
+| `thread_id`       | string   | はい  | 進行中の会話のスレッド ID。                                           |
+| `answers`         | object   | はい  | 各質問と回答を対応付けるキー・バリューのペア。                                   |
+| `attachment_urls` | string[] | いいえ | この回答に添付するファイルの URL (`create_attachment_upload` で取得したもの) 。 |
+
+<div id="confirm_action_approve">
+  ### `confirm_action_approve`
+</div>
+
+`confirm_action` イベントで保留中となっているアクションを承認します。
+
+| パラメータ             | 型        | 必須  | 説明                                                        |
+| ----------------- | -------- | --- | --------------------------------------------------------- |
+| `thread_id`       | string   | はい  | アクティブな会話のスレッド ID。                                         |
+| `result`          | string   | はい  | 承認の理由またはメッセージ。                                            |
+| `attachment_urls` | string[] | いいえ | この承認に添付するファイルの URL (`create_attachment_upload` で取得したもの) 。 |
+
+<div id="confirm_action_deny">
+  ### `confirm_action_deny`
+</div>
+
+`confirm_action` イベントで保留中となっているアクションを拒否します。
+
+| パラメータ             | 型        | 必須  | 説明                                                        |
+| ----------------- | -------- | --- | --------------------------------------------------------- |
+| `thread_id`       | string   | はい  | アクティブな会話のスレッド ID。                                         |
+| `result`          | string   | はい  | アクションを拒否する理由。                                             |
+| `attachment_urls` | string[] | いいえ | この拒否に添付するファイルの URL (`create_attachment_upload` で取得したもの) 。 |
+
+<div id="notify_connected">
+  ### `notify_connected`
+</div>
+
+`auth_required` イベントによって開始された OAuth フローを完了した後に、タスクを再開します。
+
+| パラメータ             | 型        | 必須  | 説明                                                       |
+| ----------------- | -------- | --- | -------------------------------------------------------- |
+| `thread_id`       | string   | はい  | アクティブな会話のスレッド ID。                                        |
+| `message`         | string   | はい  | 接続完了に関するメッセージ。                                           |
+| `attachment_urls` | string[] | いいえ | 再開時に添付するファイルの URL (`create_attachment_upload` で取得したもの) 。 |
+
+<div id="response-format">
+  ## レスポンス形式
+</div>
+
+タスクツールは以下のフィールドを持つ JSON オブジェクトを返します。`create_attachment_upload` の場合は代わりに、[File Uploads](#file-uploads) で説明しているアップロードエンベロープを返します。
+
+| フィールド         | 型      | 説明                                                            |
+| ------------- | ------ | ------------------------------------------------------------- |
+| `thread_id`   | string | 会話の UUID。会話を継続する際にこの値を再度渡します。スレッドが開始される前にリクエストが失敗した場合は省略されます。 |
+| `event`       | string | 発生した内容を示すイベントの種類。[Events](#events) を参照してください。                 |
+| `text`        | string | Markdown 形式のレスポンステキスト。                                        |
+| `interactive` | object | 後続のアクションが必要なインタラクティブイベントの場合のみ含まれます。                           |
+
+<div id="events">
+  ## Events
+</div>
+
+各レスポンスには、結果を示す `event` フィールドが含まれます。
+
+| イベント                   | 説明                                        | 必要な対応                                                          |
+| ---------------------- | ----------------------------------------- | -------------------------------------------------------------- |
+| `complete`             | タスクが正常に完了しました。                            | なし。                                                            |
+| `error`                | タスクが失敗しました。                               | エラーメッセージを確認してください。                                             |
+| `cancelled`            | タスクが完了前にキャンセルされました。                       | 新しいタスクを開始するか、新しい指示でスレッドを継続してください。                              |
+| `sleep`                | エージェントがタスクの途中で一時停止しています。                  | 同じ `thread_id` で `call_perplexity_computer` を呼び出して再開してください。    |
+| `waiting`              | エージェントが外部条件の成立または時間の経過を待っています。            | `thread_id` を保持し、準備ができたらスレッドを継続してください。                         |
+| `ask_user_question`    | エージェントが追加情報を必要としています。                     | 回答を添えて `answer_question` を呼び出してください。                           |
+| `confirm_action`       | エージェントが機微な操作の実行を求めています。                   | `confirm_action_approve` または `confirm_action_deny` を呼び出してください。 |
+| `auth_required`        | サードパーティサービスの認証が必要です。                      | 提示された `auth_url` をブラウザで開き、その後 `notify_connected` を呼び出してください。   |
+| `two_factor_required`  | コネクタまたはサイトで二要素認証が求められています。                | `text` の指示に従い、同じ `thread_id` で継続してください。                        |
+| `insufficient_credits` | アカウントのクレジットが不足しています。                      | クレジットを補充するか、支出上限を調整してください。                                     |
+| `access_denied`        | このアカウントでは Computer を利用できません。              | 組織に所属している場合は、管理者に Computer へのアクセスを有効化するよう依頼してください。             |
+| `timeout`              | 待機時間が終了するまでに MCP サーバーがチェックポイントを受信しませんでした。 | 同じ `thread_id` で再試行して継続するか、現在のステータスを照会してください。                  |
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card
+    title="Perplexity Computer"
+    icon={
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none">
+<path d="M10.2 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M13.8 9.3V11.1" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M3 19.2H21" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+<path d="M17.4 4.8H6.6C5.606 4.8 4.8 5.606 4.8 6.6V13.8C4.8 14.794 5.606 15.6 6.6 15.6H17.4C18.394 15.6 19.2 14.794 19.2 13.8V6.6C19.2 5.606 18.394 4.8 17.4 4.8Z" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+</svg>
+}
+    href="https://www.perplexity.ai"
+  >
+    あらゆるタスクをあなたの代わりにこなすデジタルワーカー、Perplexity Computer について詳しくご紹介します。
+  </Card>
+
+  <Card title="Perplexity API MCP Server" icon="search" href="/ja/docs/getting-started/integrations/mcp-server">
+    Perplexity の API で、リアルタイムの情報取得と生成をエージェントに組み込みましょう。
+  </Card>
+</CardGroup>

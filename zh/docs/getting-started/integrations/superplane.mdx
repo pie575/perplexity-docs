@@ -1,0 +1,156 @@
+---
+title: "在 SuperPlane 中使用 Perplexity"
+description: "在 SuperPlane 工作流中运行 Perplexity 智能体——借助网页搜索、URL 抓取和来源引用，完成研究、归纳与分析等步骤。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+[SuperPlane](https://superplane.com) 是一个面向长时运行、事件驱动工作流的开源 DevOps 控制平面。它将 Perplexity 以原生**组件**的形式提供在画布上——只需向任意工作流中拖入一个 Perplexity 节点，即可运行一个具备网页搜索和 URL 抓取能力的 Perplexity 智能体，并将响应与来源引用作为载荷发送给下游节点。
+
+<Info>
+  **SuperPlane** 将工作流建模为事件驱动的画布：节点发出载荷，下游节点订阅这些载荷，运行时则以完整的可观测性追踪每一次运行。详见 [superplane.com](https://superplane.com)。
+</Info>
+
+<div id="component-perplexity">
+  ## 组件：Perplexity
+</div>
+
+Perplexity 组件以工作流步骤的形式运行 Perplexity AI 智能体，可用于研究、信息整合、自动化分析，以及基于实时网络来源的内容生成。
+
+<div id="action">
+  ### Action
+</div>
+
+| Action        | 说明                                     |
+| ------------- | -------------------------------------- |
+| **Run Agent** | 运行具备网页搜索和 URL 抓取能力的 Perplexity AI 智能体。 |
+
+<div id="configuration">
+  ### 配置
+</div>
+
+| 参数               | 说明                                                                                                                                                                 |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Preset**       | 要使用的 智能体 preset：`fast-search`、`pro-search`、`deep-research` 或 `advanced-deep-research`，分别对应 Agent API 的 `fast` / `low` / `medium` / `high` 层级。设置该项后，`Model` 将被忽略。 |
+| **Model**        | 未指定 preset 时使用的 Agent API model 标识符 (例如 `perplexity/sonar`) 。                                                                                                      |
+| **Input**        | 提供给 智能体 的提示词或问题。支持 SuperPlane [表达式](https://docs.superplane.com/concepts/expressions)。                                                                           |
+| **Instructions** | 可选，为 智能体 提供的系统级指令。                                                                                                                                               |
+| **Web Search**   | 启用 `web_search` 工具 (默认值：`true`) 。                                                                                                                                  |
+| **Fetch URL**    | 启用 `fetch_url` 工具 (默认值：`true`) 。                                                                                                                                   |
+
+<div id="output-payload">
+  ### 输出载荷
+</div>
+
+该组件会输出一个载荷，下游节点可通过表达式访问以下字段：
+
+| 字段          | 说明               |
+| ----------- | ---------------- |
+| `text`      | 生成的文本响应。         |
+| `citations` | 来自网页结果的来源引用。     |
+| `model`     | 本次运行实际使用的 model。 |
+| `usage`     | token 用量与费用信息。   |
+
+<div id="api-key-setup">
+  ## API key 设置
+</div>
+
+在 SuperPlane 中使用你的 API key 配置 Perplexity 集成。打开画布的 **Integrations** 设置，添加 Perplexity 集成，然后粘贴你的密钥。
+
+<Card title="获取 API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 API 门户中生成你的 Perplexity API key。
+</Card>
+
+<div id="quick-start">
+  ## 快速开始
+</div>
+
+一个最简工作流：每当手动触发运行时，就向 Perplexity 提一个问题。
+
+<Steps>
+  <Step title="添加 Manual Run 触发器">
+    将 **Manual Run** 节点拖放到画布上——它就是该工作流的入口。
+  </Step>
+
+  <Step title="添加 Perplexity 节点">
+    点击 **+ Components**，选择 **Perplexity → Run Agent**，并将其拖到画布上，然后连接 **Manual Run → Perplexity**。
+  </Step>
+
+  <Step title="配置 智能体">
+    在 Perplexity 节点中设置：
+
+    * **Preset**：`pro-search`
+    * **Input**：`What is the latest news on nuclear fusion?`
+    * **Web Search**：启用
+    * **Fetch URL**：启用
+  </Step>
+
+  <Step title="运行">
+    点击 Manual Run 节点上的 **Run**。Perplexity 节点会输出一个包含 `text`、`citations`、`model` 和 `usage` 的载荷。
+  </Step>
+</Steps>
+
+<div id="reading-the-response-downstream">
+  ## 在下游读取响应
+</div>
+
+使用 SuperPlane 表达式将 Perplexity 的输出传入下一个节点——例如发送 Slack 消息或写入数据库：
+
+```
+Research result: {{ $['Perplexity'].data.text }}
+
+Sources:
+{{ $['Perplexity'].data.citations }}
+```
+
+在条件字段 (If / Filter) 中，编写表达式时无需使用 `{{ }}`：
+
+```
+$['Perplexity'].data.usage.total_tokens > 1000
+```
+
+<div id="use-cases">
+  ## 使用场景
+</div>
+
+* **事件分级处理** —— 告警触发时，先运行一次 Perplexity 研究步骤，收集相关供应商、库或 CVE 的背景信息，再呼叫值班人员。
+* **发布说明生成** —— 将原始的 GitHub 提交差异转化为面向客户、带来源引用的发布说明。
+* **竞品监控** —— 设置每日定时运行的画布，向 Perplexity 查询行业动态，并将摘要发送到 Slack 频道。
+* **文档接地** —— 将 Perplexity 运行的输出传递给下游组件，用于更新 Notion 页面或知识库。
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="SuperPlane Perplexity 组件" icon="book" href="https://docs.superplane.com/components/perplexity">
+    官方组件文档。
+  </Card>
+
+  <Card title="SuperPlane 文档" icon="globe" href="https://docs.superplane.com">
+    完整的 SuperPlane 文档。
+  </Card>
+
+  <Card title="Perplexity Agent API" icon="robot" href="/zh/docs/agent-api/quickstart">
+    了解 Perplexity 智能体层的工作原理。
+  </Card>
+
+  <Card title="Agent API model" icon="sparkles" href="/zh/docs/agent-api/models">
+    可用 model 与定价。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中需要帮助？
+
+* 浏览 [SuperPlane 文档](https://docs.superplane.com)
+* 查看我们的[常见问题](/zh/docs/resources/faq)

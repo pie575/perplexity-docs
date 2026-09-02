@@ -1,0 +1,370 @@
+---
+title: "Mode arrière-plan"
+description: "Exécutez des tâches agentiques de longue durée en asynchrone : soumettez-les avec background, interrogez-les par identifiant de réponse, diffusez-les en flux, reconnectez-vous et annulez-les."
+---
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Les exécutions agentiques longues, comme la recherche approfondie ou les traitements lourds dans le sandbox, peuvent prendre plusieurs minutes. Le mode arrière-plan exécute ces tâches de façon asynchrone, ce qui évite à votre application les dépassements de délai et les connexions interrompues : lancez l&#39;exécution, conservez l&#39;identifiant de sa réponse, puis interrogez le résultat périodiquement. L&#39;exécution se poursuit côté serveur même si votre client se déconnecte.
+
+<div id="submit-a-background-request">
+  ## Soumettre une requête en arrière-plan
+</div>
+
+Définissez `background=true` lors de la création de la réponse. Le point de terminaison de soumission est `POST https://api.perplexity.ai/v1/agent`. L&#39;appel de création renvoie immédiatement un objet Response ; conservez son `id` et vérifiez son `status` initial.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Research the current EV charging market and summarize the main segments.",
+      tools=[{"type": "web_search"}, {"type": "sandbox"}],
+      background=True,
+  )
+
+  print(f"Response ID: {response.id}")
+  print(f"Status: {response.status}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Research the current EV charging market and summarize the main segments.',
+    tools: [{ type: 'web_search' }, { type: 'sandbox' }],
+    background: true,
+  });
+
+  console.log(`Response ID: ${response.id}`);
+  console.log(`Status: ${response.status}`);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Research the current EV charging market and summarize the main segments.",
+      "tools": [{ "type": "web_search" }, { "type": "sandbox" }],
+      "background": true
+    }' | jq '{id, status}'
+  ```
+</CodeGroup>
+
+<div id="poll-for-the-result">
+  ## Interroger le résultat
+</div>
+
+Interrogez une réponse en arrière-plan avec `GET https://api.perplexity.ai/v1/agent/{id}`. Une réponse en arrière-plan n&#39;est pas dans un état terminal tant que son statut est `queued` ou `in_progress`. Elle atteint un état terminal lorsque son statut est `completed`, `failed`, `cancelled` ou `incomplete` (`incomplete` signale une exécution interrompue avant la fin, par exemple en cas de troncature).
+
+Interrogez la réponse jusqu&#39;à ce qu&#39;elle atteigne un statut terminal, puis aiguillez le traitement selon l&#39;état final.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Write a sourced brief on grid-scale battery storage trends.",
+      tools=[{"type": "web_search"}, {"type": "sandbox"}],
+      background=True,
+  )
+
+  while response.status not in ("completed", "failed", "cancelled", "incomplete"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(f"Final status: {response.status}")
+
+  if response.status == "completed":
+      print(get_output_text(response))
+  elif response.status == "failed":
+      print(response.error)
+  elif response.status == "cancelled":
+      print("The response was cancelled.")
+  elif response.status == "incomplete":
+      print("The response stopped before finishing.")
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Write a sourced brief on grid-scale battery storage trends.',
+    tools: [{ type: 'web_search' }, { type: 'sandbox' }],
+    background: true,
+  });
+
+  while (!['completed', 'failed', 'cancelled', 'incomplete'].includes(response.status)) {
+    await new Promise((resolve) => setTimeout(resolve, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(`Final status: ${response.status}`);
+
+  if (response.status === 'completed') {
+    console.log(response.output_text);
+  } else if (response.status === 'failed') {
+    console.log(response.error);
+  } else if (response.status === 'cancelled') {
+    console.log('The response was cancelled.');
+  } else if (response.status === 'incomplete') {
+    console.log('The response stopped before finishing.');
+  }
+  ```
+
+  ```bash cURL theme={null}
+  # 1. Soumettre l'exécution en arrière-plan et enregistrer son id.
+  RESPONSE_ID=$(curl -s https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Write a sourced brief on grid-scale battery storage trends.",
+      "tools": [{ "type": "web_search" }, { "type": "sandbox" }],
+      "background": true
+    }' | jq -r '.id')
+
+  # 2. Interroger jusqu'à ce que le statut soit completed, failed, cancelled ou incomplete.
+  while true; do
+    RESPONSE=$(curl -s "https://api.perplexity.ai/v1/agent/$RESPONSE_ID" \
+      -H "Authorization: Bearer $PERPLEXITY_API_KEY")
+
+    STATUS=$(echo "$RESPONSE" | jq -r '.status')
+    echo "Status: $STATUS"
+
+    if [[ "$STATUS" == "completed" || "$STATUS" == "failed" || "$STATUS" == "cancelled" || "$STATUS" == "incomplete" ]]; then
+      echo "$RESPONSE"
+      break
+    fi
+
+    sleep 2
+  done
+  ```
+</CodeGroup>
+
+Après la boucle, traitez explicitement chaque statut terminal. Pour `completed`, lisez la sortie ; pour `failed`, examinez l&#39;objet `error` ; pour `cancelled`, considérez l&#39;exécution comme volontairement interrompue ; pour `incomplete`, considérez-la comme interrompue avant la fin (par exemple en cas de troncature).
+
+<div id="stream-and-reconnect">
+  ## Streaming et reconnexion
+</div>
+
+Vous pouvez diffuser en streaming une réponse d&#39;arrière-plan de longue durée en la créant avec `background=true` et `stream=true`. Enregistrez l&#39;identifiant de la réponse et conservez un curseur basé sur le `sequence_number` de chaque événement diffusé. Si la connexion est interrompue, reconnectez-vous avec `GET /v1/agent/{id}?stream=true&starting_after=N` pour reprendre après le numéro de séquence `N`.
+
+<Info>
+  La reconnexion n&#39;est possible que pendant la fenêtre de reconnexion de la réponse. Une fois cette fenêtre expirée, la requête de reconnexion renvoie `400` ; utilisez alors un simple `GET /v1/agent/{id}` pour récupérer l&#39;instantané final.
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  import os
+  import requests
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response_id = None
+  cursor = None
+
+  stream = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Create a detailed research memo on satellite internet providers.",
+      tools=[{"type": "web_search"}],
+      background=True,
+      stream=True,
+  )
+
+  for event in stream:
+      cursor = getattr(event, "sequence_number", cursor)
+
+      # Récupérer l'id de la réponse dans le premier événement qui le contient.
+      response = getattr(event, "response", None)
+      if response_id is None and response is not None:
+          response_id = getattr(response, "id", None)
+
+      print(event)
+
+  # Si le flux se déconnecte après le curseur N, reprendre à l'événement suivant.
+  if response_id and cursor is not None:
+      reconnect = requests.get(
+          f"https://api.perplexity.ai/v1/agent/{response_id}",
+          headers={"Authorization": f"Bearer {os.environ['PERPLEXITY_API_KEY']}"},
+          params={"stream": "true", "starting_after": cursor},
+          stream=True,
+          timeout=60,
+      )
+
+      if reconnect.status_code == 400:
+          final = client.responses.retrieve(response_id)
+          print(final.status)
+      else:
+          reconnect.raise_for_status()
+          for line in reconnect.iter_lines(decode_unicode=True):
+              if not line or not line.startswith("data: "):
+                  continue
+              data = line.removeprefix("data: ")
+              if data == "[DONE]":
+                  break
+              event = json.loads(data)
+              cursor = event.get("sequence_number", cursor)
+              print(event)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let responseId: string | undefined;
+  let cursor: number | undefined;
+
+  const stream = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Create a detailed research memo on satellite internet providers.',
+    tools: [{ type: 'web_search' }],
+    background: true,
+    stream: true,
+  });
+
+  for await (const event of stream) {
+    cursor = event.sequence_number;
+
+    // Récupérer l'id de la réponse dans le premier événement qui le contient.
+    if (!responseId && 'response' in event && event.response) {
+      responseId = event.response.id;
+    }
+
+    console.log(event);
+  }
+
+  // Si le flux se déconnecte après le curseur N, reprendre à l'événement suivant.
+  if (responseId && cursor !== undefined) {
+    const reconnect = await fetch(
+      `https://api.perplexity.ai/v1/agent/${responseId}?stream=true&starting_after=${cursor}`,
+      { headers: { Authorization: `Bearer ${process.env.PERPLEXITY_API_KEY}` } },
+    );
+
+    if (reconnect.status === 400) {
+      // Fenêtre de reconnexion expirée : se rabattre sur l'instantané final.
+      const final = await client.responses.retrieve(responseId);
+      console.log(final.status);
+    } else {
+      // Analyser le flux SSE repris de la même manière, en continuant à partir de `cursor`.
+      console.log(await reconnect.text());
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  # 1. Démarrer un flux en arrière-plan.
+  curl -N https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Create a detailed research memo on satellite internet providers.",
+      "tools": [{ "type": "web_search" }],
+      "background": true,
+      "stream": true
+    }'
+
+  # 2. Si la connexion est interrompue, reprendre après le dernier sequence_number reçu.
+  curl -N "https://api.perplexity.ai/v1/agent/$RESPONSE_ID?stream=true&starting_after=$SEQUENCE_NUMBER" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+
+  # 3. Si la reconnexion renvoie 400, récupérer plutôt le dernier instantané final.
+  curl "https://api.perplexity.ai/v1/agent/$RESPONSE_ID" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="cancel-a-run">
+  ## Annuler une exécution
+</div>
+
+Annulez une réponse en arrière-plan en cours avec `POST https://api.perplexity.ai/v1/agent/{id}/cancel` lorsque le résultat n&#39;est plus nécessaire.
+L&#39;annulation est asynchrone : un `200` renvoie `status: "cancelling"` et l&#39;exécution s&#39;arrête peu après ; interrogez donc `GET /v1/agent/{id}` jusqu&#39;à obtenir le statut terminal `cancelled`.
+Annuler une réponse déjà terminée renvoie `400` ; un id inconnu, ou une réponse appartenant à un autre compte, renvoie `404`.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Run an extended literature review on heat pump adoption.",
+      tools=[{"type": "web_search"}],
+      background=True,
+  )
+
+  # Annulez-la par son id, puis interrogez GET jusqu'au statut terminal "cancelled".
+  cancelled = client.responses.cancel(response.id)
+  print(cancelled.response_id, cancelled.status)  # resp_... cancelling
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Run an extended literature review on heat pump adoption.',
+    tools: [{ type: 'web_search' }],
+    background: true,
+  });
+
+  // Annulez-la par son id, puis interrogez GET jusqu'au statut terminal 'cancelled'.
+  const cancelled = await client.responses.cancel(response.id);
+  console.log(cancelled.response_id, cancelled.status); // resp_... cancelling
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST "https://api.perplexity.ai/v1/agent/$RESPONSE_ID/cancel" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Travailler avec des fichiers" icon="file" href="/fr/docs/agent-api/working-with-files" />
+
+  <Card title="Sandbox" icon="layer-group" href="/fr/docs/agent-api/tools/sandbox" />
+
+  <Card title="Wide Research" icon="bars" href="/fr/docs/agent-api/wide-research" />
+
+  <Card title="Streaming et contrôle de la sortie" icon="clock" href="/fr/docs/agent-api/output-control" />
+</CardGroup>

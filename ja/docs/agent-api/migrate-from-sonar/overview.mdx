@@ -1,0 +1,244 @@
+---
+title: "Sonar から Agent API への移行"
+sidebarTitle: "概要"
+description: "Agent API は Sonar Chat Completions を大幅に強化したもので、より柔軟な設定と強力なエージェントプリミティブを AI アプリケーションにもたらします。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice-no-guide.mdx";
+
+<SonarDeprecationNotice />
+
+Sonar Chat Completions は引き続きサポートされますが、本番環境のワークロードには Agent API のほうが高性能でコスト効率にも優れています。Agent API には、Search as Code やチューニング済みの preset など、検索・推論технологиーにおける Perplexity の最新の成果が盛り込まれています。
+
+<Note>
+  以下を推奨します。
+
+  * 既存の Sonar Chat Completions の利用を Agent API へ移行する。
+  * 新規プロジェクトではすべて Agent API を使用する。
+</Note>
+
+<div id="about-the-agent-api">
+  ## Agent API について
+</div>
+
+Agent API は、強力なエージェントアプリケーションを構築するための統合インターフェースです。
+
+主な内容は次のとおりです。
+
+* 主要なフロンティアモデルとオープンソースモデルのすべてを 1 つの API から呼び出せます。
+* [Web 検索](/ja/docs/agent-api/tools/web-search)、[URL の取得](/ja/docs/agent-api/tools/fetch-url-content)、[sandbox](/ja/docs/agent-api/tools/sandbox)、[MCP](/ja/docs/agent-api/tools/mcp) といった組み込みツールに加え、[金融検索](/ja/docs/agent-api/tools/finance-search)や[人物検索](/ja/docs/agent-api/tools/people-search)などのプレミアムデータソースも利用できます。
+* タスクの負荷 (fast、low、medium、high、xhigh — [preset](/ja/docs/agent-api/presets)) に応じた、調査に基づくエージェント型ワークフロー向けの設定。
+* [Open Responses](https://www.openresponses.org/) 標準に準拠し、移植性を確保してロックインを回避します。私たちは、法外な移行コストで囲い込むのではなく、性能と効率でお客様に選ばれたいと考えています。
+* シームレスなマルチターンのやり取り。[過去のレスポンスを渡す](/ja/docs/agent-api/conversation-state#resume-from-a-prior-response)ことで、より高精度な推論を実現できます。
+
+<div id="why-migrate">
+  ## 移行する理由
+</div>
+
+Agent API には、Sonar Chat Completions に比べて次のような利点があります。
+
+* Perplexity の Sonar モデルに加え、OpenAI、Anthropic、Google、xAI、Z.AI、Moonshot AI、NVIDIA の各モデルファミリーを自由に選択できます。
+* 複数のツールを活用し、推論・実行・結果の観察を繰り返すエージェントループを単一リクエスト内で実行できます。
+* 生成されたコードを実行できる安全な [sandbox](/ja/docs/agent-api/tools/sandbox) を利用し、リクエストの外に出ることなく計算、データ分析、出力の検証を行えます。
+* [MCP](/ja/docs/agent-api/tools/mcp) で外部サーバーに接続したり、独自の[カスタム関数](/ja/docs/agent-api/tools/custom-functions)を定義したりして、自社のツールや非公開データでエージェントを拡張できます。
+* [Wide Research](/ja/docs/agent-api/wide-research) により、広範かつ深掘りが必要なタスクをバックグラウンドで実行し、根拠に裏付けられた大規模なコレクションを単一リクエストで構築できます。
+
+<div id="sonar-vs-agent-api">
+  ## Sonar と Agent API の比較
+</div>
+
+| 機能                      |       Sonar API       |       Agent API       |
+| ----------------------- | :-------------------: | :-------------------: |
+| 主要なフロンティアモデルとオープンソースモデル |                       | <Icon icon="check" /> |
+| 組み込みのWeb検索              | <Icon icon="check" /> | <Icon icon="check" /> |
+| 人物検索                    |                       | <Icon icon="check" /> |
+| 金融検索                    |                       | <Icon icon="check" /> |
+| コード sandbox             |                       | <Icon icon="check" /> |
+| MCP サーバー                |                       | <Icon icon="check" /> |
+| モデルのフォールバック             |                       | <Icon icon="check" /> |
+| 構造化出力                   | <Icon icon="check" /> | <Icon icon="check" /> |
+| ストリーミング                 | <Icon icon="check" /> | <Icon icon="check" /> |
+| 非同期モード                  | <Icon icon="check" /> | <Icon icon="check" /> |
+
+どちらもモデルを呼び出しますが、リクエストの組み立て方が異なります。
+Sonar は `messages` 配列を受け取り、`choices` を返します。
+Agent API は `input` を受け取り、型付きの `output` 配列を返します。この配列にはモデルが実行したステップごとに1項目が含まれ、回答テキストは `message` 項目、ソースは `search_results` 項目として返されます。
+
+<Columns cols={2}>
+  <div>
+    **Sonar**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      completion = client.chat.completions.create(
+          model="sonar",
+          messages=[{"role": "user", "content": "What are the latest developments in AI agents?"}]
+      )
+      print(completion.choices[0].message.content)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const completion = await client.chat.completions.create({
+        model: 'sonar',
+        messages: [{ role: 'user', content: 'What are the latest developments in AI agents?' }]
+      });
+      console.log(completion.choices[0].message.content);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/sonar \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "sonar",
+          "messages": [
+            {"role": "user", "content": "What are the latest developments in AI agents?"}
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+
+  <div>
+    **Agent API**
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      response = client.responses.create(
+          preset="fast",
+          input="What are the latest developments in AI agents?"
+      )
+      print(response.output_text)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const response = await client.responses.create({
+        preset: 'fast',
+        input: 'What are the latest developments in AI agents?'
+      });
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "preset": "fast",
+          "input": "What are the latest developments in AI agents?"
+        }' | jq
+      ```
+    </CodeGroup>
+  </div>
+</Columns>
+
+<Tabs>
+  <Tab title="Sonar のレスポンス">
+    ```json theme={null}
+    {
+      "id": "8158ec84-87a8-40fd-8720-a8b8e628708c",
+      "choices": [
+        {
+          // ...
+          "message": {"content": "The latest developments in AI agents (as of July 2026) center on **massive model upgrades**, **open-source toolkits**, **real-world autonomous transactions**, and **enterprise-grade security frameworks** ...", "role": "assistant"},
+          "finish_reason": "stop"
+        }
+      ],
+      "created": 1784292153,
+      "model": "sonar",
+      "citations": [
+        "https://medium.com/@agencyai/this-weeks-ai-agent-roundup-20-launches-and-updates-you-shouldn-t-miss-401202306f62",
+        "https://www.itechmagazine.com/ai-agents-news/"
+        // ...
+      ],
+      "object": "chat.completion",
+      "search_results": [
+        {"title": "AI Agents News 2026: What's Happening Right Now and Why It ...", "url": "https://www.itechmagazine.com/ai-agents-news/", "date": "2026-06-14", "last_updated": "2026-06-21", "snippet": "Amazon Web Services open-sourced its Strands Agents SDK, a toolkit that helps developers b ...", "source": "web", "place_metadata": null}
+        // ...
+      ]
+      // ...
+    }
+    ```
+  </Tab>
+
+  <Tab title="Agent API のレスポンス">
+    ```json theme={null}
+    {
+      "id": "resp_18690c07-7c56-48fa-85a3-fd22e34df694",
+      "created_at": 1784292159,
+      "model": "openai/gpt-5.4-mini",
+      "object": "response",
+      "output": [
+        {
+          "results": [
+            {"id": 1, "snippet": "This transition from one-shot intelligence to endurance, from conversational AI to genuine autonomy ...", "title": "State of AI Agents 2026: Autonomy is Here", "url": "https://www.prosus.com/news-insights/2026/state-of-ai-agents-2026-autonomy-is-here", "date": "2026-02-26", "last_updated": "2026-07-12", "source": "web"}
+            // ...
+          ],
+          "type": "search_results"
+          // ...
+        },
+        {
+          "id": "msg_525b46ea-4e33-400b-add0-6862a48549b9",
+          "content": [
+            {"text": "The latest developments in AI agents are centered on **greater autonomy, better orchestration, and stronger enterprise controls**[1][3] ...", "type": "output_text", "annotations": []}
+          ],
+          "role": "assistant",
+          "status": "completed",
+          "type": "message"
+        }
+      ],
+      "status": "completed"
+      // ...
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="how-sonar-chat-completions-maps-to-agent-api-presets">
+  ## Sonar Chat Completions と Agent API preset の対応関係
+</div>
+
+性能の向上幅はユースケースによって異なりますが、社内ベンチマークでは、以下に示す Sonar Chat Completions と Agent API preset の対応関係のいずれにおいても性能の向上が確認されています。
+
+| Sonar Chat Completions | Agent API preset | 最適な用途                            | 向上する点                                                                             |
+| ---------------------- | ---------------- | -------------------------------- | --------------------------------------------------------------------------------- |
+| Sonar                  | `fast`           | 単一の事実の調査、用語の定義、手早い要約。            | Sonar より高精度で、特にリサーチ型の多段階の質問で効果が顕著です。                                              |
+| Sonar Pro              | `low`            | 日常的なリサーチの質問、最新情報を伴う軽めの多段階調査。     | 精度が大幅に向上し、Sonar Pro では届かない本格的な多段階のエージェント型リサーチが可能になります。                            |
+| Sonar Reasoning Pro    | `medium`         | マルチホップのブラウジングと、多数の情報源にまたがる広範な集約。 | 段階的な推論、および複数回の検索をまたいで根拠をつなぐ処理が格段に強力です。                                            |
+| Sonar Deep Research    | `high`           | 専門家レベルの推論と網羅的な情報源のカバレッジ。         | 要求の高い専門家レベルの作業やディープリサーチで最も精度が高く、多くの場合 Sonar Deep Research よりもリクエストあたりのコストを抑えられます。 |
+
+<Tip>
+  最先端のディープリサーチには `xhigh` preset をご利用ください。ラインナップ中で最高品質であり、当社が実施しているベンチマーク全体でトップの成績を収めています。
+</Tip>
+
+各 preset の最適な用途については [preset の選び方](/ja/docs/agent-api/presets#choosing-a-preset) を、スコアについては [ベンチマークのページ](/ja/docs/agent-api/migrate-from-sonar/benchmarks) をご覧ください。
+
+<div id="continue-your-migration">
+  ## 移行を続ける
+</div>
+
+<CardGroup cols={2}>
+  <Card title="移行の手順" icon="arrow-right-arrow-left" href="/ja/docs/agent-api/migrate-from-sonar/how-to">
+    フィールド単位の詳細な移行手順とパラメータリファレンスを参照してください。
+  </Card>
+
+  <Card title="preset を見る" icon="sliders" href="/ja/docs/agent-api/presets">
+    各 preset が設定する内容と、個別の設定を上書きする方法を確認できます。
+  </Card>
+</CardGroup>

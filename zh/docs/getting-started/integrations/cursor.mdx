@@ -1,0 +1,328 @@
+---
+title: "在 Cursor 中使用 Perplexity"
+description: "在 Cursor 中使用 Perplexity：通过官方 TypeScript SDK 在项目代码中调用 API、使用兼容 OpenAI 的基础 URL，或接入托管的 Perplexity Docs MCP，直接在编辑器内查阅文档。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概述
+</div>
+
+[Cursor](https://cursor.com) 是一款以 AI 为核心的代码编辑器，可以从项目代码中调用任意 HTTP API，并支持通过 Model Context Protocol (MCP) 使用编辑器内的工具。本指南介绍集成 Perplexity 的三种方式：
+
+<CardGroup cols={3}>
+  <Card title="官方 TypeScript SDK" icon="code">
+    在 Cursor 中开发时，直接从项目代码调用 Perplexity API。**推荐方式。**
+  </Card>
+
+  <Card title="兼容 OpenAI 的 SDK" icon="plug">
+    将 `baseURL` 指向 `https://api.perplexity.ai/v1`，复用现有的 OpenAI 客户端。
+  </Card>
+
+  <Card title="Cursor MCP" icon="book">
+    在 `.cursor/mcp.json` 中配置托管的 Perplexity Docs MCP，让 Cursor 在你编码时查阅 Perplexity 文档。
+  </Card>
+</CardGroup>
+
+<Info>
+  **推荐路径：** 在应用代码中使用官方 SDK (或兼容 OpenAI 的 SDK) ，并在 Cursor 中添加 Perplexity Docs MCP，以便在编辑器内查阅文档。将 Cursor 的“自定义 OpenAI 兼容模型”覆盖设置指向 Perplexity 属于**实验性**做法，可靠性通常不如代码层面的集成或 MCP —— 参见[自定义模型覆盖 (实验性) ](#custom-model-override-experimental)。
+</Info>
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+* 已安装 Cursor ([cursor.com/download](https://cursor.com/download))
+* Node.js 18+ (用于运行 TypeScript 示例)
+* 一个 Perplexity API key
+
+<Card title="获取 API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="获取 Key" href="https://console.perplexity.ai/project/keys">
+  在 Perplexity API 门户中生成 key。
+</Card>
+
+<div id="api-key-handling">
+  ## API key 处理
+</div>
+
+切勿将 API key 硬编码在源文件中，也不要将其提交到代码仓库。请将其保存在环境变量中，并在运行时读取：
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title=".env（项目本地）">
+    在项目根目录创建 `.env` 文件，并将其加入 `.gitignore`：
+
+    ```bash theme={null}
+    # .env
+    PERPLEXITY_API_KEY=your_api_key_here
+    ```
+
+    在启动时加载 (例如使用 [`dotenv`](https://www.npmjs.com/package/dotenv)) ：
+
+    ```typescript theme={null}
+    import "dotenv/config";
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  请像对待密码一样对待 `PERPLEXITY_API_KEY`，不要将其粘贴到聊天、提示词或共享文件中。一旦 key 泄露，请立即[轮换密钥](https://console.perplexity.ai/project/keys)。
+</Warning>
+
+***
+
+<div id="path-1-official-typescript-sdk-recommended">
+  ## 路径 1：官方 TypeScript SDK (推荐)
+</div>
+
+在 Cursor 中开发应用，并在代码中通过官方 SDK 调用 Perplexity API。这是最可靠的方式，可提供完整的类型安全、preset 支持，并可使用全部 API 功能。
+
+<div id="install">
+  ### 安装
+</div>
+
+```bash theme={null}
+npm install @perplexity-ai/perplexity_ai
+```
+
+<Tip>
+  `pnpm` 和 `yarn` 的用法相同：`pnpm add @perplexity-ai/perplexity_ai` / `yarn add @perplexity-ai/perplexity_ai`。
+</Tip>
+
+<div id="agent-api-with-low">
+  ### 搭配 `low` 使用 Agent API
+</div>
+
+对于大多数应用来说，Agent API 都是推荐使用的接口。使用 `low` preset，即可获得基于网页检索、且默认配置合理的回答：
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity(); // 从环境变量读取 PERPLEXITY_API_KEY
+
+const response = await client.responses.create({
+  preset: "low",
+  input: "Summarize the latest changes to the Perplexity Agent API.",
+});
+
+console.log(`Model used: ${response.model}`);
+console.log(response.output_text);
+```
+
+<Accordion title="Python 等效代码">
+  ```python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()  # 从环境变量读取 PERPLEXITY_API_KEY
+
+  response = client.responses.create(
+      preset="low",
+      input="Summarize the latest changes to the Perplexity Agent API.",
+  )
+
+  print(f"Model used: {response.model}")
+  print(response.output_text)
+  ```
+</Accordion>
+
+<div id="add-web-search">
+  ### 添加网页搜索
+</div>
+
+启用 `web_search` 工具，以显式控制何时使用搜索：
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity();
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "What are the latest developments in AI inference hardware?",
+  tools: [{ type: "web_search" }],
+  instructions:
+    "You have access to a web_search tool. Use it for questions about current events, news, or recent developments.",
+});
+
+if (response.status === "completed") {
+  console.log(response.output_text);
+}
+```
+
+<Tip>
+  Cursor 的 AI 聊天可以帮你生成并编辑这些代码片段。用 `Cmd+L` / `Ctrl+L` 打开聊天，粘贴你的目标，然后让 Cursor &quot;使用 `@perplexity-ai/perplexity_ai`，搭配 `low` preset&quot;。
+</Tip>
+
+如需了解更多 preset、工具和配置选项，请参阅 [Agent API 快速入门](/zh/docs/agent-api/quickstart)和 [SDK 概览](/zh/docs/sdk/overview)。
+
+***
+
+<div id="path-2-openai-compatible-sdk">
+  ## 路径 2：兼容 OpenAI 的 SDK
+</div>
+
+如果项目中已有 OpenAI 客户端，只需将 `baseURL` 指向 `https://api.perplexity.ai/v1` 即可直接复用。Perplexity 支持将 `POST /v1/responses` 作为 Agent API 的别名。
+
+<div id="install-2">
+  ### 安装
+</div>
+
+```bash theme={null}
+npm install openai
+```
+
+<div id="use-it">
+  ### 使用方法
+</div>
+
+```typescript theme={null}
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  baseURL: "https://api.perplexity.ai/v1",
+});
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "Explain the key differences between REST and GraphQL APIs.",
+});
+
+console.log(response.output_text);
+```
+
+<Accordion title="Python 等效代码">
+  ```python theme={null}
+  import os
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Explain the key differences between REST and GraphQL APIs.",
+  )
+
+  print(response.output_text)
+  ```
+</Accordion>
+
+<Info>
+  请使用 `baseURL` (TypeScript) 或 `base_url` (Python) ，且两者都必须包含 `/v1` 后缀。如需查看完整的受支持参数列表，以及通过这一方式可使用哪些 Perplexity 功能，请参阅 [OpenAI 兼容性指南](/zh/docs/agent-api/openai-compatibility)。
+</Info>
+
+***
+
+<div id="path-3-cursor-mcp-for-docs-lookup">
+  ## 路径 3：使用 Cursor MCP 查阅文档
+</div>
+
+Cursor 支持 Model Context Protocol (MCP) 。托管在 `https://docs.perplexity.ai/mcp` 的 **Perplexity Docs MCP** 可让 Cursor 直接在聊天中搜索和阅读 Perplexity 文档——无需切换到浏览器，即可让代码建议以权威文档为依据。
+
+<div id="project-scoped-configuration">
+  ### 项目级配置
+</div>
+
+在项目根目录下添加 `.cursor/mcp.json` 文件。这样该服务器仅在此项目中可用：
+
+```json theme={null}
+{
+  "mcpServers": {
+    "perplexity-docs": {
+      "url": "https://docs.perplexity.ai/mcp"
+    }
+  }
+}
+```
+
+<div id="global-configuration">
+  ### 全局配置
+</div>
+
+若要让该服务器在所有项目中都可用，请将相同的条目添加到 `~/.cursor/mcp.json`：
+
+```json theme={null}
+{
+  "mcpServers": {
+    "perplexity-docs": {
+      "url": "https://docs.perplexity.ai/mcp"
+    }
+  }
+}
+```
+
+<Steps>
+  <Step title="添加配置">
+    将上面的 JSON 保存到 `.cursor/mcp.json` (项目级) 或 `~/.cursor/mcp.json` (全局级) 。
+  </Step>
+
+  <Step title="重新加载 Cursor">
+    打开 **Cursor → Settings → MCP**，确认 `perplexity-docs` 已出现且状态为绿色/就绪。必要时重启 Cursor。
+  </Step>
+
+  <Step title="在聊天中使用">
+    在 Cursor 聊天中提出类似这样的问题：*&quot;Using the Perplexity docs MCP, show me how to enable `low` in the Agent API.&quot;* Cursor 会调用该 MCP 服务器，并基于最新文档作答。
+  </Step>
+</Steps>
+
+<Tip>
+  Docs MCP 为只读，无需 API key —— 它仅提供 Perplexity 文档内容。若要让 Cursor 使用 Perplexity 的**搜索与推理**工具 (而不只是文档) ，请安装 [Perplexity MCP Server](/zh/docs/getting-started/integrations/mcp-server)，它基于 `@perplexity-ai/mcp-server`，需要配置 `PERPLEXITY_API_KEY`。
+</Tip>
+
+***
+
+<div id="custom-model-override-experimental">
+  ## 自定义模型覆盖 (实验性)
+</div>
+
+Cursor 允许你将其内置的模型选择器指向兼容 OpenAI 的基础 URL。虽然可以把它设置为 `https://api.perplexity.ai/v1` 并使用 Perplexity 的模型名称，但这种方式存在以下局限：
+
+* Cursor 的内部提示词无法充分发挥 Agent API 的能力 (preset、结构化工具调用、财经/人物搜索) 。
+* Cursor 的自动补全和编辑功能是针对特定模型的行为调优的，换用其他模型后效果可能不佳。
+* 流式传输、工具调用和错误处理的表现可能与在代码层面集成时不同。
+
+因此，**我们建议在项目代码中调用 Perplexity** (路径 1 或路径 2) ，并通过 **Perplexity Docs MCP** (路径 3) 在编辑器内查阅文档。只有当你确实希望让 Cursor 的聊天界面对接 Perplexity 模型，且能接受上述取舍时，再考虑使用自定义模型覆盖。
+
+***
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 快速入门" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    了解上述示例中用到的 preset、工具以及 Agent API 的完整功能。
+  </Card>
+
+  <Card title="Perplexity SDK 概览" icon="code-circle" href="/zh/docs/sdk/overview">
+    安装、配置并使用官方 Python 与 TypeScript SDK。
+  </Card>
+
+  <Card title="OpenAI 兼容性" icon="plug" href="/zh/docs/agent-api/openai-compatibility">
+    无缝兼容的详细说明、支持的参数以及迁移建议。
+  </Card>
+
+  <Card title="Perplexity MCP Server" icon="server" href="/zh/docs/getting-started/integrations/mcp-server">
+    为 Cursor 及其他 MCP 客户端添加 Perplexity 的 search、ask、research 和 reason 工具。
+  </Card>
+</CardGroup>
+
+<Info>
+  需要帮助？欢迎加入 [Perplexity 开发者社区](https://community.perplexity.ai)，获取支持并参与讨论。
+</Info>

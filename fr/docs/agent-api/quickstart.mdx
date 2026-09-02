@@ -1,0 +1,1269 @@
+---
+title: "Agent API"
+sidebarTitle: "Démarrage rapide"
+description: "L'Agent API est une spécification d'API multi-fournisseurs et interopérable pour créer des applications LLM. Accédez aux modèles de plusieurs fournisseurs avec une recherche web en temps réel intégrée, la configuration des outils, le contrôle du raisonnement et des budgets de tokens, le tout via une interface unifiée."
+---
+
+<Card title="Essayer le playground de l'Agent API" href="https://console.perplexity.ai/project/agent-playground" horizontal="True" cta="Lancer le playground">
+  Testez les requêtes et les paramètres de l&#39;Agent API de manière interactive dans la console API.
+</Card>
+
+<Card title="Tarifs" icon="receipt" href="/fr/docs/getting-started/pricing" horizontal="True" cta="Voir les tarifs">
+  Tarification à l&#39;usage pour toutes les API. Aucun abonnement requis.
+</Card>
+
+<div id="why-use-the-agent-api">
+  ## Pourquoi utiliser l&#39;Agent API ?
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Réponses ancrées dans le web" icon="globe">
+    Obtenez des réponses précises et à jour, ancrées dans une recherche web en temps réel, avec des citations en ligne en un seul appel et un contexte conversationnel conservé d&#39;un tour à l&#39;autre.
+  </Card>
+
+  <Card title="Accès multi-fournisseurs" icon="stack-3" iconType="solid">
+    Accédez à OpenAI, Anthropic, Google, xAI et bien d&#39;autres via une seule API unifiée, sans avoir à gérer plusieurs clés API.
+  </Card>
+
+  <Card title="Tarification transparente" icon="receipt">
+    Consultez le nombre exact de tokens et le coût de chaque requête, sans majoration : uniquement le tarif direct du fournisseur.
+  </Card>
+
+  <Card title="Contrôle granulaire" icon="adjustments">
+    Modifiez le modèle, le raisonnement, les tokens et les outils avec une syntaxe cohérente.
+  </Card>
+</CardGroup>
+
+<Info>
+  Nous recommandons d&#39;utiliser nos [SDK officiels](/fr/docs/sdk/overview) pour interagir avec l&#39;Agent API de façon plus pratique et avec un typage sûr.
+</Info>
+
+<Note>
+  **Point de terminaison :** l&#39;Agent API est disponible à l&#39;adresse `POST https://api.perplexity.ai/v1/agent`. Pour la compatibilité avec le SDK OpenAI, `POST /v1/responses` est également accepté comme alias. Consultez le [guide de compatibilité OpenAI](/fr/docs/agent-api/openai-compatibility) pour savoir comment utiliser les SDK OpenAI avec Perplexity.
+</Note>
+
+<div id="installation">
+  ## Installation
+</div>
+
+Installez le SDK correspondant au langage de votre choix :
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash Typescript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+<div id="authentication">
+  ## Authentification
+</div>
+
+Définissez votre clé API dans une variable d&#39;environnement. Le SDK la lira automatiquement :
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+</Tabs>
+
+<Info>
+  Tous les exemples de SDK ci-dessous utilisent automatiquement la variable d&#39;environnement `PERPLEXITY_API_KEY`. Vous pouvez aussi passer la clé explicitement si nécessaire.
+</Info>
+
+<div id="basic-usage">
+  ## Utilisation de base
+</div>
+
+<Tip>
+  **Propriété pratique :** les SDK Python et TypeScript fournissent tous deux une propriété `output_text` qui regroupe l&#39;ensemble du contenu textuel des sorties de la réponse. Au lieu de parcourir `response.output`, utilisez simplement `response.output_text` pour un code plus lisible.
+</Tip>
+
+<div id="using-a-third-party-model">
+  ### Utiliser un modèle tiers
+</div>
+
+Utilisez des modèles tiers d&#39;OpenAI, Anthropic, Google, xAI et d&#39;autres fournisseurs pour des capacités spécifiques :
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Explain the difference between supervised and unsupervised learning in machine learning."
+  )
+
+  print(f"Response ID: {response.id}")
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.6-sol",
+      input: "Explain the difference between supervised and unsupervised learning in machine learning."
+  });
+
+  console.log(`Response ID: ${response.id}`);
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Explain the difference between supervised and unsupervised learning in machine learning."
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Réponse">
+  ```json theme={null}
+  {
+    "background": false,
+    "completed_at": 1771891464,
+    "created_at": 1771891464,
+    "error": null,
+    "frequency_penalty": 0,
+    "id": "resp_f854ed0a-f0e2-4ee8-b5ea-8582956910f2",
+    "incomplete_details": null,
+    "instructions": null,
+    "max_output_tokens": null,
+    "max_tool_calls": null,
+    "metadata": {},
+    "model": "openai/gpt-5.6-sol",
+    "object": "response",
+    "output": [
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "Supervised learning uses labeled data where each example has a known output, enabling the model to learn direct input-output relationships. Examples include classification and regression.",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_f47013d2-7fe7-44d6-a7aa-4e34c85ce2b6",
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "presence_penalty": 0,
+    "previous_response_id": null,
+    "prompt_cache_key": null,
+    "reasoning": null,
+    "safety_identifier": null,
+    "service_tier": "default",
+    "status": "completed",
+    "store": true,
+    "temperature": 1,
+    "text": {
+      "format": {
+        "type": "text"
+      }
+    },
+    "tool_choice": "auto",
+    "tools": [],
+    "top_logprobs": 0,
+    "top_p": 1,
+    "truncation": "disabled",
+    "usage": {
+      "cost": {
+        "currency": "USD",
+        "input_cost": 4e-05,
+        "output_cost": 0.00311,
+        "total_cost": 0.00315
+      },
+      "input_tokens": 20,
+      "input_tokens_details": {
+        "cached_tokens": 0
+      },
+      "output_tokens": 222,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "total_tokens": 242
+    },
+    "user": null
+  }
+  ```
+</Accordion>
+
+<div id="using-a-preset">
+  ### Utiliser un preset
+</div>
+
+Les presets fournissent des valeurs par défaut optimisées pour des cas d&#39;usage spécifiques.
+
+Commencez par un preset pour une configuration rapide :
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="low",
+      input="Explain what the MMLU benchmark measures for large language models, and how the Apache 2.0 license differs from a restricted research-only license for model weights.",
+  )
+
+  print(f"Model used: {response.model}")
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      preset: "low",
+      input: "Explain what the MMLU benchmark measures for large language models, and how the Apache 2.0 license differs from a restricted research-only license for model weights.",
+  });
+
+  console.log(`Model used: ${response.model}`);
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "low",
+      "input": "Explain what the MMLU benchmark measures for large language models, and how the Apache 2.0 license differs from a restricted research-only license for model weights."
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Réponse">
+  ```json theme={null}
+  {
+    "background": false,
+    "completed_at": 1771891641,
+    "created_at": 1771891641,
+    "error": null,
+    "frequency_penalty": 0,
+    "id": "resp_aca2bace-3782-4d81-be45-a82c24cfff9d",
+    "incomplete_details": null,
+    "instructions": "## Abstract\n<role>\nYou are an AI assistant developed by Perplexity AI...\n</role>\n...",
+    "max_output_tokens": 8192,
+    "max_tool_calls": null,
+    "metadata": {},
+    "model": "openai/gpt-5.1",
+    "object": "response",
+    "output": [
+      {
+        "queries": [
+          "2025 open source LLM benchmark performance",
+          "2025 newly released open source LLMs license",
+          "2025 open source LLM real world use cases"
+        ],
+        "results": [
+          {
+            "date": "2025-11-19",
+            "id": 1,
+            "last_updated": "2026-02-23T12:12:34",
+            "snippet": "updated\n\n19 Nov 2025\n\n# Open LLM Leaderboard\n\nThis LLM leaderboard displays...",
+            "source": "web",
+            "title": "Open LLM Leaderboard 2025",
+            "url": "https://www.vellum.ai/open-llm-leaderboard"
+          },
+          {
+            "date": "2023-05-05",
+            "id": 2,
+            "last_updated": "2026-01-06T09:02:43.651546",
+            "snippet": "",
+            "source": "web",
+            "title": "A list of open LLMs available for commercial use.",
+            "url": "https://github.com/eugeneyan/open-llms"
+          },
+          {
+            "date": "2025-05-05",
+            "id": 3,
+            "last_updated": "2026-02-22T19:27:06",
+            "snippet": "# Best Open Source LLMs You Can Run Locally in 2025\n\nRunning large language models on your own hardware is...",
+            "source": "web",
+            "title": "Best Open Source LLMs You Can Run Locally in 2025 - DemoDazzle",
+            "url": "https://demodazzle.com/blog/open-source-llms-2025"
+          },
+          {
+            "date": "2025-12-15",
+            "id": 4,
+            "last_updated": "2026-02-23T21:56:51",
+            "snippet": "updated\n\n15 Dec 2025\n\n# LLM Leaderboard\n\nThis LLM leaderboard displays the latest public benchmark performance for SOTA model versions released after April 2024...",
+            "source": "web",
+            "title": "LLM Leaderboard 2025 - Vellum",
+            "url": "https://www.vellum.ai/llm-leaderboard"
+          },
+          {
+            "date": "2025-11-22",
+            "id": 5,
+            "last_updated": "2026-02-11T02:35:36",
+            "snippet": "Open\u2011source Large Language Models (LLMs) have moved from niche hobby projects to a full\u2011blown industry trend in 2025...",
+            "source": "web",
+            "title": "Open\u2011Source LLMs 2025: GPT\u2011OSS Models & How ... - Neura AI Blog",
+            "url": "https://blog.meetneura.ai/open-source-llms-2025/"
+          },
+          {
+            "date": "2025-07-23",
+            "id": 6,
+            "last_updated": "2026-02-23T23:43:21",
+            "snippet": "",
+            "source": "web",
+            "title": "55 real-world LLM applications and use cases from top ...",
+            "url": "https://www.evidentlyai.com/blog/llm-applications"
+          },
+          {
+            "date": "2025-10-29",
+            "id": 7,
+            "last_updated": "2026-02-23T21:22:10",
+            "snippet": "",
+            "source": "web",
+            "title": "Top 10 open source LLMs for 2025 - NetApp Instaclustr",
+            "url": "https://www.instaclustr.com/education/open-source-ai/top-10-open-source-llms-for-2025/"
+          },
+          {
+            "date": "2025-05-21",
+            "id": 8,
+            "last_updated": "2026-02-23T14:54:20",
+            "snippet": "Here are the details of OpenLLaMA:\n\n**Parameters:** 3B, 7B and 13B\n\n**License:** Apache 2.0...",
+            "source": "web",
+            "title": "The List of 11 Most Popular Open Source LLMs [2025]",
+            "url": "https://www.lakera.ai/blog/open-source-llms"
+          },
+          {
+            "date": "2026-01-07",
+            "id": 9,
+            "last_updated": "2026-02-23T17:41:06",
+            "snippet": "",
+            "source": "web",
+            "title": "The state of open source AI models in 2025 | Red Hat Developer",
+            "url": "https://developers.redhat.com/articles/2026/01/07/state-open-source-ai-models-2025"
+          },
+          {
+            "date": "2025-10-28",
+            "id": 10,
+            "last_updated": "2026-02-23T07:53:56",
+            "snippet": "- **Open source dominates by volume:** 63% of models in our dataset (59 open source vs 35 proprietary)\n- **Performance...",
+            "source": "web",
+            "title": "Open Source vs Proprietary LLMs: Complete 2025 Benchmark ...",
+            "url": "https://whatllm.org/blog/open-source-vs-proprietary-llms-2025"
+          },
+          {
+            "date": "2025-06-02",
+            "id": 11,
+            "last_updated": "2026-01-18T13:27:38.757741",
+            "snippet": "",
+            "source": "web",
+            "title": "Top 8 Open\u2011Source LLMs to Watch in 2025 - JetRuby Agency",
+            "url": "https://jetruby.com/blog/top-8-open-source-llms-to-watch-in-2025/"
+          },
+          {
+            "date": "2026-01-26",
+            "id": 12,
+            "last_updated": "2026-02-23T16:49:21",
+            "snippet": "",
+            "source": "web",
+            "title": "Best Open Source LLMs in 2026",
+            "url": "https://www.keywordsai.co/blog/best-open-source-llms"
+          },
+          {
+            "date": "2025-12-10",
+            "id": 13,
+            "last_updated": "2026-02-23T18:38:26",
+            "snippet": "",
+            "source": "web",
+            "title": "Full Benchmark Table For...",
+            "url": "https://skywork.ai/blog/llm/top-10-open-llms-2025-november-ranking-analysis/"
+          },
+          {
+            "date": "2024-09-19",
+            "id": 14,
+            "last_updated": "2025-12-27T09:28:04.559969",
+            "snippet": "## Top Open-Source LLMs of 2025\n\n### 1. LLaMA 3.1\n\n**Developer:**Meta AI **Release Date:**July 23, 2024 **Parameter Size:**405B, 70B, 8B...",
+            "source": "web",
+            "title": "Top 10 Open-Source LLMs in 2025 - Kite Metric",
+            "url": "https://kitemetric.com/blogs/top-10-open-source-llms-in-2025-a-comprehensive-guide"
+          },
+          {
+            "date": "2025-02-26",
+            "id": 15,
+            "last_updated": "2025-09-10T16:36:09.704235",
+            "snippet": "Use Cases:\n\n**Advanced Chatbots:**Responsive customer support bots. **Content Creation for Marketing:**Generating product descriptions and blog posts...",
+            "source": "web",
+            "title": "Top 10 Open-Source LLMs in 2025 and Their Use Cases",
+            "url": "https://capalearning.com/2025/02/26/top-10-open-source-llms-in-2025-and-their-use-cases/"
+          }
+        ],
+        "type": "search_results"
+      },
+      {
+        "contents": [
+          {
+            "snippet": "Hi, Camille\u2019s here! On October 28, 2025, I fell into a small rabbit hole...",
+            "title": "Full Benchmark Table For...",
+            "url": "https://skywork.ai/blog/llm/top-10-open-llms-2025-november-ranking-analysis/"
+          },
+          {
+            "snippet": "# Open source vs proprietary LLMs: complete 2025 benchmark analysis\n\n## TL;DR: The state of LLMs in late 2025\n\n**The landscape has shifted dramatically:**\n\n- **Open source dominates by volume:** 63% of models in our dataset (59 open source vs 35 proprietary)\n- **Performance...",
+            "title": "Open Source vs Proprietary LLMs: Complete 2025 Benchmark ...",
+            "url": "https://whatllm.org/blog/open-source-vs-proprietary-llms-2025"
+          }
+        ],
+        "type": "fetch_url_results"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "In 2025, the strongest open\u2011source LLMs (Qwen 2.5, Llama 3.3/3.x, DeepSeek V3\u2011series, Mixtral...",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_1140f2e2-5bdb-4be8-a4c8-9d56bf61f35f",
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "presence_penalty": 0,
+    "previous_response_id": null,
+    "prompt_cache_key": null,
+    "reasoning": null,
+    "safety_identifier": null,
+    "service_tier": "default",
+    "status": "completed",
+    "store": true,
+    "temperature": 1,
+    "text": {
+      "format": {
+        "type": "text"
+      }
+    },
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "type": "web_search"
+      },
+      {
+        "type": "fetch_url"
+      }
+    ],
+    "top_logprobs": 0,
+    "top_p": 1,
+    "truncation": "disabled",
+    "usage": {
+      "cost": {
+        "cache_read_cost": 0.00059,
+        "currency": "USD",
+        "input_cost": 0.00919,
+        "output_cost": 0.02743,
+        "tool_calls_cost": 0.003,
+        "total_cost": 0.04021
+      },
+      "input_tokens": 12088,
+      "input_tokens_details": {
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 4736,
+        "cached_tokens": 4736
+      },
+      "output_tokens": 2743,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "tool_calls_details": {
+        "fetch_url": {
+          "invocation": 1
+        },
+        "search_web": {
+          "invocation": 1
+        }
+      },
+      "total_tokens": 14831
+    },
+    "user": null
+  }
+  ```
+</Accordion>
+
+<Tip>
+  Consultez la page [presets](/fr/docs/agent-api/presets) pour découvrir des configurations prédéfinies optimisées pour différents cas d&#39;usage, avec des modèles, des limites de tokens et des accès aux outils spécifiques.
+</Tip>
+
+<div id="with-web-search">
+  ### Avec la recherche web
+</div>
+
+L&#39;Agent API donne accès à un ensemble d&#39;outils permettant d&#39;étendre les capacités du modèle.
+
+Activez les fonctionnalités de recherche web à l&#39;aide de l&#39;outil `web_search` :
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Explain the original Transformer architecture from 'Attention Is All You Need' (Vaswani et al. 2017): encoder-decoder structure, multi-head self-attention, and positional encodings.",
+      tools=[{"type": "web_search"}],
+      instructions="You have access to a web_search tool. Use it for questions about current events, news, or recent developments. Use 1 query for simple questions. Keep queries brief: 2-5 words. NEVER ask permission to search - just search when appropriate",
+  )
+
+  if response.status == "completed":
+      print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.6-sol",
+      input: "Explain the original Transformer architecture from 'Attention Is All You Need' (Vaswani et al. 2017): encoder-decoder structure, multi-head self-attention, and positional encodings.",
+      tools: [{ type: "web_search" }],
+      instructions: "You have access to a web_search tool. Use it for questions about current events, news, or recent developments.",
+  });
+
+  if (response.status === "completed") {
+      console.log(response.output_text);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    --data @- <<'JSON' | jq
+  {
+      "model": "openai/gpt-5.6-sol",
+      "input": "Explain the original Transformer architecture from 'Attention Is All You Need' (Vaswani et al. 2017): encoder-decoder structure, multi-head self-attention, and positional encodings.",
+      "tools": [{"type": "web_search"}],
+      "instructions": "You have access to a web_search tool. Use it for questions about current events, news, or recent developments."
+  }
+  JSON
+  ```
+</CodeGroup>
+
+<Accordion title="Réponse">
+  ```json theme={null}
+  {
+    "background": false,
+    "completed_at": 1771891737,
+    "created_at": 1771891737,
+    "error": null,
+    "frequency_penalty": 0,
+    "id": "resp_367113ed-7a1b-4b2e-bad7-93e53a6cbeca",
+    "incomplete_details": null,
+    "instructions": "You have access to a web_search tool. Use it for questions about current events, news, or recent developments. Use 1 query for simple questions. Keep queries brief: 2-5 words. NEVER ask permission to search - just search when appropriate",
+    "max_output_tokens": 8192,
+    "max_tool_calls": null,
+    "metadata": {},
+    "model": "openai/gpt-5.6-sol",
+    "object": "response",
+    "output": [
+      {
+        "queries": [
+          "latest AI developments 2026"
+        ],
+        "results": [
+          {
+            "date": "2026-01-01",
+            "id": 1,
+            "last_updated": "2026-02-23T20:10:25",
+            "snippet": "Many believe efficiency will be the new frontier...",
+            "source": "web",
+            "title": "The trends that will shape AI and tech in 2026 - IBM",
+            "url": "https://www.ibm.com/think/news/ai-tech-trends-predictions-2026"
+          },
+          {
+            "date": "2026-01-08",
+            "id": 2,
+            "last_updated": "2026-02-23T20:19:20",
+            "snippet": "## What\u2019s next in AI: 7 trends to watch in 2026\n\nAI is entering a new phase, one defined by real-world impact...",
+            "source": "web",
+            "title": "What's next in AI: 7 trends to watch in 2026 - Microsoft Source",
+            "url": "https://news.microsoft.com/source/features/ai/whats-next-in-ai-7-trends-to-watch-in-2026/"
+          },
+          {
+            "date": "2026-01-06",
+            "id": 3,
+            "last_updated": "2026-02-21T02:30:13",
+            "snippet": "#### Topics\n\n#### AI in Action\n\n**Summary:**\n\nMIT SMR columnists Thomas H. Davenport and Randy Bean see five...",
+            "source": "web",
+            "title": "Five Trends in AI and Data Science for 2026",
+            "url": "https://sloanreview.mit.edu/article/five-trends-in-ai-and-data-science-for-2026/"
+          },
+          {
+            "date": "2026-01-06",
+            "id": 4,
+            "last_updated": "2026-02-24T00:01:21",
+            "snippet": "## Jeff Su\n\n##### Jan 06, 2026 (0:13:13)\nMost #AI predictions are speculation. This video covers...",
+            "source": "web",
+            "title": "Top 6 AI Trends That Will Define 2026 (backed by data)",
+            "url": "https://www.youtube.com/watch?v=B23W1gRT9eY"
+          },
+          {
+            "date": "2026-01-15",
+            "id": 5,
+            "last_updated": "2026-02-23T17:37:52",
+            "snippet": "",
+            "source": "web",
+            "title": "11 things AI experts are watching for in 2026 | University of California",
+            "url": "https://www.universityofcalifornia.edu/news/11-things-ai-experts-are-watching-2026"
+          },
+          {
+            "date": "2026-01-13",
+            "id": 6,
+            "last_updated": "2026-02-23T16:27:23",
+            "snippet": "Artificial intelligence (AI) is no longer an emerging technology, it\u2019s a transformational force driving innovation across industries...",
+            "source": "web",
+            "title": "AI Trends in 2026: A New Era of AI Advancements and Breakthroughs",
+            "url": "https://www.trigyn.com/insights/ai-trends-2026-new-era-ai-advancements-and-breakthroughs"
+          },
+          {
+            "date": "2025-12-22",
+            "id": 7,
+            "last_updated": "2026-02-23T09:47:25",
+            "snippet": "The most significant advances in artificial intelligence next year won't come from...",
+            "source": "web",
+            "title": "6 AI breakthroughs that will define 2026 - InfoWorld",
+            "url": "https://www.infoworld.com/article/4108092/6-ai-breakthroughs-that-will-define-2026.html"
+          },
+          {
+            "date": "2025-12-22",
+            "id": 8,
+            "last_updated": "2026-02-23T20:21:57",
+            "snippet": "What will define AI in 2026? \ud83d\ude80 Martin Keen & Aaron Baughman explore groundbreaking trends like Agentic AI, cloud computing, automation, and quantum computing, plus innovations like Physical AI...",
+            "source": "web",
+            "title": "AI Trends 2026: Quantum, Agentic AI & Smarter Automation",
+            "url": "https://www.youtube.com/watch?v=zt0JA5rxdfM"
+          },
+          {
+            "date": "2025-12-15",
+            "id": 9,
+            "last_updated": "2026-02-23T13:13:58",
+            "snippet": "",
+            "source": "web",
+            "title": "Stanford AI Experts Predict What Will Happen in 2026",
+            "url": "https://hai.stanford.edu/news/stanford-ai-experts-predict-what-will-happen-in-2026"
+          },
+          {
+            "date": "2025-05-10",
+            "id": 10,
+            "last_updated": "2026-02-20T16:07:11",
+            "snippet": "{ts:574} breakthroughs in AlphaGo and Alpha Fold, which are absolutely incredible. Now, DeepMind has basically said...",
+            "title": "2026 AI : 10 Things Coming In 2026 (A.I In 2026 Major Predictions)",
+            "url": "https://www.youtube.com/watch?v=RfA2Ug4FuaY"
+          }
+        ],
+        "type": "search_results"
+      },
+      {
+        "content": [
+          {
+            "annotations": [],
+            "logprobs": [],
+            "text": "Here are major *recent* directions in AI (late 2025\u2013early 2026) that researchers...",
+            "type": "output_text"
+          }
+        ],
+        "id": "msg_d0f12cc6-c6a2-426f-b55e-fff247e40c8c",
+        "role": "assistant",
+        "status": "completed",
+        "type": "message"
+      }
+    ],
+    "parallel_tool_calls": true,
+    "presence_penalty": 0,
+    "previous_response_id": null,
+    "prompt_cache_key": null,
+    "reasoning": null,
+    "safety_identifier": null,
+    "service_tier": "default",
+    "status": "completed",
+    "store": true,
+    "temperature": 1,
+    "text": {
+      "format": {
+        "type": "text"
+      }
+    },
+    "tool_choice": "auto",
+    "tools": [
+      {
+        "type": "web_search"
+      }
+    ],
+    "top_logprobs": 0,
+    "top_p": 1,
+    "truncation": "disabled",
+    "usage": {
+      "cost": {
+        "currency": "USD",
+        "input_cost": 0.00826,
+        "output_cost": 0.0063,
+        "tool_calls_cost": 0.0025,
+        "total_cost": 0.01706
+      },
+      "input_tokens": 4718,
+      "input_tokens_details": {
+        "cached_tokens": 0
+      },
+      "output_tokens": 450,
+      "output_tokens_details": {
+        "reasoning_tokens": 0
+      },
+      "tool_calls_details": {
+        "search_web": {
+          "invocation": 1
+        }
+      },
+      "total_tokens": 5168
+    },
+    "user": null
+  }
+  ```
+</Accordion>
+
+<div id="with-finance-search">
+  ### Avec la recherche financière
+</div>
+
+Récupérez des données financières et boursières structurées grâce à l&#39;outil `finance_search`. Les requêtes adressées directement à un modèle doivent définir `max_steps` sur 3 au minimum, afin que l&#39;outil dispose de suffisamment d&#39;étapes pour s&#39;initialiser et s&#39;exécuter. Consultez le [guide Finance Search](/fr/docs/agent-api/tools/finance-search) pour découvrir les fonctionnalités et les configurations recommandées.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Explain how to read a 10-K filing: what each major section contains (Item 1 Business, Item 1A Risk Factors, Item 7 MD&A, Item 8 Financial Statements) and how investors use them.",
+      tools=[{"type": "finance_search"}],
+      max_steps=3,
+  )
+
+  for item in response.output:
+      if item.type == "message":
+          print(item.content[0].text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.6-sol",
+      input: "Explain how to read a 10-K filing: what each major section contains (Item 1 Business, Item 1A Risk Factors, Item 7 MD&A, Item 8 Financial Statements) and how investors use them.",
+      tools: [{ type: "finance_search" }],
+      max_steps: 3,
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Explain NVIDIA\u0027s GPU compute model: streaming multiprocessors, CUDA cores, Tensor Cores, and HBM memory bandwidth.",
+      "tools": [{"type": "finance_search"}],
+      "max_steps": 3
+    }' | jq
+  ```
+</CodeGroup>
+
+<AccordionGroup>
+  <Accordion title="Réponse — Expliquez comment lire un rapport 10-K : ce que contient chaque section principale (Item 1 Business, I...">
+    ```json theme={null}
+    {
+      "id": "resp_4c946a0e-9a51-44d1-89a6-c972c57228a8",
+      "created_at": 1779391718,
+      "model": "openai/gpt-5.1",
+      "object": "response",
+      "output": [
+        {
+          "results": [
+            {
+              "id": 1,
+              "snippet": "(d) En réponse au point l, Activités, un tel déposant n’a qu’à fournir une brève\ndescription des activités menées par le déposant et ses filiales au cours du\ndernier exercice qui, selon la direction, indique la\nnature générale et l’étendue des activités du déposant et de ses filiales, et\nen réponse au point 2, Propriétés, un tel déposant n’a qu’à fournir une brève\ndescription des propriétés importantes du déposant et de ses filiales dans la\nmesure où, selon la direction, cela est nécessaire à la compréhension des\nactivités menées par le déposant et ses filiales.\n...\npoints par ailleurs exigés suivants :\n(a) Point 1, Activités ;\n...\nPARTIE I \n[Voir l’instruction générale G(2)] \nPoint 1.\nActivités.\nFournir les informations exigées par le point 101 du règlement S-K (§ 229.101 du présent chapitre) \nsauf que l’exposé sur le développement des activités du déposant n’a besoin d’inclure que\nles développements survenus depuis le début de l’exercice visé par le présent rapport.\nPoint 1A.\nFacteurs de risque.\nIndiquer, sous l’intitulé « Facteurs de risque », le cas échéant, les facteurs de risque décrits au \npoint 105 du règlement S-K (§ 229.105 du présent chapitre) applicables au déposant.\nPrésenter tout\nexposé des facteurs de risque en langage clair conformément à la règle 421(d) du Securities Act de \n1933 (§ 230.421(d) du présent chapitre).\nLes sociétés déclarantes de plus petite taille ne sont pas tenues de fournir les \ninformations exigées par ce point.\nPoint 1B.",
+              "title": "[PDF] Formulaire 10-K - SEC.gov",
+              "url": "https://www.sec.gov/files/form10-k.pdf",
+              "date": null,
+              "last_updated": "2025-06-03",
+              "source": "web"
+            },
+            {
+              "id": 2,
+              "snippet": "Le point 105 du règlement S-K exige des déposants qu’ils fournissent « un exposé des\nfacteurs importants qui rendent un investissement dans le déposant ou l’offre\nspéculatif ou risqué ».\nCertains indicateurs de risque peuvent figurer dans les\nnotes aux états financiers, dans le rapport de gestion (MD&A) ou ailleurs dans des\nprésentations aux investisseurs ou d’autres dépôts périodiques.",
+              "title": "3.3 Informations sur les risques | DART – Deloitte Accounting Research ...",
+              "url": "https://dart.deloitte.com/USDART/home/publications/deloitte/additional-deloitte-guidance/roadmap-sec-comment-letter-considerations/chapter-3-sec-disclosure-topics/3-3-disclosures-about-risk",
+              "date": null,
+              "last_updated": "2026-03-31",
+              "source": "web"
+            },
+            {
+              "id": 3,
+              "snippet": "Les sections supplémentaires du présent formulaire 10-K qui devraient faciliter la lecture de notre rapport de gestion sont les suivantes : (i) une description des services que nous fournissons, par secteur, aux points\n1 et 2 « Activités et propriétés » — « Services fournis » ; (ii) une description de notre stratégie commerciale aux points 1 et 2 « Activités et propriétés » — « Notre stratégie » ; et (iii) une description des\nfacteurs de risque nous affectant, ainsi que nos activités, au point 1A « Facteurs de risque ».",
+              "title": "Formulaire 10-K Point 7. Rapport de gestion - SEC.gov",
+              "url": "https://www.sec.gov/Archives/edgar/data/1449732/000119312512289206/d374099dex993.htm",
+              "date": "2012-03-29",
+              "last_updated": "2025-09-23",
+              "source": "web"
+            },
+            {
+              "id": 4,
+              "snippet": "En résumé, les formulaires 10-K, 10-Q, 20-F et 40-F communiquent des informations détaillées et des éclairages sur la performance financière globale de la société et sur ses détails opérationnels, tandis que les formulaires 8-K et 6-K sont déposés pour fournir des mises à jour opportunes et pertinentes sur des changements importants significatifs.",
+              "title": "Comment s’orienter parmi les formulaires 10-K, 10-Q, 20-F, 40-F, 8-K et 6-K",
+              "url": "https://www.toppanmerrill.com/blog/how-to-navigate-forms-10-k-10-q-20-f-40-f-8-k-and-6-k/",
+              "date": "2025-03-19",
+              "last_updated": "2026-05-16",
+              "source": "web"
+            },
+            {
+              "id": 5,
+              "snippet": "#### Point 1 – Activités\nCette section décrit les activités de la société : qui elle est et ce qu’elle fait, quelles filiales elle détient et sur quels marchés elle opère.\nElle peut également inclure les événements récents, la concurrence, la réglementation et les questions de main-d’œuvre.\n(Certains secteurs sont fortement réglementés et soumis à des exigences complexes en matière de main-d’œuvre, ce qui a des effets importants sur l’activité.)\nD’autres sujets de cette section peuvent inclure des coûts d’exploitation particuliers, des facteurs saisonniers ou des questions d’assurance.",
+              "title": "Formulaire 10-K - Wikipédia",
+              "url": "https://en.wikipedia.org/wiki/Form_10-K",
+              "date": "2005-02-23",
+              "last_updated": "2026-03-31",
+              "source": "web"
+            },
+            {
+              "id": 6,
+              "snippet": "Quelques sociétés ont placé le résumé au « Point 1.\nActivités ».",
+              "title": "Règles de la SEC sur la communication des facteurs de risque",
+              "url": "https://corpgov.law.harvard.edu/2021/12/22/sec-risk-factor-disclosure-rules/",
+              "date": "2021-12-22",
+              "last_updated": "2026-04-13",
+              "source": "web"
+            },
+            {
+              "id": 7,
+              "snippet": "Le point 303 du règlement S-K précise les informations qu’un déposant est\ntenu de fournir lorsqu’il commente sa situation financière et ses résultats\nd’exploitation dans le rapport de gestion (MD&A).\n...\n- Exiger la communication (1) de toute tendance ou incertitude connue qui a eu ou est raisonnablement susceptible d’avoir une incidence importante sur les produits ou le résultat et (2) de tout événement connu qui est « raisonnablement susceptible de provoquer un changement important dans la relation entre les coûts et les produits (tels que des hausses futures de coûts connues ou raisonnablement probables . . . ) » (soulignement ajouté).\n...\nEn vertu du point 303 du règlement S-K, les déposants sont tenus de communiquer dans le rapport de gestion\nles tendances ou incertitudes connues importantes susceptibles d’affecter la performance future\n(qu’elles soient favorables ou défavorables).\n...\nPour fournir des informations complètes et utiles, la direction devrait envisager de communiquer les éléments suivants dans la section du rapport de gestion consacrée aux méthodes comptables critiques :- La ou les méthodes utilisées pour déterminer les estimations comptables critiques.\n- L’exactitude des estimations ou hypothèses passées.\n- La mesure dans laquelle les estimations ou hypothèses ont changé.\n- Les facteurs qui influent sur la variabilité.\n- Quelles estimations ou hypothèses sont raisonnablement susceptibles de changer à l’avenir.\n...\nles questions dans le rapport de gestion si ces questions répondent aux critères du point\n303(b)(2)(ii) du règlement S-K, qui exige la communication de « toute tendance\nou incertitude connue qui a eu ou qui est raisonnablement susceptible d’avoir » une\nincidence importante sur les produits ou le résultat.",
+              "title": "3.1 Rapport de gestion | DART",
+              "url": "https://dart.deloitte.com/USDART/home/publications/deloitte/additional-deloitte-guidance/roadmap-sec-comment-letter-considerations/chapter-3-sec-disclosure-topics/3-1-management-s-discussion-analysis",
+              "date": null,
+              "last_updated": "2026-04-19",
+              "source": "web"
+            },
+            {
+              "id": 8,
+              "snippet": "- **Point 1 : Activités**\n...\n## Point 1 - ActivitésneLes sociétés définissent généralement leurs activités dans cette section d’ouverture du rapport 10-K.\nElles décrivent leurs différentes gammes de produits et secteurs d’activité.\nElles énumèrent les contrats, les matières premières utilisées et les circuits d’approvisionnement ou de distribution.\nElles évoquent la concurrence et les facteurs concurrentiels du marché.\nSi la recherche et développement ou les questions de propriété intellectuelle sont importantes pour les activités de la société, elles y sont incluses.\nLa réglementation publique est abordée.\nEnfin, plusieurs pages sont consacrées à l’exposé des facteurs de risque à prendre en compte pour évaluer les activités de la société.",
+              "title": "Le 10-K - Dépôts auprès de la SEC - Guides de recherche du Baruch College",
+              "url": "https://guides.newman.baruch.cuny.edu/c.php?g=188202&p=1244183",
+              "date": "2009-11-02",
+              "last_updated": "2026-05-09",
+              "source": "web"
+            },
+            {
+              "id": 9,
+              "snippet": "- **Item 1A: Risk Factors:** Absolutely critical reading.\nThis **section** lists the most significant risks and uncertainties that could materially affect the company’s business, **financial condition**, or operating results.\nEffective **10k risk factors analysis** is paramount for **investors**.\nLook for specific, quantifiable risks, not just boilerplate warnings.",
+              "title": "How to Read a 10-K Report with AI | Complete SEC Analysis Guide",
+              "url": "https://www.v7labs.com/blog/how-to-read-a-10k-report-ai-sec-filings-guide",
+              "date": "2025-06-11",
+              "last_updated": "2026-05-16",
+              "source": "web"
+            },
+            {
+              "id": 10,
+              "snippet": "**Item 7: Management’s Discussion and Analysis of Financial Condition and Results of Operations (MD&A)**– This section is perhaps the most narrative part of Form 10-K, where the company’s executives discuss the financial and operational factors that affected the business’s performance over the reporting period.\n...\nItem 7, Management’s Discussion and Analysis (MD&A), is an essential part of Form 10-K that offers investors a detailed narrative crafted by the company’s management.\nIt provides context and analysis beyond the figures presented in the financial statements.\nThis section aims to offer a view of the company through the lens of its management, explaining the dynamics of the business, the financial outcomes, and the strategies and decisions that influenced those results over the fiscal year.\n...\n**Operational Review**: This component of MD&A provides an analysis of the company’s business operations over the fiscal year.\nIt covers critical areas such as sales trends, customer acquisition and retention, changes in the competitive landscape, and operational milestones.",
+              "title": "What are Items 7, 7A, and 8 in Part II of Form 10-K? - Superfast CPA",
+              "url": "https://www.superfastcpa.com/what-are-items-7-7a-and-8-in-part-ii-of-form-10-k/",
+              "date": "2021-03-13",
+              "last_updated": "2026-01-05",
+              "source": "web"
+            },
+            {
+              "id": 11,
+              "snippet": "(a) If the registrant experiences a cybersecurity incident that is determined by the registrant \n...\nIf the registrant or any of its subsidiaries consolidated has completed the acquisition or \ndisposition of a significant amount of assets, otherwise than in the ordinary course of business, or \nthe acquisition or disposition of a significant amount of assets that constitute a real estate \noperation as defined in § 210.3-14(a)(2) disclose the following information:\n(a) the date of completion of the transaction; \n(b) a brief description of the assets involved; \n(c) the identity of the person(s) from whom the assets were acquired or to whom they were \nsold and the nature of any material relationship, other than in respect of the transaction, between \nsuch person(s) and the registrant or any of its affiliates, or any director or officer of the\n...\n(1) \nthe date on which the registrant becomes obligated on the direct financial obligation \nand a brief description of the transaction or agreement creating the obligation; \n(2)\nthe amount of the obligation, including the terms of its payment and, if applicable, a \nbrief description of the material terms under which it may be accelerated or increased and the \nnature of any recourse provisions that would enable the registrant to recover from third parties; \nand; \n...\na brief description of the other terms and conditions of the transaction or agreement\nthat are material to the registrant.",
+              "title": "[PDF] Form 8-K - SEC.gov",
+              "url": "https://www.sec.gov/files/form8-k.pdf",
+              "date": null,
+              "last_updated": "2025-04-11",
+              "source": "web"
+            },
+            {
+              "id": 12,
+              "snippet": "**Item 1 **“Business” requires a description of the company’s business, including its main products and services, what subsidiaries it owns, and what markets it operates in.\nThis section may also include information about recent events, competition the company faces, regulations that apply to it, labor issues, special operating costs, or seasonal factors.\nThis is a good place to start to understand how the company operates.",
+              "title": "How to Read a 10-K/10-Q | Investor.gov",
+              "url": "https://www.investor.gov/introduction-investing/general-resources/news-alerts/alerts-bulletins/investor-bulletins/how-read",
+              "date": "2021-01-25",
+              "last_updated": "2026-05-17",
+              "source": "web"
+            },
+            {
+              "id": 13,
+              "snippet": "**Item 7: Management's Discussion and Analysis (MD&A)** is the required narrative section of the 10-K where management explains its financial results and financial condition.\nIt covers results of operations (why revenue and expenses changed), liquidity and capital resources (how the company funds itself), and critical accounting policies and estimates (the judgements that shaped the numbers).\nThe MD&A is not audited by the company's auditor; it is management's explanation of the statements.\nYet it is heavily scrutinised by the SEC, which requires it to be accurate, balanced, and not misleading — and has enforcement power to challenge inadequate disclosures.\n...\nThe SEC's MD&A requirements are detailed in Regulation S-K, Item 303.\nThe agency requires that MD&A address:\n1. **Results of operations.** A discussion of revenue, cost of goods sold, operating expenses, and operating income.\nThis must include year-over-year comparisons and explanation of significant changes (usually anything more than 5% variance).\n2. **Liquidity and capital resources.** Cash flow from operations, investing, and financing.\nManagement must discuss how it funds the business, what liquidity constraints exist, and what capital expenditures are planned.\n3. **Critical accounting policies and estimates.** The accounting methods and assumptions that have the most impact on financial results.\nExamples include revenue recognition, inventory valuation, allowances for doubtful accounts, and pension assumptions.\n4. **Off-balance-sheet arrangements and known contractual obligations.** Leases, purchase commitments, debt covenants, and other obligations that shape future cash requirements.\n5. **Tabular disclosure of contractual obligations.** A table showing debt maturity, operating lease obligations, purchase commitments, and other fixed obligations by period (current year, years 2–3, years 4–5, beyond 5 years).\n6. **Forward-looking statements and risk disclosures.** While Item 1A (Risk Factors) covers risks in depth, MD&A must touch on risks relevant to the company's financial condition and results.\n...\nItem 7 (MD&A) is the narrative bridge between the audited financial statements and the real business.",
+              "title": "Item 7: Management's Discussion and Analysis (MD&A)",
+              "url": "https://pomegra.io/learn/library/track-b-stock-market-core/financial-statements/chapter-08-reading-a-10-k/item-7-md-and-a",
+              "date": null,
+              "last_updated": "2026-05-14",
+              "source": "web"
+            }
+          ],
+          "type": "search_results",
+          "queries": [
+            "SEC Form 10-K item 1 business description",
+            "SEC 10-K Item 1A risk factors explanation",
+            "SEC 10-K Item 7 MD&A overview",
+            "SEC 10-K Item 8 financial statements contents"
+          ]
+        },
+        {
+          "id": "msg_e81fbad4-f4ac-4092-b332-d04db8f414b2",
+          "content": [
+            {
+              "text": "Investors read a Form 10‑K by focusing on a few core items that move from “what this business is” to “what could go wrong” to “how management explains the numbers” to the audited financials themselves.[web:12][web:5] Together, Items 1, 1A, 7, and 8 form the spine of the filing and should be read as a connected story, not as isolated sections.[web:1][web:13]\n\n## Item 1: Business\n\nItem 1 “Business” describes what the company actually does, including its main products and services, key subsidiaries, and the markets where it operates.[web:12][web:5] This section often discusses competition, applicable regulations, labor issues, important contracts, seasonal patterns, and sometimes special operating costs or insurance matters that affect operations.[web:12][web:8]\n\nInvestors use Item 1 to understand the company’s **economic** engine and competitive position, which is essential context for interpreting the rest of the 10‑K.[web:12][web:8] Common uses include:\n- Checking how the company makes money (revenue streams, segments, and geographies).[web:12][web:8]\n- Evaluating competitive landscape and regulatory exposure that may affect margins or growth.[web:8][web:5]\n- Seeing whether the described business model aligns with later financial performance and management’s narrative in MD&A.[web:3][web:13]\n\n## Item 1A: Risk Factors\n\nItem 1A “Risk Factors” must present the material factors that make an investment in the company speculative or risky, under Regulation S‑K Item 105.[web:1][web:2] It should be written in plain English and cover significant uncertainties that could materially affect the business, financial condition, or operating results.[web:1][web:9]\n\nInvestors use this section to assess downside scenarios and weed out boilerplate from company‑specific risks.[web:2][web:9] Typical approaches include:\n- Identifying the few most material, tailored risks (e.g., reliance on one product, tight liquidity, regulatory investigations) versus generic language.[web:2][web:9]\n- Mapping risks back to Item 1 and Item 7 to see whether management’s strategy and financial explanations realistically reflect those risks.[web:2][web:13]\n- Using the risk list as a checklist for stress‑testing valuation assumptions (growth, margins, leverage, and capital needs).[web:2][web:9]\n\n## Item 7: MD&A\n\nItem 7 “Management’s Discussion and Analysis of Financial Condition and Results of Operations” (MD&A) is the narrative where management explains the financial results and financial condition, as required by Regulation S‑K Item 303.[web:7][web:13] It must discuss results of operations, liquidity and capital resources, and critical accounting policies and estimates, including known trends or uncertainties reasonably likely to materially impact performance.[web:7][web:13]\n\nInvestors use MD&A as the **bridge** between the business description and the audited numbers.[web:10][web:13] Common uses include:\n- Understanding the drivers behind year‑over‑year changes in revenue, margins, and expenses, instead of just seeing the changes in the statements.[web:10][web:13]\n- Evaluating liquidity, funding sources, capital expenditures, and off‑balance‑sheet arrangements to judge solvency and future cash needs.[web:7][web:13]\n- Studying critical accounting estimates to spot areas where management judgment heavily affects reported earnings (e.g., revenue recognition, reserves, impairment).[web:7][web:13]\n\n## Item 8: Financial Statements\n\nItem 8 contains the audited financial statements and related notes, typically including the balance sheet, income statement, cash flow statement, statement of shareholders’ equity, and accompanying footnotes.[web:1][web:10] This section also includes the independent auditor’s report, which speaks to whether the financials are fairly presented in conformity with GAAP, and sometimes flags material weaknesses in internal control.[web:1][web:10]\n\nInvestors use Item 8 to test the narrative against hard numbers and to build models.[web:10][web:13] Key uses include:\n- Verifying that trends highlighted in MD&A actually show up in revenue, margins, cash flows, and leverage metrics.[web:10][web:13]\n- Mining footnotes for segment data, debt terms, contingencies, leases, and other detailed disclosures that may not be prominent elsewhere.[web:10][web:1]\n- Building or updating valuation models (DCF, comparables) using audited figures rather than management’s non‑GAAP metrics or selective highlights.[web:10][web:13]\n\n## How to read them together\n\nA practical way to read a 10‑K is to start with Item 1 (what the company is), move to Item 1A (what can go wrong), then Item 7 (how management explains recent performance and future trends), and finally Item 8 (whether the audited numbers and notes support that story).[web:12][web:13] Experienced investors constantly cross‑check among these sections, looking for inconsistencies between the business description, the risks, management’s discussion, and the underlying financial statements.[web:3][web:7]",
+              "type": "output_text",
+              "annotations": [],
+              "logprobs": []
+            }
+          ],
+          "role": "assistant",
+          "status": "completed",
+          "type": "message"
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "usage": {
+        "input_tokens": 7267,
+        "output_tokens": 1188,
+        "total_tokens": 8455,
+        "cost": {
+          "currency": "USD",
+          "input_cost": 0.0046,
+          "output_cost": 0.01188,
+          "total_cost": 0.01943,
+          "cache_creation_cost": null,
+          "cache_read_cost": 0.00045,
+          "tool_calls_cost": 0.0025
+        },
+        "input_tokens_details": {
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 3584,
+          "cached_tokens": 3584
+        },
+        "tool_calls_details": {
+          "search_web": {
+            "invocation": 1
+          }
+        },
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "background": false,
+      "completed_at": 1779391718,
+      "frequency_penalty": 0,
+      "incomplete_details": null,
+      "instructions": "## Abstract\n<role>\nYou are an AI assistant developed by Perplexity AI. Given a user's query, your goal is to generate an expert, useful, factually correct, and contextually relevant response by leveraging available tools and conversation history. First, you will receive the tools you can call iteratively to gather the necessary knowledge for your response. You need to use these tools rather than using internal knowledge. Second, you will receive guidelines to format your response for clear and effective presentation. Third, you will receive guidelines for citation practices to maintain factual accuracy and credibility.\n</role>\n\n## Instructions\n<tools_workflow>\nBegin each turn with tool calls to gather information. You must call at least one tool before answering, even if information exists in your knowledge base. Decompose complex user queries into discrete tool calls for accuracy and parallelization. After each tool call, assess if your output fully addresses the query and its subcomponents. Continue until the user query is resolved or until the <tool_call_limit> below is reached. End your turn with a comprehensive response. Never mention tool calls in your final response as it would badly impact user experience.\n\n<tool_call_limit> Make at most three tool calls before concluding.</tool_call_limit>\n</tools_workflow>\n\n## Citation Instructions\n<citation_instructions>\nYour response must include at least 1 citation. Add a citation to every sentence that includes information derived from tool outputs.\nTool results are provided using `id` in the format `type:index`. `type` is the data source or context. `index` is the unique identifier per citation.\n<common_source_types> are included below.\n\n<common_source_types>\n- `web`: Internet sources\n- `page`: Full web page content\n- `conversation_history`: past queries and answers from your interaction with the user\n</common_source_types>\n\n<formatting_citations>\nUse brackets to indicate citations like this: [type:index]. Commas, dashes, or alternate formats are not valid citation formats. If citing multiple sources, write each citation in a separate bracket like [web:1][web:2][web:3].\n\nCorrect: \"The Eiffel Tower is in Paris [web:3].\"\nIncorrect: \"The Eiffel Tower is in Paris [web-3].\"\n</formatting_citations>\n\nYour citations must be inline - not in a separate References or Citations section. Cite the source immediately after each sentence containing referenced information. If your response presents a markdown table with referenced information from `web`, `memory`, `attached_file`, or `calendar_event` tool result, cite appropriately within table cells directly after relevant data instead in of a new column. Do not cite `generated_image` or `generated_video` inside table cells.\n\n## Response Guidelines\n<response_guidelines>\nResponses are displayed on web interfaces where users should not need to scroll extensively. Limit responses to 5 sections maximum. Users can ask follow-up questions if they need additional detail. Prioritize the most relevant information for the initial query.\n\n### Answer Formatting\n- Begin with a direct 1-2 sentence answer to the core question.\n- Organize the rest of your answer into sections led with Markdown headers (using ##, ###) when appropriate to ensure clarity (e.g. entity definitions, biographies, and wikis).\n- Your answer should be at least 3 sentences long.\n- Each Markdown header should be concise (less than 6 words) and meaningful.\n- Markdown headers should be plain text, not numbered.\n- Between each Markdown header is a section consisting of 2-3 well-cited sentences.\n- When comparing entities with multiple dimensions, use a markdown table to show differences (instead of lists).\n- Whenever possible, present information as bullet point lists to improve readability.\n- You are allowed to bold at most one word (**example**) per paragraph. You can't bold consecutive words.\n- For grouping multiple related items, present the information with a mix of paragraphs and bullet point lists. Do not nest lists within other lists.\n\n### Tone\n<tone>\nExplain clearly using plain language. Use active voice and vary sentence structure to sound natural. Ensure smooth transitions between sentences. Avoid personal pronouns like \"I\". Keep explanations direct; use examples or metaphors only when they meaningfully clarify complex concepts that would otherwise be unclear.\n</tone>\n\n### Lists and Paragraphs\n<lists_and_paragraphs>\nUse lists for: multiple facts/recommendations, steps, features/benefits, comparisons, or biographical information.\n\nAvoid repeating content in both intro paragraphs and list items. Keep intros minimal. Either start directly with a header and list, or provide 1 sentence of context only.\n\nList formatting:\n- Use numbers when sequence matters; otherwise bullets (-) with a space after the dash.\n- Use numbers when sequence matters; otherwise bullets (-).\n- No whitespace before bullets (i.e. no indenting), one item per line.\n- Sentence capitalization; periods only for complete sentences.\n\nParagraphs:\n- Use for brief context (2-3 sentences max) or simple answers\n- Separate with blank lines\n- If exceeding 3 consecutive sentences, consider restructuring as a list\n</lists_and_paragraphs>\n\n### Summaries and Conclusions\n<summaries_and_conclusions>\nAvoid summaries and conclusions. They are not needed and are repetitive. Markdown tables are not for summaries. For comparisons, provide a table to compare, but avoid labeling it as 'Comparison/Key Table', provide a more meaningful title.\n</summaries_and_conclusions>\n\n## Prohibited Meta-Commentary\n<prohibited_commentary>\n- Never reference your information gathering process in your final answer.\n- Do not use phrases such as:\n- \"Based on my search results...\"\n- \"Now I have gathered comprehensive information...\"\n- \"According to my research...\"\n- \"My search revealed...\"\n- \"I found information about...\"\n- \"Let me provide a detailed answer...\"\n- \"Let me compile this information...\"\n- \"Short Answer: ...\"\n- Begin answers immediately with factual content that directly addresses the user's query.\n</prohibited_commentary>\n\n<copyright_requirements>\n- Never reproduce copyrighted content (text, lyrics, etc.)\n- You may share public domain content (expired copyrights, traditional works)\n- When copyright status is uncertain, treat as copyrighted\n- Keep summaries brief (under 30 words) and original — don't reconstruct sources\n- Brief factual statements (names, dates, facts) are always acceptable\n</copyright_requirements>\n\nCurrent date: Thursday, May 21, 2026\n\n",
+      "max_output_tokens": 8192,
+      "max_tool_calls": null,
+      "metadata": {},
+      "parallel_tool_calls": true,
+      "presence_penalty": 0,
+      "previous_response_id": null,
+      "prompt_cache_key": null,
+      "reasoning": null,
+      "safety_identifier": null,
+      "service_tier": "default",
+      "store": true,
+      "temperature": 1,
+      "text": {
+        "format": {
+          "type": "text"
+        }
+      },
+      "tool_choice": "auto",
+      "tools": [
+        {
+          "type": "web_search"
+        },
+        {
+          "type": "fetch_url"
+        }
+      ],
+      "top_logprobs": 0,
+      "top_p": 1,
+      "truncation": "disabled",
+      "user": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Réponse — Expliquez le modèle de calcul sur GPU de NVIDIA : multiprocesseurs de flux, cœurs CUDA, Tensor Cores...">
+    ```json theme={null}
+    {
+      "id": "resp_ef76b85e-1a63-4c0f-97ce-9e58dd1d050a",
+      "created_at": 1779391739,
+      "model": "openai/gpt-5.1",
+      "object": "response",
+      "output": [
+        {
+          "results": [
+            {
+              "id": 1,
+              "snippet": "Lorsque nous programmons des GPU, nous produisons des séquences d'instructions que leurs Streaming Multiprocessors doivent exécuter.\nLes Streaming Multiprocessors (SM) des GPU NVIDIA sont à peu près analogues aux\ncœurs des CPU.\nAutrement dit, les SM exécutent des calculs et stockent l'état disponible\npour le calcul dans des registres, avec des caches associés.\nComparés aux cœurs de CPU, les\nSM de GPU sont des processeurs simples et peu puissants.\nL'exécution dans les SM est pipelinée au sein d'une\ninstruction (comme dans presque tous les CPU depuis les années 1990), mais il n'y a pas d'exécution spéculative\nni de prédiction du pointeur d'instruction (contrairement à tous les CPU haute performance\ncontemporains).\n...\nUn GPU H100 SXM consomme au plus 700 W et comporte 132 SM, chacun disposant de quatre\nWarp Schedulers pouvant chacun émettre des instructions à 32 threads (autrement dit un warp) en parallèle par cycle d'horloge, soit un total de 128 × 132 > 16 000 threads parallèles fonctionnant à environ 5 cW chacun.\n...\nLes SM de GPU prennent aussi en charge un grand nombre de threads *concurrents* -- des fils d'exécution dont les instructions sont entrelacées.\nUn seul SM d'un H100 peut exécuter simultanément jusqu'à 2048 threads répartis en\n64 groupes de 32 threads chacun.\nAvec 132 SM, cela fait un total de plus de\n250 000 threads concurrents.\nLes CPU peuvent également exécuter de nombreux threads simultanément.\nMais les basculements entre\nwarps se produisent à la vitesse d'un seul cycle d'horloge (plus de 1000x plus rapide que les changements de contexte sur un CPU), là encore grâce aux Warp Schedulers du SM. Le volume de warps disponibles et la rapidité des basculements de warps aident à masquer la latence causée par les lectures mémoire, la synchronisation des threads ou d'autres instructions coûteuses, garantissant que la bande passante arithmétique fournie par les CUDA Cores et les Tensor Cores est bien utilisée.",
+              "title": "Qu'est-ce qu'un Streaming Multiprocessor ? | Glossaire GPU - Modal",
+              "url": "https://modal.com/gpu-glossary/device-hardware/streaming-multiprocessor",
+              "date": null,
+              "last_updated": "2026-05-15",
+              "source": "web"
+            },
+            {
+              "id": 2,
+              "snippet": "NVIDIA n'appelle pas du tout ces tuiles des « cœurs » — elle les appelle Graphics Processing Clusters, ou « GPC ».\n...\nDans cette zone de la puce, nous nous attendons à trouver 16 unités load/store, 4 unités de fonctions spéciales, 128 cœurs CUDA et 4 cœurs Tensor.\n...\nEn commençant ici du côté GPU, nous savons que chacun de ces streaming multiprocessors possède 128 cœurs CUDA et 4 cœurs Tensor :\n...\nCela nous donne un grand total de 8 cœurs Zen 4 sur le CPU, 18 432 cœurs CUDA et 576 cœurs Tensor sur le GPU :\n...\nPlus précisément, nous savons qu'un Streaming Multiprocessor Ada possède 128 cœurs CUDA et 4 cœurs Tensor.",
+              "title": "Zen, CUDA et Tensor Cores, Partie I : Le silicium",
+              "url": "https://www.computerenhance.com/p/zen-cuda-and-tensor-cores-part-i",
+              "date": "2024-09-03",
+              "last_updated": "2026-05-19",
+              "source": "web"
+            },
+            {
+              "id": 3,
+              "snippet": "La section terminologie définit un Streaming Multiprocessor (SM) comme quelque chose qui : « exécute des instructions de calcul sur le GPU ».\n...\nLes SM sont les unités centrales du GPU qui exécutent les instructions de calcul.\nLes moteurs GPU comprennent les SM ainsi que d'autres parties comme les moteurs de copie ou vidéo gérant diverses tâches.",
+              "title": "Différence entre Streaming Multiprocessor et Compute Engine ?",
+              "url": "https://forums.developer.nvidia.com/t/difference-between-streaming-multiprocessor-and-compute-engine/300154",
+              "date": "2024-07-17",
+              "last_updated": "2026-04-28",
+              "source": "web"
+            },
+            {
+              "id": 4,
+              "snippet": "Les unités INT32 effectuent des calculs entiers, les unités FP32 et FP64 des calculs en virgule flottante.\nLes LD/ST sont des unités load-store, la SFU calcule des fonctions spéciales (par ex. sin/cos).\n...\nComme @rs277 l'a déjà expliqué, quand les gens parlent d'un GPU avec *n* « cœurs CUDA », ils veulent dire un GPU avec *n* cœurs FP32, dont chacun peut effectuer une opération de multiplication-addition fusionnée (FMA) en simple précision par cycle.\nLe nombre de « cœurs CUDA » n'indique rien de particulier sur le nombre d'ALU entières 32 bits, ni de cœurs FP64, ni d'unités multifonctions, ni de « cœurs Tensor » (que je considérerais aussi comme un terme marketing).",
+              "title": "Comprendre les Tensor Core, Cuda Core et autres cœurs dans ...",
+              "url": "https://forums.developer.nvidia.com/t/understanding-of-tensor-core-cuda-core-and-other-cores-in-ampere-architecture/235900",
+              "date": "2022-12-01",
+              "last_updated": "2026-05-10",
+              "source": "web"
+            },
+            {
+              "id": 5,
+              "snippet": "Un Streaming Multiprocessor (SM) est un composant fondamental des GPU NVIDIA, constitué de plusieurs Stream Processors (CUDA Core) chargés d'exécuter les instructions en parallèle.\nCe sont des processeurs généralistes visant une fréquence d'horloge basse et dotés d'un petit cache.\n...\nSe compose de :\n- Un fichier de registres TRÈS GRAND - C'est ainsi qu'ils peuvent changer de contexte rapidement sans surcoût, en gardant les données dans les registres, voir Warp Scheduling\n- Caches et mémoire partagée\n- Warp Scheduler\n- Unités d'exécution (SFU, CUDA Cores et Tensor Cores)\n...\n> Les SM exécutent plusieurs blocs de threads en parallèle.\nDès que l'un de ses blocs de threads a terminé son exécution, il prend le bloc de threads suivant en série.\nGrâce à Stephen Jones, j'ai appris que chaque SM peut gérer 64 warps, soit un total de 2048 threads.\nCependant, il traite réellement 4 warps à la fois (voir Warp Scheduling).\n...\n> Un SM peut contenir jusqu'à 8 blocs de threads au total.\n...\n> En général, les SM prennent en charge le parallélisme au niveau des instructions mais pas la prédiction de branchement.\nChaque architecture de GPU se compose de plusieurs SM.",
+              "title": "Streaming Multiprocessor (SM) - Steven Gong",
+              "url": "https://stevengong.co/notes/Streaming-Multiprocessor",
+              "date": "2026-02-07",
+              "last_updated": "2026-05-20",
+              "source": "web"
+            },
+            {
+              "id": 6,
+              "snippet": "En intégrant étroitement ces Tensor Cores à des unités de fonctions spéciales étendues au sein des streaming multiprocessors de NVIDIA Rubin, la plateforme accélère considérablement les mécanismes d'attention et les chemins de calcul creux, augmentant à la fois la densité arithmétique et l'efficacité énergétique sans compromettre la précision du modèle.",
+              "title": "NVIDIA Tensor Cores",
+              "url": "https://www.nvidia.com/en-us/data-center/tensor-cores/",
+              "date": "2026-03-16",
+              "last_updated": "2026-05-20",
+              "source": "web"
+            },
+            {
+              "id": 7,
+              "snippet": "Nvidia solved the problem of escalating complexity with its \"unified\" Tesla architecture, released in 2006.\nIn the G80 die, there is no more distinction between layers.\nThe Stream Multiprocessor (SM) replaces all previous units thanks to its ability to run vertex, fragment and geometry \"kernel\" without distinction.\nThe load balancing happens automatically by swapping the \"kernel\" run by each SM depending on the need of the pipeline.\nNo longer SIMD capable, \"shaders units\" are now \"core\" capable of one integer or one float32 instruction per clock.\nSM receive threads in groups of 32 called warps.\nIdeally all threads in a warp will execute the same instruction at the same time, only on different data (hence the name SIMT).\nThe Multi-threaded Instruction Unit (MT) takes care of enabling/disabling threads in a warp in case their Instruction Pointer (IP) converge/diverge.\nTwo SFU units are here to help with complex mathematic calculation such as inverse square root, sin, cos, exp, and rcp.\nThese units are also able to execute one instruction per clock but since there are only two of them, warp execution speed is divided by four.\nThere is no hardware support for float64, it is done in software and greatly affects the execution speed.\n...\nThe SM needs to be fed instructions and data which resides in the GPU memory.\nTo avoid stalling, GPUs don't try to avoid memory trips with a lot of cache and speculation like CPUs do.\n...\nThe execution model still revolves around warps of 32 threads scheduled on a SM.\nOnly thanks to a process of 40nm, NVidia doubled/quadrupled everything.\nA SM can now schedule two half-warp (16 threads) simultaneously thanks to two arrays of 16 CUDA cores.\nWith each core executing one instruction per clock, a SM can retire one warp instruction per clock (4x the capacity of Tesla SM).\n...\nThere is a semi-hardware support for float64 where operations are carried by two CUDA core combined.\n...\nWith four warp scheduler able to process a whole warp in one clock (compared to Fermi's half-warp design) the SMX now contains 192 cores.\n...\nWith the release of Turing in 2018, Nvidia operated its \"biggest architectural leap forward in over a decade\"^[13]^.\nNot only the \"Turing SM\" added A.I dedicated Tensor cores, they also gained Raytracing cores.\n...\nBesides the new cores, Turing added three major features.\nFirst, the CUDA core is now a super-scalar able to execute both integer instruction and float instruction in parallel.\n...\nSecond, the new GDDR6X memory sub-system, backed by 16 controllers, can now achieve 14 Gbps.\nLast, threads are no longer sharing their Instruction Pointer in a warp.\nThanks to Independent Thread Scheduling introduced in Volta each thread has its own IP.\nAs a result, SMs are free to fine schedule threads in a warp without the need to make them converge as soon as possible.\n...\nThe next architecture, codenamed Ampere, is rumored to be announced later in 2020.",
+              "title": "A history of NVidia Stream Multiprocessor - Fabien Sanglard",
+              "url": "https://fabiensanglard.net/cuda/",
+              "date": "2020-05-02",
+              "last_updated": "2026-05-18",
+              "source": "web"
+            },
+            {
+              "id": 8,
+              "snippet": "According to Michael Houston from NVIDIA, Tensor Cores are specialized hardware units designed to accelerate mixed precision training.",
+              "title": "Tensor Cores Explained in Simple Terms - DigitalOcean",
+              "url": "https://www.digitalocean.com/community/tutorials/understanding-tensor-cores",
+              "date": "2025-08-04",
+              "last_updated": "2026-05-18",
+              "source": "web"
+            },
+            {
+              "id": 9,
+              "snippet": "2. You’ve already figured out the constant cache is 8kB per SM.\nIt’s not configurable (not sure what you would configure about it, anyway).",
+              "title": "Multiprocessor architecture - CUDA - NVIDIA Developer Forums",
+              "url": "https://forums.developer.nvidia.com/t/multiprocessor-architecture/159951",
+              "date": "2020-11-19",
+              "last_updated": "2026-05-19",
+              "source": "web"
+            },
+            {
+              "id": 10,
+              "snippet": "CUDA Cores are the fundamental processing units inside NVIDIA GPUs, and they handle parallel computations.\n...\nCUDA Cores are the generalists.\nThey handle standard floating-point operations, integer math, and general-purpose parallel computing tasks.\n...\nCUDA Cores handle general parallel computing tasks like data preprocessing and activation functions, while **Tensor Cores** specialize in the matrix multiplications that dominate neural network training.\nBoth work together to accelerate your complete machine learning pipeline.",
+              "title": "NVIDIA CUDA Cores: How They Work and Why They Matter (2026)",
+              "url": "https://www.thundercompute.com/blog/cuda-cores-explained-ai-training",
+              "date": "2026-05-17",
+              "last_updated": "2026-05-14",
+              "source": "web"
+            },
+            {
+              "id": 11,
+              "snippet": "The GPU’s memory bandwidth determines how fast it can move data from/to memory (vRAM) to the computation cores.\nIt’s a more representative indicator than GPU Memory Speed.\nIt is determined by the data transmission speed between memory and computation cores and the number of individual parallel links in the bus between these two parts.\n...\nGPU memory bandwidth refers to the rate at which data can be transferred between the GPU and its memory (VRAM).\nIt is measured in gigabytes per second (GB/s) and plays a critical role in handling large datasets, real-time rendering, and AI/ML workloads.",
+              "title": "GPU Memory Bandwidth and Its Impact on Performance - DigitalOcean",
+              "url": "https://www.digitalocean.com/community/tutorials/gpu-memory-bandwidth",
+              "date": "2025-08-05",
+              "last_updated": "2026-05-18",
+              "source": "web"
+            }
+          ],
+          "type": "search_results",
+          "queries": [
+            "NVIDIA streaming multiprocessor architecture overview",
+            "NVIDIA CUDA cores and tensor cores definition",
+            "NVIDIA HBM memory bandwidth explanation"
+          ]
+        },
+        {
+          "id": "msg_64a3d245-e4a5-494f-85ea-53211b74bf68",
+          "content": [
+            {
+              "text": "NVIDIA’s GPU compute model is built around many simple parallel cores grouped into streaming multiprocessors (SMs), backed by very high memory bandwidth (often HBM) so those cores stay busy. [web:1][web:11] SMs contain CUDA cores for general arithmetic and Tensor Cores for dense matrix math, all fed by wide, fast VRAM links. [web:2][web:5][web:6][web:10]\n\n## Streaming multiprocessors (SMs)\n\nAn SM is the fundamental **compute** block of an NVIDIA GPU, roughly analogous to a CPU core but designed to run thousands of lightweight threads in parallel. [web:1][web:5][web:7] Each SM has its own register file, caches/shared memory, warp schedulers, and execution units (CUDA cores, Tensor Cores, special‑function units, load/store units). [web:1][web:5][web:9]\n\nThe programming model launches many threads that are grouped into warps of 32 threads, and warps are scheduled onto SMs. [web:1][web:7] An SM can keep many warps resident (for example up to 64 warps / 2048 threads on recent parts) and quickly switch between them every cycle to hide memory latency instead of relying on deep caches or speculation. [web:1][web:5][web:7]\n\n## CUDA cores\n\n“CUDA cores” are the scalar FP32 execution units inside an SM that perform general-purpose parallel arithmetic. [web:4][web:10] In common usage, the advertised “N CUDA cores” number means N single‑precision units, each capable of roughly one fused multiply‑add (FMA) per cycle for floating‑point math. [web:4][web:2]\n\nCUDA cores handle the bulk of standard GPU work: floating‑point math, integer math, and general GPGPU tasks like elementwise ops, reductions, and control-heavy kernels. [web:4][web:10] An SM in a modern Ada architecture GPU, for example, might have 128 CUDA cores, and a large GPU aggregates many SMs to reach tens of thousands of CUDA cores in total. [web:2][web:7][web:10]\n\n## Tensor Cores\n\nTensor Cores are specialized matrix‑math units inside SMs designed to accelerate small matrix multiply‑accumulate operations, especially for deep learning. [web:6][web:8] They operate on tiles (e.g., 4×4, 16×16 depending on architecture) in mixed or reduced precision (FP16, BF16, TF32, INT8, etc.), delivering far higher throughput than doing the same operations on CUDA cores. [web:6][web:8]\n\nIn NVIDIA’s architectures since Volta/Turing, each SM includes multiple Tensor Cores alongside its CUDA cores (e.g., one Ada SM has 4 Tensor Cores and 128 CUDA cores). [web:2][web:7] The CUDA programming model or frameworks like cuDNN, TensorRT, and PyTorch map large GEMM/convolution ops into many tile operations, which Tensor Cores execute to accelerate training and inference. [web:6][web:8][web:10]\n\n## HBM and memory bandwidth\n\nGPU memory bandwidth is the rate at which data can be moved between GPU cores (inside SMs) and VRAM, typically measured in GB/s. [web:11] High bandwidth is crucial because massively parallel SMs can consume data extremely quickly and will stall if memory cannot supply operands fast enough. [web:1][web:11]\n\nHigh Bandwidth Memory (HBM) is a 3D‑stacked DRAM technology with a very wide bus that provides much higher bandwidth at lower power than traditional GDDR. [web:11] NVIDIA’s data‑center GPUs pair many SMs and Tensor Cores with HBM so that large models and tensors can be streamed efficiently, ensuring the arithmetic units (CUDA and Tensor Cores) can run near peak utilization rather than waiting on data. [web:1][web:6][web:11]",
+              "type": "output_text",
+              "annotations": [],
+              "logprobs": []
+            }
+          ],
+          "role": "assistant",
+          "status": "completed",
+          "type": "message"
+        }
+      ],
+      "status": "completed",
+      "error": null,
+      "usage": {
+        "input_tokens": 6685,
+        "output_tokens": 915,
+        "total_tokens": 7600,
+        "cost": {
+          "currency": "USD",
+          "input_cost": 0.00388,
+          "output_cost": 0.00915,
+          "total_cost": 0.01598,
+          "cache_creation_cost": null,
+          "cache_read_cost": 0.00045,
+          "tool_calls_cost": 0.0025
+        },
+        "input_tokens_details": {
+          "cache_creation_input_tokens": 0,
+          "cache_read_input_tokens": 3584,
+          "cached_tokens": 3584
+        },
+        "tool_calls_details": {
+          "search_web": {
+            "invocation": 1
+          }
+        },
+        "output_tokens_details": {
+          "reasoning_tokens": 0
+        }
+      },
+      "background": false,
+      "completed_at": 1779391739,
+      "frequency_penalty": 0,
+      "incomplete_details": null,
+      "instructions": "## Abstract\n<role>\nYou are an AI assistant developed by Perplexity AI. Given a user's query, your goal is to generate an expert, useful, factually correct, and contextually relevant response by leveraging available tools and conversation history. First, you will receive the tools you can call iteratively to gather the necessary knowledge for your response. You need to use these tools rather than using internal knowledge. Second, you will receive guidelines to format your response for clear and effective presentation. Third, you will receive guidelines for citation practices to maintain factual accuracy and credibility.\n</role>\n\n## Instructions\n<tools_workflow>\nBegin each turn with tool calls to gather information. You must call at least one tool before answering, even if information exists in your knowledge base. Decompose complex user queries into discrete tool calls for accuracy and parallelization. After each tool call, assess if your output fully addresses the query and its subcomponents. Continue until the user query is resolved or until the <tool_call_limit> below is reached. End your turn with a comprehensive response. Never mention tool calls in your final response as it would badly impact user experience.\n\n<tool_call_limit> Make at most three tool calls before concluding.</tool_call_limit>\n</tools_workflow>\n\n## Citation Instructions\n<citation_instructions>\nYour response must include at least 1 citation. Add a citation to every sentence that includes information derived from tool outputs.\nTool results are provided using `id` in the format `type:index`. `type` is the data source or context. `index` is the unique identifier per citation.\n<common_source_types> are included below.\n\n<common_source_types>\n- `web`: Internet sources\n- `page`: Full web page content\n- `conversation_history`: past queries and answers from your interaction with the user\n</common_source_types>\n\n<formatting_citations>\nUse brackets to indicate citations like this: [type:index]. Commas, dashes, or alternate formats are not valid citation formats. If citing multiple sources, write each citation in a separate bracket like [web:1][web:2][web:3].\n\nCorrect: \"The Eiffel Tower is in Paris [web:3].\"\nIncorrect: \"The Eiffel Tower is in Paris [web-3].\"\n</formatting_citations>\n\nYour citations must be inline - not in a separate References or Citations section. Cite the source immediately after each sentence containing referenced information. If your response presents a markdown table with referenced information from `web`, `memory`, `attached_file`, or `calendar_event` tool result, cite appropriately within table cells directly after relevant data instead in of a new column. Do not cite `generated_image` or `generated_video` inside table cells.\n\n## Response Guidelines\n<response_guidelines>\nResponses are displayed on web interfaces where users should not need to scroll extensively. Limit responses to 5 sections maximum. Users can ask follow-up questions if they need additional detail. Prioritize the most relevant information for the initial query.\n\n### Answer Formatting\n- Begin with a direct 1-2 sentence answer to the core question.\n- Organize the rest of your answer into sections led with Markdown headers (using ##, ###) when appropriate to ensure clarity (e.g. entity definitions, biographies, and wikis).\n- Your answer should be at least 3 sentences long.\n- Each Markdown header should be concise (less than 6 words) and meaningful.\n- Markdown headers should be plain text, not numbered.\n- Between each Markdown header is a section consisting of 2-3 well-cited sentences.\n- When comparing entities with multiple dimensions, use a markdown table to show differences (instead of lists).\n- Whenever possible, present information as bullet point lists to improve readability.\n- You are allowed to bold at most one word (**example**) per paragraph. You can't bold consecutive words.\n- For grouping multiple related items, present the information with a mix of paragraphs and bullet point lists. Do not nest lists within other lists.\n\n### Tone\n<tone>\nExplain clearly using plain language. Use active voice and vary sentence structure to sound natural. Ensure smooth transitions between sentences. Avoid personal pronouns like \"I\". Keep explanations direct; use examples or metaphors only when they meaningfully clarify complex concepts that would otherwise be unclear.\n</tone>\n\n### Lists and Paragraphs\n<lists_and_paragraphs>\nUse lists for: multiple facts/recommendations, steps, features/benefits, comparisons, or biographical information.\n\nAvoid repeating content in both intro paragraphs and list items. Keep intros minimal. Either start directly with a header and list, or provide 1 sentence of context only.\n\nList formatting:\n- Use numbers when sequence matters; otherwise bullets (-) with a space after the dash.\n- Use numbers when sequence matters; otherwise bullets (-).\n- No whitespace before bullets (i.e. no indenting), one item per line.\n- Sentence capitalization; periods only for complete sentences.\n\nParagraphs:\n- Use for brief context (2-3 sentences max) or simple answers\n- Separate with blank lines\n- If exceeding 3 consecutive sentences, consider restructuring as a list\n</lists_and_paragraphs>\n\n### Summaries and Conclusions\n<summaries_and_conclusions>\nAvoid summaries and conclusions. They are not needed and are repetitive. Markdown tables are not for summaries. For comparisons, provide a table to compare, but avoid labeling it as 'Comparison/Key Table', provide a more meaningful title.\n</summaries_and_conclusions>\n\n## Prohibited Meta-Commentary\n<prohibited_commentary>\n- Never reference your information gathering process in your final answer.\n- Do not use phrases such as:\n- \"Based on my search results...\"\n- \"Now I have gathered comprehensive information...\"\n- \"According to my research...\"\n- \"My search revealed...\"\n- \"I found information about...\"\n- \"Let me provide a detailed answer...\"\n- \"Let me compile this information...\"\n- \"Short Answer: ...\"\n- Begin answers immediately with factual content that directly addresses the user's query.\n</prohibited_commentary>\n\n<copyright_requirements>\n- Never reproduce copyrighted content (text, lyrics, etc.)\n- You may share public domain content (expired copyrights, traditional works)\n- When copyright status is uncertain, treat as copyrighted\n- Keep summaries brief (under 30 words) and original — don't reconstruct sources\n- Brief factual statements (names, dates, facts) are always acceptable\n</copyright_requirements>\n\nCurrent date: Thursday, May 21, 2026\n\n",
+      "max_output_tokens": 8192,
+      "max_tool_calls": null,
+      "metadata": {},
+      "parallel_tool_calls": true,
+      "presence_penalty": 0,
+      "previous_response_id": null,
+      "prompt_cache_key": null,
+      "reasoning": null,
+      "safety_identifier": null,
+      "service_tier": "default",
+      "store": true,
+      "temperature": 1,
+      "text": {
+        "format": {
+          "type": "text"
+        }
+      },
+      "tool_choice": "auto",
+      "tools": [
+        {
+          "type": "web_search"
+        },
+        {
+          "type": "fetch_url"
+        }
+      ],
+      "top_logprobs": 0,
+      "top_p": 1,
+      "truncation": "disabled",
+      "user": null
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Recherche web" icon="settings-bolt" href="/fr/docs/agent-api/tools/web-search">
+    Utilisez la recherche web pour obtenir un contexte à jour et adossé à des sources.
+  </Card>
+
+  <Card title="Modèles de l'Agent API" icon="brain" href="/fr/docs/agent-api/models">
+    Parcourez les modèles disponibles et leurs tarifs chez tous les fournisseurs pris en charge.
+  </Card>
+
+  <Card title="Presets" icon="settings" href="/fr/docs/agent-api/presets">
+    Découvrez les configurations prédéfinies pour les cas d&#39;usage courants, comme low et medium.
+  </Card>
+
+  <Card title="Contrôle de la sortie" icon="indent-decrease" href="/fr/docs/agent-api/output-control">
+    Configurez les réponses en streaming et les sorties structurées avec un schéma JSON.
+  </Card>
+
+  <Card title="Repli de modèle" icon="square-rounded-arrow-down" href="/fr/docs/agent-api/model-fallback">
+    Spécifiez plusieurs modèles pour bénéficier d&#39;un basculement automatique et d&#39;une meilleure disponibilité.
+  </Card>
+
+  <Card title="Guide de prompt" icon="book" href="/fr/docs/agent-api/prompt-guide">
+    Bonnes pratiques pour rédiger des prompts efficaces avec les modèles de recherche web.
+  </Card>
+
+  <Card title="Filtres de recherche" icon="filter" href="/fr/docs/agent-api/tools/web-search#filters">
+    Affinez les résultats de recherche grâce aux filtres de domaine, de date et de localisation.
+  </Card>
+
+  <Card title="Référence de l'API" icon="code-circle" href="/fr/api-reference/agent-post">
+    Consultez la documentation complète des points de terminaison et des paramètres.
+  </Card>
+</CardGroup>
+
+<Info>
+  Besoin d&#39;aide ? Rendez-vous sur notre [communauté](https://community.perplexity.ai) pour obtenir de l&#39;assistance et échanger avec d&#39;autres développeurs.
+</Info>

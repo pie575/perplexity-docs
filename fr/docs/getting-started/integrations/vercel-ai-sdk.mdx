@@ -1,0 +1,207 @@
+---
+title: "Perplexity avec le Vercel AI SDK"
+description: "Utilisez l'Agent API de Perplexity depuis vos applications Vercel AI SDK (Next.js) grâce au fournisseur @ai-sdk/open-responses."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Le [Vercel AI SDK](https://ai-sdk.dev) est une boîte à outils TypeScript pour créer des applications d&#39;IA — Next.js et React — avec des primitives de streaming et des hooks d&#39;interface comme `useChat`.
+Accédez à l&#39;[Agent API](/fr/docs/agent-api/quickstart) via le fournisseur [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses), pointé vers le point de terminaison `/v1/responses` de Perplexity, pour obtenir un modèle natif de l&#39;AI SDK que vous pourrez passer à `generateText`, `streamText` et `useChat`.
+
+<Info>
+  Créez le fournisseur côté serveur — dans un Route Handler Next.js, une Server Action ou une route d&#39;API — afin que `PERPLEXITY_API_KEY` n&#39;arrive jamais jusqu&#39;au navigateur.
+</Info>
+
+<div id="installation">
+  ## Installation
+</div>
+
+<CodeGroup>
+  ```bash pnpm theme={null}
+  pnpm add ai @ai-sdk/open-responses
+  ```
+
+  ```bash npm theme={null}
+  npm install ai @ai-sdk/open-responses
+  ```
+</CodeGroup>
+
+<div id="api-key-setup">
+  ## Configuration de l&#39;API key
+</div>
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="Obtenir une API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  Générez votre API key Perplexity depuis le portail API.
+</Card>
+
+<div id="quickstart">
+  ## Démarrage rapide
+</div>
+
+Créez le fournisseur avec `createOpenResponses`, faites-le pointer vers `/v1/responses`, puis appelez `generateText`.
+
+```typescript theme={null}
+import { createOpenResponses } from "@ai-sdk/open-responses";
+import { generateText } from "ai";
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const { text } = await generateText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "Explain the difference between supervised and unsupervised learning.",
+});
+
+console.log(text);
+```
+
+<div id="web-grounded-answers">
+  ## Réponses ancrées dans le web
+</div>
+
+Ajoutez l&#39;outil [`web_search`](/fr/docs/agent-api/tools/web-search) pour ancrer les réponses dans des résultats en temps réel issus de la recherche web de Perplexity — celle-là même qui alimente le moteur de réponses de Perplexity.
+Le fournisseur envoie un corps de requête fixe et n&#39;expose pas les outils intégrés de l&#39;Agent API comme options de premier ordre : activez donc `web_search` en l&#39;ajoutant au corps de la requête dans le hook `fetch` du fournisseur.
+
+```typescript theme={null}
+import { createOpenResponses } from "@ai-sdk/open-responses";
+import { generateText } from "ai";
+
+// Le fournisseur n'expose pas les sources dans le résultat : on les récupère donc dans le hook.
+let sources = [];
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  fetch: async (url, options) => {
+    const body = JSON.parse(options.body as string);
+    // Activer l'outil intégré web_search en l'ajoutant au corps de la requête.
+    body.tools = [{ type: "web_search" }];
+    const response = await fetch(url, { ...options, body: JSON.stringify(body) });
+
+    // Les sources arrivent sous la forme d'un élément `search_results` distinct dans le tableau `output` de la réponse.
+    // (À ignorer en streaming, où le corps est un flux d'événements et non du JSON.)
+    if (!body.stream) {
+      const raw = await response.clone().json();
+      sources = raw.output
+        .filter((item) => item.type === "search_results")
+        .flatMap((item) => item.results); // chacun : { title, url, snippet, date, ... }
+    }
+
+    return response;
+  },
+});
+
+const { text } = await generateText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "What are the latest breakthroughs in fusion energy this year?",
+});
+
+console.log(text);
+
+for (const source of sources) {
+  console.log(source.title, source.url);
+}
+```
+
+La réponse est ancrée côté serveur, mais `@ai-sdk/open-responses` n&#39;expose pas les sources dans le résultat — `result.sources` est vide.
+C&#39;est pourquoi le hook `fetch` les lit directement dans l&#39;élément `search_results` brut du tableau `output` de la réponse.
+Consultez [Lire les sources depuis la réponse](/fr/docs/agent-api/prompt-guide) pour connaître la structure complète de la réponse.
+
+<div id="presets">
+  ## Presets
+</div>
+
+Les [presets](/fr/docs/agent-api/presets) regroupent un modèle, des outils et un system prompt ajusté pour un cas d&#39;usage donné, ce qui vous évite de tout câbler vous-même.
+Définissez `preset` dans le corps de la requête, au sein du même hook `fetch` — un preset inclut déjà `web_search` : vous n&#39;avez donc pas besoin d&#39;ajouter d&#39;outils séparément.
+
+```typescript theme={null}
+// Dans le hook fetch, définissez un preset plutôt que d'ajouter des outils :
+body.preset = "fast"; // fast | low | medium | high | xhigh
+```
+
+<Tip>
+  Les presets vont de `fast` (recherche d&#39;un fait précis) à `xhigh` (travail agentique ouvert, avec exécution de code dans un sandbox).
+  Consultez le [guide des presets](/fr/docs/agent-api/presets) pour choisir celui qui convient.
+</Tip>
+
+<div id="streaming">
+  ## Streaming
+</div>
+
+Utilisez `streamText` pour une sortie token par token.
+Dans un Route Handler Next.js, renvoyez `result.toUIMessageStreamResponse()` et affichez le résultat côté client avec `useChat`.
+
+```typescript theme={null}
+import { streamText } from "ai";
+
+// Réutilisez le fournisseur `perplexity` créé ci-dessus.
+const result = streamText({
+  model: perplexity("openai/gpt-5.6-sol"),
+  prompt: "What are the latest breakthroughs in fusion energy this year?",
+});
+
+for await (const chunk of result.textStream) {
+  process.stdout.write(chunk);
+}
+```
+
+<div id="supported-models">
+  ## Modèles pris en charge
+</div>
+
+Transmettez n&#39;importe quel [modèle de l&#39;Agent API](/fr/docs/agent-api/models) au fournisseur — OpenAI, Anthropic, Google, xAI et bien d&#39;autres — le tout acheminé via votre unique clé Perplexity.
+
+```typescript theme={null}
+perplexity("openai/gpt-5.6-sol");
+perplexity("google/gemini-3-flash-preview");
+perplexity("xai/grok-4.5");
+```
+
+<Card title="Modèles de l'Agent API" icon="sparkles" href="/fr/docs/agent-api/models">
+  Parcourez tous les modèles disponibles et leurs tarifs.
+</Card>
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Fournisseur Open Responses" icon="plug" href="https://ai-sdk.dev/providers/ai-sdk-providers/open-responses">
+    Configurez le fournisseur AI SDK utilisé sur cette page.
+  </Card>
+
+  <Card title="Démarrage rapide Agent API" icon="bolt" href="/fr/docs/agent-api/quickstart">
+    Développez avec les modèles, les outils et les presets de l&#39;Agent API.
+  </Card>
+
+  <Card title="Outil de recherche web" icon="magnifying-glass" href="/fr/docs/agent-api/tools/web-search">
+    Ancrez vos réponses dans la recherche web en temps réel de Perplexity.
+  </Card>
+
+  <Card title="Documentation du SDK AI de Vercel" icon="globe" href="https://ai-sdk.dev/docs">
+    API de génération principales et hooks d&#39;interface.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Assistance
+</div>
+
+Besoin d&#39;aide pour l&#39;intégration ?
+
+* Consultez la [documentation du Vercel AI SDK](https://ai-sdk.dev/docs)
+* Consultez notre [FAQ](/fr/docs/resources/faq)

@@ -1,0 +1,445 @@
+---
+title: "OpenClaw で Perplexity を使う"
+description: "OpenClaw で Perplexity を LLM プロバイダーおよびウェブ検索プロバイダーとして利用します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+<u>[OpenClaw](https://openclaw.ai)</u> は、ターミナル上で動作し、複数のLLMプロバイダーに接続できるオープンソースのAIエージェントです。リアルタイムな情報取得のためのウェブ検索プロバイダーとしてPerplexityをサポートしています。
+
+OpenClawでは、PerplexityのAgent APIのモデルをエージェントとして利用し、Web検索のツール呼び出しにPerplexity Search APIを使用するよう設定できます。これにより、Perplexityの強力なモデルと最新の検索結果を、OpenClawのエージェントフレームワーク内で直接活用できます。
+
+<Card title="Perplexity APIキーを取得する" icon="key" arrow="True" horizontal="True" iconType="solid" cta="キーを取得" href="https://console.perplexity.ai/project/keys">
+  APIコンソールに移動し、OpenClawで使用する新しいキーを生成してください。
+</Card>
+
+***
+
+<div id="search-api-setup-use-perplexity-as-your-web-search-provider">
+  ## Search API のセットアップ (Perplexity をウェブ検索プロバイダーとして使用)
+</div>
+
+リアルタイムな情報取得のために、Perplexity Search API を OpenClaw のウェブ検索バックエンドとして使用します。
+
+<Steps>
+  <Step title="Perplexity プラグインをインストールする">
+    Perplexity 検索プロバイダーは、OpenClaw の独立したプラグインとして提供されています。キーを設定する前にインストールしてください。
+
+    ```bash theme={null}
+    openclaw plugins install @openclaw/perplexity-plugin
+    openclaw gateway restart
+    ```
+  </Step>
+
+  <Step title="検索プロバイダーを設定する">
+    <Tabs>
+      <Tab title="対話型 CLI（推奨）">
+        最も手軽な方法で、ファイルの編集は不要です。
+
+        ```bash theme={null}
+        openclaw configure --section web
+        ```
+
+        検索プロバイダーの選択を求められたら **Perplexity** を選び、APIキー を貼り付けます。
+      </Tab>
+
+      <Tab title="設定ファイル（JSON）">
+        `openclaw.json` を編集します (場所を確認するには `openclaw config file` を実行してください) 。
+
+        ```json theme={null}
+        {
+          "plugins": {
+            "entries": {
+              "perplexity": {
+                "config": {
+                  "webSearch": {
+                    "apiKey": "pplx-..."
+                  }
+                }
+              }
+            }
+          },
+          "tools": {
+            "web": {
+              "search": {
+                "provider": "perplexity"
+              }
+            }
+          }
+        }
+        ```
+      </Tab>
+
+      <Tab title="環境変数">
+        環境変数を設定すると、OpenClaw が自動的に検出します。
+
+        <Tabs>
+          <Tab title="macOS / Linux">
+            ```bash theme={null}
+            export PERPLEXITY_API_KEY="pplx-..."
+            ```
+          </Tab>
+
+          <Tab title="Windows (PowerShell)">
+            ```powershell theme={null}
+            setx PERPLEXITY_API_KEY="pplx-..."
+            ```
+          </Tab>
+        </Tabs>
+
+        デーモンとしてインストールしている場合は、`~/.openclaw/.env` に `PERPLEXITY_API_KEY` を設定してください。
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Perplexity Search を使って OpenClaw を使い始める">
+    OpenClaw を起動し、ウェブ検索が必要な質問をしてみてください。
+
+    ```
+    openclaw
+    > What are the latest developments in quantum computing?
+    ```
+
+    OpenClaw は Perplexity Search API で構造化された結果を取得し、それを応答に反映します。
+  </Step>
+</Steps>
+
+<div id="search-tool-parameters">
+  ### 検索ツールのパラメータ
+</div>
+
+OpenClaw が Perplexity をプロバイダーとして `web_search` を呼び出す際は、以下のパラメータを利用できます。
+
+| パラメータ                 | 説明                                        |
+| --------------------- | ----------------------------------------- |
+| `query`               | 検索クエリ (必須)                                |
+| `count`               | 結果の件数 (1〜10、デフォルト: 5)                     |
+| `country`             | ISO 3166-1 alpha-2 の国コード (例: `US`、`DE`)   |
+| `language`            | ISO 639-1 の言語コード (例: `en`、`fr`)           |
+| `freshness`           | 期間フィルター: `day`、`week`、`month`、`year`      |
+| `date_after`          | この日付より後に公開された結果 (`YYYY-MM-DD`)            |
+| `date_before`         | この日付より前に公開された結果 (`YYYY-MM-DD`)            |
+| `domain_filter`       | ドメインの許可リストまたは拒否リスト (最大 20 件)              |
+| `max_tokens`          | コンテンツ全体の上限 (デフォルト: 25,000、最大: 1,000,000)  |
+| `max_tokens_per_page` | 1 ページあたりの token 上限 (デフォルト: 2,048)         |
+
+<Tip>
+  ドメインフィルターは許可リスト (`["nature.com", "science.org"]`) と拒否リスト (`["-reddit.com", "-pinterest.com"]`) に対応していますが、同一リクエスト内で両方を併用することはできません。詳細は[ドメインフィルターガイド](/ja/docs/search/filters/domain-filter)を参照してください。
+</Tip>
+
+***
+
+<div id="agent-api-setup-use-perplexity-as-your-llm-provider">
+  ## Agent API のセットアップ (Perplexity を LLM プロバイダーとして利用する)
+</div>
+
+Perplexity の Agent API を使えば、Anthropic、OpenAI、Google などのフロンティア モデル を単一の APIキー で実行できます。
+
+<Steps>
+  <Step title="APIキーを取得する">
+    <Card title="API keyを生成" icon="key" arrow="True" horizontal="True" iconType="solid" cta="キーを取得" href="https://console.perplexity.ai/project/keys">
+      API Consoleにアクセスし、新しいキーを生成します。
+    </Card>
+  </Step>
+
+  <Step title="OpenClaw をインストールする">
+    OpenClaw をまだインストールしていない場合は、次のコマンドを実行します。
+
+    <Tabs>
+      <Tab title="macOS / Linux">
+        ```bash theme={null}
+        curl -fsSL https://openclaw.ai/install.sh | bash
+        ```
+      </Tab>
+
+      <Tab title="Windows (PowerShell)">
+        ```powershell theme={null}
+        iwr -useb https://openclaw.ai/install.ps1 | iex
+        ```
+      </Tab>
+    </Tabs>
+
+    Docker、Podman、Nix などその他のインストール方法については、[OpenClaw のインストールドキュメント](https://docs.openclaw.ai/install)を参照してください。
+  </Step>
+
+  <Step title="必要な設定を適用する">
+    PerplexityのAgent APIは、独自のサーバーサイド組み込みツールを実行します。OpenClawのmodelプロバイダーとして利用する場合は、`openclaw.json`でOpenClaw側が管理する`web_search`を無効化し、modelがPerplexityの組み込み検索を使うように設定してください。
+
+    ```json theme={null}
+    {
+      "tools": {
+        "web": {
+          "search": { "enabled": false }
+        }
+      }
+    }
+    ```
+
+    PerplexityのAgent APIがサーバーサイドツール用に予約している名前の一覧は、以下の[予約済みツール名](#reserved-tool-names)を参照してください。
+  </Step>
+
+  <Step title="LLM プロバイダーとして Perplexity を設定する">
+    <Tabs>
+      <Tab title="オンボーディング CLI（推奨）">
+        ファイル編集が不要な、最も手軽な方法です。
+
+        ```bash theme={null}
+        openclaw onboard \
+          --auth-choice custom-api-key \
+          --custom-base-url "https://api.perplexity.ai/v1" \
+          --custom-api-key "pplx-YOUR_KEY_HERE" \
+          --custom-model-id "anthropic/claude-sonnet-4-6" \
+          --custom-compatibility openai-responses \
+          --custom-provider-id perplexity \
+          --install-daemon
+        ```
+
+        これで、model を 1 つ持つプロバイダーとして Perplexity が登録されます。model を追加するには、別の `--custom-model-id` を指定して再実行するか、設定ファイルによる方法に切り替えてください。
+
+        `anthropic/claude-sonnet-4-6` を [Agent API の model 一覧](/ja/docs/agent-api/models) にある任意の model ID に置き換えれば、デフォルトの model を変更できます。
+      </Tab>
+
+      <Tab title="設定ファイル">
+        `openclaw.json` を編集します (場所は `openclaw config file` で確認できます) 。以下の設定では、初期 model を 1 つ指定して Perplexity を宣言し、あわせてライブ model ディスカバリーを有効にします。これにより OpenClaw は残りの Agent API カタログを `GET /v1/models` から取得します。
+
+        ```json theme={null}
+        {
+        "agents": {
+          "defaults": {
+            "model": { "primary": "perplexity/anthropic/claude-sonnet-4-6" },
+            "models": { "perplexity/*": {} }
+          }
+        },
+        "tools": {
+          "web": { "search": { "enabled": false } }
+        },
+        "models": {
+          "mode": "merge",
+          "providers": {
+            "perplexity": {
+              "baseUrl": "https://api.perplexity.ai/v1",
+              "apiKey": "${PERPLEXITY_API_KEY}",
+              "api": "openai-responses",
+              "models": [
+                {
+                  "id": "anthropic/claude-sonnet-4-6",
+                  "name": "Claude Sonnet 4.6 (Perplexity)",
+                  "api": "openai-responses",
+                  "reasoning": false,
+                  "input": ["text"],
+                  "cost": { "input": 3.00, "output": 15.00, "cacheRead": 0.30, "cacheWrite": 0 },
+                  "contextWindow": 200000,
+                  "maxTokens": 16384
+                }
+              ]
+            }
+          }
+        }
+        }
+        ```
+
+        キーを設定ファイルに直接書かず、`PERPLEXITY_API_KEY` をシェルで設定するか、OpenClaw のシークレットストレージを利用してください。
+
+        `agents.defaults.models` 配下の `"perplexity/*": {}` エントリによってライブディスカバリーが有効になります。再起動後に `openclaw models list --provider perplexity` を実行すると、`GET /v1/models` が返すすべての model を確認でき、いずれも `perplexity/<model-id>` の形式で参照できます (例: `perplexity/openai/gpt-5.4` や `perplexity/anthropic/claude-opus-4-7`) 。model 単位でコンテキストウィンドウ、コスト、機能を固定したい場合は、その model だけを `models` 配列に追加してください。固定しなかった項目はライブディスカバリーの結果が継承されます。
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="OpenClaw を使い始める">
+    OpenClaw を起動すると、エージェントが Perplexity を使用します。
+
+    ```bash theme={null}
+    openclaw
+    ```
+  </Step>
+</Steps>
+
+<div id="reserved-tool-names">
+  ### 予約済みのツール名
+</div>
+
+Perplexity の Agent API は、サーバーサイドの組み込みツール用に次の関数名を予約しています。これらの名前でカスタム関数を定義しないでください。
+
+* `web_search`
+* `fetch_url`
+* `people_search`
+* `finance_search`
+
+上記のセットアップ手順で必須となっている設定では、OpenClaw が管理する `web_search` を無効化し、モデル が代わりに Perplexity のサーバーサイド検索を使用するようにします。Perplexity の `web_search` は モデル のレスポンス内で実行され、モデル によって自動的に呼び出されます (1 回あたり $0.0025) 。結果には引用が付き、根拠が明示されます。特定のリクエストで強制的に有効にするには、リクエストの `tools` 配列に、関数ではなく組み込みツールとして `{"type": "web_search"}` を追加してください。
+
+予約済みの名前を持つその他のツールを送信側のツールカタログから除外するには、各ツールの設定トグルで無効化するか、OpenClaw の一般的なツールポリシーを使用します。
+
+```json theme={null}
+{
+  "tools": {
+    "deny": ["web_search"]
+  }
+}
+```
+
+***
+
+<div id="mcp-server-setup-use-perplexity-as-a-tool-provider">
+  ## MCP サーバーのセットアップ (Perplexity をツールプロバイダーとして利用する)
+</div>
+
+OpenClaw は [Model Context Protocol](https://docs.perplexity.ai/docs/getting-started/integrations/mcp-server) 経由で Perplexity に接続することもできます。この方法では、`perplexity_search`、`perplexity_ask`、`perplexity_research`、`perplexity_reason` がエージェントから呼び出せる MCP ツールとして公開されます。これは上記の Agent API のセットアップを補完するものです。つまり、Agent API が モデル を動かし、MCP が モデル に Perplexity の検索・リサーチ機能へのアクセスを提供します。
+
+<Tabs>
+  <Tab title="リモート MCP（推奨）">
+    ホスト型 MCP サーバーを `openclaw.json` に追加します。
+
+    ```json theme={null}
+    {
+      "mcp": {
+        "servers": {
+          "perplexity": {
+            "url": "https://api.perplexity.ai/mcp",
+            "transport": "streamable-http",
+            "headers": {
+              "Authorization": "Bearer ${PERPLEXITY_API_KEY}"
+            }
+          }
+        }
+      }
+    }
+    ```
+
+    または CLI を使用します。
+
+    ```bash theme={null}
+    openclaw mcp add perplexity \
+      --url https://api.perplexity.ai/mcp \
+      --transport streamable-http \
+      --header "Authorization=Bearer $PERPLEXITY_API_KEY"
+    openclaw mcp doctor perplexity --probe
+    ```
+
+    OpenClaw はリクエスト時に環境変数から `${PERPLEXITY_API_KEY}` を解決します。キーそのものを設定ファイルに貼り付けないでください。
+  </Tab>
+
+  <Tab title="ローカル MCP（stdio）">
+    `npx` を通じて MCP サーバーをローカルで実行し、子プロセスの管理は OpenClaw に任せます。
+
+    ```json theme={null}
+    {
+      "mcp": {
+        "servers": {
+          "perplexity": {
+            "command": "npx",
+            "args": ["-y", "@perplexity-ai/mcp-server"],
+            "transport": "stdio",
+            "env": {
+              "PERPLEXITY_API_KEY": "${PERPLEXITY_API_KEY}"
+            }
+          }
+        }
+      }
+    }
+    ```
+
+    または CLI を使用します。
+
+    ```bash theme={null}
+    openclaw mcp add perplexity \
+      --command npx \
+      --arg "-y" \
+      --arg "@perplexity-ai/mcp-server" \
+      --env "PERPLEXITY_API_KEY=$PERPLEXITY_API_KEY"
+    openclaw mcp doctor perplexity --probe
+    ```
+
+    ローカルの stdio を使うには、OpenClaw を実行するマシンに Node.js が必要です。Perplexity のエッジに依存せずすべてをオフラインで実行する必要がある場合を除き、リモート MCP サーバーの利用を推奨します。
+  </Tab>
+</Tabs>
+
+<Note>
+  MCP ツールは `perplexity_search` のような名前になっているため、Perplexity の Agent API の予約名と衝突しません。Agent API のセットアップと MCP のセットアップを併用する場合は、Agent API のセクションで設定した `tools.web.search.enabled: false` をそのまま残しておいてください。
+</Note>
+
+<Tip>
+  MCP ツールは OpenClaw のツールプロファイルおよび許可/拒否ポリシーに従います。エージェントが呼び出せる Perplexity のツールは `mcp.servers.perplexity.toolFilter.include` で絞り込めます。フィールドの全一覧は [OpenClaw MCP ガイド](https://docs.openclaw.ai/tools/mcp) を参照してください。
+</Tip>
+
+<div id="agent-api-configuration-tips">
+  ### Agent API 設定のヒント
+</div>
+
+<AccordionGroup>
+  <Accordion title="API トランスポートは openai-responses にする必要があります">
+    Perplexity の Agent API のメインエンドポイントは `POST https://api.perplexity.ai/v1/agent` です。加えて、[OpenAI-Responses 互換のエイリアス](/ja/docs/agent-api/openai-compatibility)として `POST https://api.perplexity.ai/v1/responses` でもリクエストを受け付けます。OpenClaw は `api` が `"openai-responses"` のときにこちらを使用します。
+
+    `openclaw.json` では、プロバイダーレベルと各モデルエントリの両方に `api: "openai-responses"` を設定してください。Agent API は `/v1/chat/completions` を実装していないため、`"openai-completions"` では動作しません。
+  </Accordion>
+
+  <Accordion title="ベース URL は必ず https://api.perplexity.ai/v1 にしてください">
+    Perplexity の Agent API のメインエンドポイントは `POST /v1/agent` で、`POST /v1/responses` はその OpenAI-Responses 互換エイリアスです。OpenClaw の `openai-responses` クライアントは、指定されたベース URL の末尾に `/responses` を付けて送信します。そのため、OpenClaw が `/v1/responses` のエイリアスにアクセスするには、ベース URL を `https://api.perplexity.ai/v1` にする必要があります。
+
+    | 正しいベース URL                     | ベース URL として使用しないもの                                                                                            |
+    | ------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+    | `https://api.perplexity.ai/v1` | `https://api.perplexity.ai/v1/agent` (OpenClaw が `/v1/agent/responses` を呼び出し、`405 Method Not Allowed` になります)  |
+    |                                | `https://api.perplexity.ai/v1/responses` (OpenClaw が `/v1/responses/responses` を呼び出し、`404` になります)             |
+    |                                | `https://api.perplexity.ai` (`/v1` が欠落。リクエストが `/responses` に送られ、`404` になります)                                  |
+  </Accordion>
+
+  <Accordion title="モデル ID の形式">
+    設定ファイルでは、プロバイダーブロック配下のモデル ID からプロバイダーのプレフィックスを省略します。完全なモデル参照ではこれを付けます。
+
+    * 設定のモデル ID: `anthropic/claude-sonnet-4-6`
+    * 完全なモデル参照: `perplexity/anthropic/claude-sonnet-4-6`
+  </Accordion>
+
+  <Accordion title="`perplexity/*` ワイルドカードでモデルを検出する">
+    `agents.defaults.models` に `"perplexity/*": {}` を追加すると、OpenClaw が `GET https://api.perplexity.ai/v1/models` を呼び出し、返されたすべてのモデルを自動的に登録します。`models.providers.perplexity.models` 配下の詳細なエントリは固定したいモデルにのみ残し、それ以外はライブ検出に任せられます。`openclaw models list --provider perplexity` で確認してください。
+  </Accordion>
+</AccordionGroup>
+
+<Tip>
+  最新のモデル一覧と価格については、[Agent API モデルページ](/ja/docs/agent-api/models)と[価格ページ](/ja/docs/getting-started/pricing)を参照してください。
+</Tip>
+
+***
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API クイックスタート" icon="robot" href="/ja/docs/agent-api/quickstart">
+    サードパーティ製モデルを組み込みツールや関数呼び出しと組み合わせて利用する
+  </Card>
+
+  <Card title="Agent API のモデル一覧" icon="list" href="/ja/docs/agent-api/models">
+    利用可能なモデルの一覧と料金
+  </Card>
+
+  <Card title="MCP サーバー" icon="plug" href="/ja/docs/getting-started/integrations/mcp-server">
+    Perplexity のリモートおよびローカル MCP サーバー、ツール、認証
+  </Card>
+
+  <Card title="Perplexity CLI" icon="terminal" href="/ja/docs/cli/overview">
+    シェルやエージェントスクリプトから検索・ページ抜粋を取得できるターミナル用ツール
+  </Card>
+
+  <Card title="Search API クイックスタート" icon="search" href="/ja/docs/search/quickstart">
+    Perplexity Search API の完全なドキュメント
+  </Card>
+
+  <Card title="OpenAI 互換性" icon="plug" href="/ja/docs/agent-api/openai-compatibility">
+    Agent API を OpenAI 互換クライアントで利用する方法
+  </Card>
+
+  <Card title="OpenClaw ドキュメント" icon="book" href="https://docs.openclaw.ai">
+    OpenClaw の公式ドキュメント
+  </Card>
+
+  <Card title="API コンソール" icon="key" href="https://console.perplexity.ai">
+    APIキー の発行と管理
+  </Card>
+</CardGroup>

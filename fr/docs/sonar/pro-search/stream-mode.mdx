@@ -1,0 +1,1053 @@
+---
+title: "Mode de streaming : concis ou complet"
+description: "Découvrez comment utiliser stream_mode pour contrôler le format des réponses en streaming et optimiser votre intégration"
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Le paramètre `stream_mode` vous permet de contrôler le format des réponses en streaming. Deux modes sont disponibles :
+
+* **`full`** (par défaut) – Format de streaming traditionnel, avec des objets de message complets dans chaque chunk
+* **`concise`** – Format de streaming optimisé, avec une redondance réduite et une meilleure visibilité sur le raisonnement
+
+<Info>
+  Le mode `concise` est conçu pour minimiser la consommation de bande passante et offrir une meilleure visibilité sur le processus de raisonnement du model.
+</Info>
+
+<div id="quick-comparison">
+  ## Comparatif rapide
+</div>
+
+| Fonctionnalité              | Mode complet                                 | Mode concis                                   |
+| --------------------------- | -------------------------------------------- | --------------------------------------------- |
+| **Agrégation des messages** | Côté serveur (inclut `choices.message`)      | Côté client (delta uniquement)                |
+| **Types de chunks**         | Type unique (`chat.completion.chunk`)        | Plusieurs types selon les étapes              |
+| **Résultats de recherche**  | Plusieurs fois pendant le flux               | Uniquement dans les chunks `done`             |
+| **Bande passante**          | Plus élevée (inclut des données redondantes) | Plus faible (optimisée pour l&#39;efficacité) |
+
+<div id="using-concise-mode">
+  ## Utiliser le mode concis
+</div>
+
+Définissez `stream_mode: "concise"` lors de la création de complétions en streaming :
+
+<Tabs>
+  <Tab title="SDK Python">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "Current weather and 7-day forecast for Seattle, Washington"}],
+        stream=True,
+        stream_mode="concise"
+    )
+
+    for chunk in stream:
+        print(f"Chunk type: {chunk.object}")
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="")
+    ```
+  </Tab>
+
+  <Tab title="SDK TypeScript">
+    ```typescript theme={null}
+    import Perplexity from '@perplexity-ai/perplexity_ai';
+
+    const client = new Perplexity();
+
+    const stream = await client.chat.completions.create({
+      model: "sonar-pro",
+      messages: [{ role: "user", content: "Current weather and 7-day forecast for Seattle, Washington" }],
+      stream: true,
+      stream_mode: "concise"
+    });
+
+    for await (const chunk of stream) {
+      console.log(`Chunk type: ${chunk.object}`);
+      if (chunk.choices[0]?.delta?.content) {
+        process.stdout.write((chunk.choices[0]?.delta?.content ?? '') as string);
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="cURL">
+    ```bash theme={null}
+    curl -X POST "https://api.perplexity.ai/v1/sonar" \
+      -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "sonar-pro",
+        "messages": [{"role": "user", "content": "What is the weather in Seattle?"}],
+        "stream": true,
+        "stream_mode": "concise"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+<AccordionGroup>
+  <Accordion title="Réponse — Météo actuelle et prévisions à 7 jours pour Seattle, Washington">
+    ```json theme={null}
+    {
+      "id": "300fab98-92a3-4a69-9e84-fe05c918f831",
+      "results": [
+        {
+          "snippet": "**Conditions actuelles à**\n## Boeing Field - King County International Airport (KBFI)\n**Lat : ** 47,54548°N**Lon : ** 122,3147°O**Alt. : ** 20,0 pi\nPartiellement nuageux\n61°F\n16°C\n|**Humidité**|63 %|\n|--|--|\n|**Vitesse du vent**|N 0 mi/h|\n|**Baromètre**|29,95 po (1014,22 mb)|\n|**Point de rosée**|48°F (9°C)|\n|**Visibilité**|10,00 mi|\n|**Dernière mise à jour**|26 mai 15h00 PDT|\n...\n**Prévisions étendues pour**\n## Seattle (WA)\n- Cette nuit\nMin. : 50 °F\nDégagé en grande partie\n- Mercredi\nMax. : 71 °F\nEnsoleillé\n- Mercredi soir\nMin. : 54 °F\nDégagé en grande partie\n- Jeudi\nMax. : 77 °F\nEnsoleillé\n- Jeudi soir\nMin. : 53 °F\nPossibilité de pluie\n- Vendredi\nMax. : 60 °F\nPossibilité de pluie\n- Vendredi soir\nMin. : 49 °F\nPartiellement nuageux\n- Samedi\nMax. : 62 °F\nPartiellement ensoleillé\n- Samedi soir\nMin. : 48 °F\nPartiellement nuageux\n## Prévisions détaillées\n**Cette nuit**\nCiel dégagé en grande partie, minimum d'environ 50.\nVent du nord de 5 à 8 mi/h devenant calme en soirée.\n**Mercredi**\nEnsoleillé, maximum près de 71.\nVent faible et variable devenant du nord de 5 à 10 mi/h le matin.\n**Mercredi soir**\nCiel dégagé en grande partie, minimum d'environ 54.\nVent du nord de 5 à 8 mi/h devenant calme en soirée.\n**Jeudi**\nEnsoleillé, maximum près de 77.\nVent calme devenant du nord-nord-ouest à environ 5 mi/h l'après-midi.\n**Jeudi soir**\n30 pour cent de probabilité de pluie, surtout après 23 h.\nPartiellement nuageux, minimum d'environ 53.\nVent du nord-nord-ouest de 5 à 9 mi/h devenant du sud après minuit.\n**Vendredi**\n50 pour cent de probabilité de pluie.\nPartiellement nuageux, maximum près de 60.\n**Vendredi soir**\nPartiellement nuageux, minimum d'environ 49.\n**Samedi**\nPartiellement ensoleillé, maximum près de 62.\n**Samedi soir**\nPartiellement nuageux, minimum d'environ 48.\n**Dimanche**\nGénéralement ensoleillé, maximum près de 64.\n**Dimanche soir**\nCiel dégagé en grande partie, minimum d'environ 49.\n**Lundi**\nEnsoleillé, maximum près de 70.\n**Lundi soir**\nPartiellement nuageux, minimum d'environ 53.\n**Mardi**\nGénéralement ensoleillé, maximum près de 78.\n...\nSeattle (WA)\n47,62°N 122,36°O (Alt. 105 pi)\nDernière mise à jour :\n11h26 PDT 26 mai 2026\nPrévisions valides :\n15h PDT 26 mai 2026-18h PDT 2 juin 2026",
+          "title": "Prévisions sur 7 jours 47,62N 122,36O",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6218&lon=-122.3503",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-26"
+        },
+        {
+          "snippet": "Prévisions météo pour Seattle (WA) | AccuWeather\n## Météo du jour\nMar. 26 mai\nGénéralement nuageux; brèves averses le matin suivies d'une averse par endroits cet après-midi\n**Max. : 62°**\nCette nuit : partiellement nuageux\n**Min. : 51°**\n## Météo actuelle\n14h32\n57°F\nRealFeel®\n60°\nNuageux Plus de détails\nRealFeel Shade™ 56°\nVent NO 2 mi/h\nRafales 5 mi/h\nQualité de l'air Moyenne\n## Perspectives\nRéchauffement, puis temps nettement plus frais à nouveau vendredi\n## Météo horaire\n15 h 59°\n40 %\n16 h 61°\n37 %\n17 h 62°\n32 %\n18 h 62°\n32 %\n19 h 61°\n21 %\n20 h 60°\n0 %\n21 h 59°\n0 %\n22 h 57°\n0 %\n23 h 56°\n0 %\n0 h 54°\n0 %\n1 h 53°\n0 %\n2 h 53°\n0 %\n## Prévisions météo sur 10 jours\nAujourd'hui\n26/05\n62° 51°\nQuelques averses ce matin\nNuit : partiellement nuageux\n80 %\nMer.\n27/05\n73° 55°\nPartiellement ensoleillé et agréable\nPartiellement nuageux\n0 %\nJeu.\n28/05\n77° 53°\nGénéralement ensoleillé et agréable\nPartiellement nuageux\n12 %\nVen.\n29/05\n59° 47°\nPlus frais\nNuages bas\n25 %\nSam.\n30/05\n62° 47°\nPartiellement nuageux\nPartiellement nuageux\n25 %\nDim.\n31/05\n70° 50°\nAgréable avec nuages et soleil\nGénéralement dégagé\n19 %\nLun.\n01/06\n76° 57°\nGénéralement ensoleillé et agréable\nGénéralement dégagé\n13 %\nMar.\n02/06\n93° 58°\nChaud avec nuages élevés\nNuageux\n2 %\nMer.\n03/06\n76° 55°\nPartiellement nuageux\nPartiellement nuageux\n6 %\nJeu.\n04/06\n73° 53°\nSoleil et quelques nuages\nGénéralement dégagé\n1 %\n...\nQualité de l'air Moyenne\nLa qualité de l'air est généralement acceptable pour la plupart des personnes.\nCependant, les groupes sensibles peuvent présenter des symptômes légers à modérés en cas d'exposition prolongée.",
+          "title": "Prévisions météo pour Seattle (WA)",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-26"
+        },
+        {
+          "snippet": "Conditions supplémentaires\nPression\n29,93 °po\nVisibilité\n10 °milles\nNuages\nPartiellement nuageux\nPoint de rosée\n47 °F\nHumidité\n60 °%\nPrécipitations\n0 °po\nÉpaisseur de neige\n0 °po\nPrincipaux reportages vidéo\n...\n5h20\n20h55",
+          "title": "Prévisions météo sur 10 jours pour Seattle (WA)",
+          "url": "https://www.wunderground.com/forecast/us/wa/seattle",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-27"
+        },
+        {
+          "snippet": "**Conditions actuelles à**\n## Boeing Field - Aéroport international du comté de King (KBFI)\n**Lat : ** 47,54548°N**Lon : ** 122,3147°O**Alt : ** 20,0 pi.\nPartiellement nuageux\n52°F\n11°C\n|**Humidité**|66 %|\n|--|--|\n|**Vitesse du vent**|OSO 6 MPH|\n|**Baromètre**|30,15 po (1021,0 mb)|\n|**Point de rosée**|41°F (5°C)|\n|**Visibilité**|10,00 mi|\n|**Dernière mise à jour**|16 mai 18h20 PDT|\n...\n**Prévisions étendues pour**\n## Centre-ville de Seattle, WA\n- Ce soir\nMin : 43 °F\nPossibilité de pluie\npuis partiellement\nnuageux\n- Dimanche\nMax : 62 °F\nPlutôt ensoleillé\n- Dimanche soir\nMin : 48 °F\nNuages\ncroissants\n- Lundi\nMax : 66 °F\nDiminution\ndes nuages\n- Lundi soir\nMin : 50 °F\nPartiellement nuageux\n- Mardi\nMax : 65 °F\nPartiellement ensoleillé\n- Mardi soir\nMin : 50 °F\nPartiellement nuageux\n- Mercredi\nMax : 68 °F\nPlutôt ensoleillé\n- Mercredi soir\nMin : 51 °F\nPartiellement nuageux\n## Prévisions détaillées\n**Ce soir**\n50 pour cent de probabilité de pluie, principalement avant 20h.\nPartiellement nuageux, avec un minimum autour de 43.\nVent d'ouest d'environ 5 mph devenant calme en soirée.\n**Dimanche**\nPlutôt ensoleillé, avec un maximum proche de 62.\nVent léger et variable.\n**Dimanche soir**\nNuages croissants, avec un minimum autour de 48.\nVent calme.\n**Lundi**\nNuageux, puis devenant progressivement plutôt ensoleillé, avec un maximum proche de 66.\nVent léger et variable.\n**Lundi soir**\nPartiellement nuageux, avec un minimum autour de 50.\nVent du nord d'environ 6 mph devenant calme en soirée.\n**Mardi**\nPartiellement ensoleillé, avec un maximum proche de 65.\n**Mardi soir**\nPartiellement nuageux, avec un minimum autour de 50.\n**Mercredi**\nPlutôt ensoleillé, avec un maximum proche de 68.\n**Mercredi soir**\nPartiellement nuageux, avec un minimum autour de 51.\n**Jeudi**\nPlutôt ensoleillé, avec un maximum proche de 69.\n**Jeudi soir**\nPartiellement nuageux, avec un minimum autour de 52.\n**Vendredi**\nPlutôt ensoleillé, avec un maximum proche de 69.\n**Vendredi soir**\nPrincipalement dégagé, avec un minimum autour de 52.\n**Samedi**\nPlutôt ensoleillé, avec un maximum proche de 73.\n...\nCentre-ville de Seattle, WA\n47,61°N 122,32°O (Alt. 240 pi)\nDernière mise à jour :\n11h27 PDT 16 mai 2026\nPrévisions valides :\n18h PDT 16 mai 2026-18h PDT 23 mai 2026\nDiscussion des prévisions",
+          "title": "Prévisions sur 7 jours 47,61N 122,32O - National Weather Service",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6032&lon=-122.3303",
+          "date": "2026-05-17",
+          "last_updated": "2026-05-17"
+        },
+        {
+          "snippet": "**Conditions actuelles à**\n## BUREAU DE PRÉVISIONS MÉTÉOROLOGIQUES DE SEATTLE (SEAW1)\n**Lat : ** 47,68528°N**Lon : ** 122,25111°O**Alt : ** 29,0 pi.\nND\n45°F\n7°C\n|**Humidité**|75 %|\n|--|--|\n|**Vitesse du vent**|SSO 5 MPH|\n|**Baromètre**|30,45 po (1031,16 mb)|\n|**Point de rosée**|37°F (3°C)|\n|**Visibilité**|ND|\n|**Refroidissement éolien**|42°F (6°C)|\n|**Dernière mise à jour**|26 mars 09h30 PDT|\n...\n**Prévisions étendues pour**\n## 2 milles SSE Seattle-University, WA\n- Aujourd'hui\nMax : 53 °F\nEnsoleillé\n- Ce soir\nMin : 35 °F\nNuages\ncroissants\n- Vendredi\nMax : 56 °F\nPlutôt ensoleillé\n- Vendredi soir\nMin : 38 °F\nPartiellement nuageux\n- Samedi\nMax : 54 °F\nPartiellement ensoleillé\n- Samedi soir\nMin : 39 °F\nPartiellement nuageux\n- Dimanche\nMax : 54 °F\nFaible possibilité\nde pluie\n- Dimanche soir\nMin : 39 °F\nPossibilité de pluie\n- Lundi\nMax : 51 °F\nPossibilité de pluie\n## Prévisions détaillées\n**Aujourd'hui**\nEnsoleillé, avec un maximum proche de 53.\nVent du sud d'environ 6 mph.\n**Ce soir**\nNuages croissants, avec un minimum autour de 35.\nVent calme.\n**Vendredi**\nPlutôt ensoleillé, avec un maximum proche de 56.\nVent calme devenant du nord de 5 à 7 mph dans l'après-midi.\n**Vendredi soir**\nPartiellement nuageux, avec un minimum autour de 38.\nVent du nord de 5 à 8 mph devenant calme en soirée.\n**Samedi**\nPartiellement ensoleillé, avec un maximum proche de 54.\nVent calme devenant du nord-nord-ouest à environ 5 mph dans l'après-midi.\n**Samedi soir**\nPartiellement nuageux, avec un minimum autour de 39.\n**Dimanche**\n20 pour cent de probabilité de pluie après 11h.\nPartiellement nuageux, avec un maximum proche de 54.\n**Dimanche soir**\nPossibilité de pluie.\nPartiellement nuageux, avec un minimum autour de 39.\n**Lundi**\nPossibilité de pluie.\nPartiellement nuageux, avec un maximum proche de 51.\n**Lundi soir**\nPossibilité de pluie, principalement avant 23h.\nPartiellement nuageux, avec un minimum autour de 36.\n**Mardi**\nFaible possibilité de pluie.\nPlutôt ensoleillé, avec un maximum proche de 53.\n**Mardi soir**\nPossibilité de pluie.\nPartiellement nuageux, avec un minimum autour de 40.\n**Mercredi**\nPossibilité de pluie.\nPartiellement nuageux, avec un maximum proche de 53.\n...\n2 milles SSE Seattle-University, WA\n47,63°N 122,3°O (Alt. 190 pi)\nDernière mise à jour :\n23h27 PDT 25 mars 2026\nPrévisions valides :\n10h PDT 26 mars 2026-18h PDT 1er avr. 2026\nDiscussion des prévisions",
+          "title": "Prévisions sur 7 jours 47,63N 122,3O - National Weather Service",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6329523&lon=-122.28918880000003&site=all&smap=1&searchresult=Seattle%2C+WA+98112%2C+USA",
+          "date": "2026-03-26",
+          "last_updated": "2026-03-26"
+        },
+        {
+          "snippet": "Des conditions météorologiques propices aux incendies, de niveau élevé à critique, en raison de rafales de vent et d'une faible humidité, sont attendues jusqu'à mardi dans l'Oregon et le Nevada.\nDes averses et des orages se développeront sur le Nord-Ouest.\n...\n**Conditions actuelles à**\n## BUREAU DE PRÉVISIONS MÉTÉOROLOGIQUES DE SEATTLE (SEAW1)\n**Lat : ** 47.68528°N**Lon : ** 122.25111°O**Alt : ** 29,0 pi.\nND\n53°F\n12°C\n|**Humidité**|86 %|\n|--|--|\n|**Vitesse du vent**|ESE 5 MPH|\n|**Baromètre**|29,71 po (1006,1 mb)|\n|**Point de rosée**|49°F (9°C)|\n|**Visibilité**|ND|\n|**Dernière mise à jour**|25 mai 22h30 PDT|\n...\n**Prévisions étendues pour**\n## Seattle-University WA\n- Ce soir\nMin : 48 °F\nFaible risque\nde pluie\n- Mardi\nMax : 65 °F\nRisque de pluie\npuis partiellement\nensoleillé\n- Mardi soir\nMin : 49 °F\nPartiellement nuageux\n- Mercredi\nMax : 74 °F\nEnsoleillé\n- Mercredi soir\nMin : 53 °F\nGénéralement dégagé\n- Jeudi\nMax : 78 °F\nEnsoleillé\n- Jeudi soir\nMin : 53 °F\nPartiellement nuageux\n- Vendredi\nMax : 64 °F\nRisque de pluie\n- Vendredi soir\nMin : 48 °F\nRisque de pluie\npuis généralement\nnuageux\n## Prévisions détaillées\n**Ce soir**\n10 pour cent de risque de pluie après 5h.\nPartiellement nuageux, avec un minimum d'environ 48.\nVent du sud d'environ 6 mph devenant calme après minuit.\n**Mardi**\n30 pour cent de risque de pluie, principalement avant 9h.\nPartiellement ensoleillé, avec un maximum près de 65.\nVent calme devenant du nord-nord-ouest de 5 à 7 mph l'après-midi.\n**Mardi soir**\nPartiellement nuageux, avec un minimum d'environ 49.\nVent du nord d'environ 6 mph devenant calme en soirée.\n**Mercredi**\nEnsoleillé, avec un maximum près de 74.\nVent calme devenant du nord de 5 à 8 mph l'après-midi.\n**Mercredi soir**\nGénéralement dégagé, avec un minimum d'environ 53.\nVent du nord de 5 à 7 mph devenant calme en soirée.\n**Jeudi**\nEnsoleillé, avec un maximum près de 78.\n**Jeudi soir**\nPartiellement nuageux, avec un minimum d'environ 53.\n**Vendredi**\nRisque de pluie.\nGénéralement nuageux, avec un maximum près de 64.\n**Vendredi soir**\nRisque de pluie avant 23h.\nGénéralement nuageux, avec un minimum d'environ 48.\n**Samedi**\nPartiellement ensoleillé, avec un maximum près de 65.\n**Samedi soir**\nPartiellement nuageux, avec un minimum d'environ 47.\n**Dimanche**\nGénéralement ensoleillé, avec un maximum près de 66.\n**Dimanche soir**\nPartiellement nuageux, avec un minimum d'environ 48.\n**Lundi**\nGénéralement ensoleillé, avec un maximum près de 72.\n...\nSeattle-University WA\n47,65°N 122,3°O (Alt. 33 pi)\nDernière mise à jour :\n13h00 PDT 25 mai 2026\nPrévisions valides :\n23h PDT 25 mai 2026 - 18h PDT 1er juin 2026\nDiscussion des prévisions",
+          "title": "Prévisions sur 7 jours 47.65N 122.3W - National Weather Service",
+          "url": "https://forecast.weather.gov/MapClick.php?CityName=Seattle&state=WA&site=SEW&lat=47.6606&lon=-122.292",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-26"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="Réponse — Quel temps fait-il à Seattle ?">
+    ```json theme={null}
+    {
+      "id": "3b076c08-870a-45e5-881d-ddaf39781638",
+      "results": [
+        {
+          "snippet": "Prévisions météo pour Seattle, WA | AccuWeather\n## Météo du jour\nMer. 20 mai\nÉclaircies entre les nuages\n**Max : 68°**\nCette nuit : Ciel généralement dégagé\n**Min : 51°**\n## Météo actuelle\n13 h 47\n64°F\nRealFeel®\n77°\nEn grande partie nuageux Plus de détails\nRealFeel Shade™ 65°\nVent NNO 3 mph\nRafales 6 mph\nQualité de l'air Moyenne\n## À venir\n...\n68° 51°\nÉclaircies entre les nuages\nNuit : Ciel généralement dégagé",
+          "title": "Prévisions météo pour Seattle, WA - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "**Conditions actuelles à**\n## Boeing Field - Aéroport international du comté de King (KBFI)\n**Lat : ** 47.54548°N**Lon : ** 122.3147°O**Alt. : ** 20.0 pi\nDégagé\n64°F\n18°C\n|**Humidité**|52 %|\n|--|--|\n|**Vitesse du vent**|ONO 10 MPH|\n|**Baromètre**|30,19 po (1022,35 mb)|\n|**Point de rosée**|46°F (8°C)|\n|**Visibilité**|10,00 mi|\n|**Dernière mise à jour**|20 mai 14 h 30 PDT|\n...\n## Seattle WA\n- Cet après-midi\nMax : 67 °F\nEn grande partie ensoleillé\n- Cette nuit\nMin : 51 °F\nDiminution\nde la nébulosité\n- Jeudi\n...\n**Cet après-midi**\nEn grande partie ensoleillé, avec un maximum près de 67.\nVent du nord-nord-ouest d'environ 8 mph.\n**Cette nuit**\nEn grande partie nuageux, puis dégagement progressif, avec un minimum d'environ 51.\nVent du nord de 5 à 7 mph devenant calme après minuit.\n...\n14 h PDT 20 mai 2026 - 18 h PDT 26 mai 2026",
+          "title": "Prévisions sur 7 jours 47.62N 122.36O - National Weather Service",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6218&lon=-122.3503",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "*access_time* ** 22 h 20 PDT le 20 mai 2026** (GMT -7) | Mis à jour il y a 2 secondes\n--° | 50°\nressenti 61°\nDégagé\nN\nRafales\nLa température de demain devrait être PLUS CHAUDE qu'aujourd'hui.",
+          "title": "Conditions météo à Seattle, WA | Weather Underground",
+          "url": "https://www.wunderground.com/weather/us/wa/seattle",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "Dégagé\n56°\n73°\n49°\nPrécipitations : 0 %\nVent : 3 mph NNE\nHumidité : 69 %\nIndice UV : Faible\nSeattle, WA\nChanger de lieu\nMercredi\n73\n49\n0 %\nDégagé\nVent : 3 mph NNE\nHumidité : 69 %\nIndice UV : Faible\nJeudi\n73\n51\n...\nPartiellement nuageux\nVent : 9 mph N\nHumidité : 56 %\nIndice UV : Élevé\nVendredi\n74\n...\nEnsoleillé\nVent : 7 mph NNO\nHumidité : 60 %\nIndice UV : Élevé\nSamedi\n...\nNuages le matin/soleil l'après-midi\n...\nDimanche\n...\nNuageux\n...\nLundi\n56\n48\n40 %\nAverses\nVent : 12 mph SSO\nHumidité : 74 %\nIndice UV : Modéré\nMardi\n61\n49\n30 %\nAverses le matin\nVent : 8 mph O\nHumidité : 71 %\nIndice UV : Élevé",
+          "title": "Météo - KOMO News",
+          "url": "https://komonews.com/weather",
+          "date": "2026-05-21",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "Mercredi 20 mai\n# Météo actuelle\n14 h 37\n65°F\nEnsoleillé\nRealFeel® 75°\nAgréable\nRealFeel Shade™ 64°\nAgréable\nRealFeel®\n75°\nRealFeel Shade™\n64°\nIndice UV max\n5,8 (Élevé)\nVent\nNNO 4 mph\nRafales\n7 mph\nHumidité\n65 %\nHumidité intérieure\n59 % (Humidité idéale)\nPoint de rosée\n53° F\nPression\n↓ 30,21 po\nNébulosité\n1 %\nVisibilité\n6 mi\nPlafond nuageux\n40000 pi\n## Jour\n20/05\n68° Max\nRealFeel®\n75°\nAgréable\nRealFeel Shade™\n65°\nAgréable\nÉclaircies entre les nuages\nIndice UV max 8,0 (Très élevé)\nAccuLumen Brightness Index™ 6 (Moyen)\nVent N 7 mph\nRafales 13 mph\nProbabilité de précipitations 0 %\nProbabilité d'orages 0 %\nPrécipitations 0,00 po\nNébulosité 59 %\n...\n20/05\n51° Min\nRealFeel®\n50°\nFrais\nCiel généralement dégagé\nVent NNE 6 mph\nRafales 12 mph\nProbabilité de précipitations 0 %\nProbabilité d'orages 0 %\nPrécipitations 0,00 po\nNébulosité 22 %\n...\n## Conditions météo actuelles à Seattle\nÀ Seattle, dans l'État de Washington, le temps est actuellement ensoleillé avec une température de 65°.\nLa température RealFeel® actuelle est de 75° (Agréable) d'après les conditions observées, dont 65 % d'humidité, 1 % de nébulosité, un indice UV de 6 et des vents de 4 mph.\nÀ l'ombre, le RealFeel Shade™ est de 64°.",
+          "title": "Météo actuelle - Seattle, WA - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/current-weather/351409",
+          "date": null,
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "Conditions supplémentaires\nPression\n30,14 °po\nVisibilité\n10 °milles\nNuages\nPartiellement nuageux\nPoint de rosée\n45 °F\nHumidité\n44 °%\nPluie\n0 °po\nÉpaisseur de neige\n0 °po\nPrincipaux reportages vidéo",
+          "title": "Prévisions météo sur 10 jours pour Seattle, WA",
+          "url": "https://www.wunderground.com/forecast/us/wa/seattle",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "Seattle, WA\n57°\nRessenti **57°**\nMax : ° Min : 49° à 1 h 48 PDT\n2 h\n...\nEn direct\nSeattle\n, WA\n57°\nEn direct\nSeattle\n, WA\n57°\nEn direct\nSeattle\n, WA\n57°\nEn direct\n...\nMétéo à Seattle : le soleil et les 70°F de retour pour la fin de la semaine de travail",
+          "title": "Météo FOX 13 pour Seattle et l'ouest de Washington",
+          "url": "https://www.fox13seattle.com/weather",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "18\n°C\nDégagé\nRessenti 18\nMax : 18°   Min : 10°\n## Heure par heure\n...\nPartiellement nuageux.\n...\n## FAQ météo pour Seattle, WA\nQuelle est la température actuelle à Seattle ?\n18°\nQuelle est la température ressentie à Seattle ?\n18°\nQuelles sont les températures maximale et minimale aujourd'hui à Seattle ?\n18°\n10°\nQuelle est la probabilité de pluie ou de neige aujourd'hui à Seattle ?\n20 % P.d.P.\nQuelle quantité de pluie ou de neige tombera aujourd'hui à Seattle ?\nAucune prévue\nQuelles sont la vitesse et la direction actuelles du vent à Seattle ?\n9 km/h NO\nQuel est le taux d'humidité actuel à Seattle ?\n52 %\nY a-t-il des alertes météo actives à Seattle ?\nNon\nQuel est l'indice UV en ce moment à Seattle ?\nFaible\nÀ quelle heure sont le lever et le coucher du soleil aujourd'hui à Seattle ?\nLever du soleil 5 h 25\nCoucher du soleil 20 h 45",
+          "title": "Météo actuelle à Seattle, WA",
+          "url": "https://www.theweathernetwork.com/en/city/us/washington/seattle/current?_guid_iss_=1",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "# Seattle, WA Weather\nAs of\n- **Current Temperature**\n52\nFeels like:52°\n- **Today's high temperature**\n72°\n- **Today's low temperature**\n52°\nCurrent Weather ConditionSunny\n## Live Weather Radar\n...\n## Current Weather Details\n- **Windchill**\n52°\n- **Daily Rain**\n0\"\n- **Dew point**\n46°\n- **Monthly Rain**\n0.35\"\n- **Humidity**\n81%\n- **Avg.\nWind**\nW 2 mph\n- **Pressure**\n30.19\" →\n- **Wind Gust**\nW 3 mph\n- **Sunrise**\n5:25 AM\n- **Moon**\nWaxing Crescent\n- **Sunset**\n8:47 PM\n- **UV Index**\n7 (High)\n## Weather Forecast\n- ### Today\nHi\nSunny.\nHighs in the upper 60s to mid 70s.\nLight wind becoming northwest around 10 mph in the afternoon.\n- ### Tonight\nLo\nMostly clear.\nLows in the lower 50s.\nNorth wind to 10 mph in the evening becoming light.",
+          "title": "Seattle, WA Weather Today & Tomorrow - Local Forecast & Live ...",
+          "url": "https://www.weatherbug.com/weather-forecast/now/seattle-wa-98104",
+          "date": "2026-05-21",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "Seattle, WA Hourly Weather | AccuWeather\n## 11 PM\n56°\nRealFeel®\n53°\nCool\n0%\nMostly clear\nWindNNE 7 mph\nAir QualityPoor\nWind Gusts9 mph\nHumidity68%\nIndoor Humidity44% (Ideal Humidity)\nDew Point45° F\nAccuLumen Brightness Index™0 (Dark)\nCloud Cover13%\nVisibility10 mi\nCloud Ceiling34000 ft\n...\nAccuWeather's hourly forecast for Seattle provides hour-by-hour temperatures, RealFeel® Temperature, and precipitation probability through the next 10 days.\nThe current hour shows 56° with a RealFeel® of 53°, mostly clear with a 0% chance of precipitation.",
+          "title": "Seattle, WA Hourly Weather - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/hourly-weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-21"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<div id="understanding-chunk-types">
+  ## Comprendre les types de chunks
+</div>
+
+En mode concis, vous recevrez quatre types de chunks différents au cours du flux :
+
+<div id="1-chatreasoning">
+  ### 1. `chat.reasoning`
+</div>
+
+Diffusé en streaming pendant la phase de raisonnement, ce type contient les étapes de raisonnement en temps réel ainsi que les opérations de recherche.
+
+<Tabs>
+  <Tab title="Structure">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441590,
+      "object": "chat.reasoning",
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": ""
+        },
+        "delta": {
+          "role": "assistant",
+          "content": "",
+          "reasoning_steps": [{
+            "thought": "Searching the web for Seattle's current weather...",
+            "type": "web_search",
+            "web_search": {
+              "search_results": [...],
+              "search_keywords": ["Seattle current weather"]
+            }
+          }]
+        }
+      }],
+      "type": "message"
+    }
+    ```
+  </Tab>
+
+  <Tab title="Gestionnaire Python">
+    ```python theme={null}
+    def handle_reasoning_chunk(chunk):
+        """Traiter les mises à jour de la phase de raisonnement"""
+        if chunk.object == "chat.reasoning":
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'reasoning_steps'):
+                for step in delta.reasoning_steps:
+                    print(f"\n[Reasoning] {step.thought}")
+
+                    if step.type == "web_search":
+                        keywords = step.web_search.search_keywords
+                        print(f"[Search] Keywords: {', '.join(keywords)}")
+    ```
+  </Tab>
+
+  <Tab title="Gestionnaire Typescript">
+    ```typescript theme={null}
+    function handleReasoningChunk(chunk: any) {
+      if (chunk.object === "chat.reasoning") {
+        const delta = chunk.choices[0].delta;
+
+        if (delta.reasoning_steps) {
+          for (const step of delta.reasoning_steps) {
+            console.log(`\n[Reasoning] ${step.thought}`);
+
+            if (step.type === "web_search") {
+              const keywords = step.web_search.search_keywords;
+              console.log(`[Search] Keywords: ${keywords.join(', ')}`);
+            }
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="2-chatreasoningdone">
+  ### 2. `chat.reasoning.done`
+</div>
+
+Marque la fin de la phase de raisonnement et contient l&#39;ensemble des résultats de recherche (web, images, vidéos) ainsi que les étapes de raisonnement.
+
+<Tabs>
+  <Tab title="Structure">
+    ```json theme={null}
+    {
+      "id": "3dd9d463-0fef-47e3-af70-92f9fcc4db1f",
+      "model": "sonar-pro",
+      "created": 1759459505,
+      "object": "chat.reasoning.done",
+      "usage": {
+        "prompt_tokens": 6,
+        "completion_tokens": 0,
+        "total_tokens": 6,
+        "search_context_size": "low"
+      },
+      "search_results": [...],
+      "images": [...],
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": "",
+          "reasoning_steps": [...]
+        },
+        "delta": {
+          "role": "assistant",
+          "content": ""
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Gestionnaire Python">
+    ```python theme={null}
+    def handle_reasoning_done(chunk):
+        """Traiter la fin de l'étape de raisonnement"""
+        if chunk.object == "chat.reasoning.done":
+            print("\n[Reasoning Complete]")
+
+            # Accéder à tous les résultats de recherche
+            if hasattr(chunk, 'search_results'):
+                print(f"Found {len(chunk.search_results)} sources")
+                for result in chunk.search_results[:3]:
+                    print(f"  • {result['title']}")
+
+            # Accéder aux résultats d'images
+            if hasattr(chunk, 'images'):
+                print(f"Found {len(chunk.images)} images")
+
+            # Statistiques d'utilisation partielles disponibles
+            if hasattr(chunk, 'usage'):
+                print(f"Tokens used so far: {chunk.usage.total_tokens}")
+    ```
+  </Tab>
+
+  <Tab title="Gestionnaire Typescript">
+    ```typescript theme={null}
+    function handleReasoningDone(chunk: any) {
+      if (chunk.object === "chat.reasoning.done") {
+        console.log("\n[Reasoning Complete]");
+
+        // Accéder à tous les résultats de recherche
+        if (chunk.search_results) {
+          console.log(`Found ${chunk.search_results.length} sources`);
+          chunk.search_results.slice(0, 3).forEach((result: any) => {
+            console.log(`  • ${result.title}`);
+          });
+        }
+
+        // Accéder aux résultats d'images
+        if (chunk.images) {
+          console.log(`Found ${chunk.images.length} images`);
+        }
+
+        // Statistiques d'utilisation partielles disponibles
+        if (chunk.usage) {
+          console.log(`Tokens used so far: ${chunk.usage.total_tokens}`);
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="3-chatcompletionchunk">
+  ### 3. `chat.completion.chunk`
+</div>
+
+Émis en streaming pendant l&#39;étape de génération de la réponse, il contient le contenu effectivement généré.
+
+<Tabs>
+  <Tab title="Structure">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441592,
+      "object": "chat.completion.chunk",
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": ""
+        },
+        "delta": {
+          "role": "assistant",
+          "content": " tonight"
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Gestionnaire Python">
+    ```python theme={null}
+    def handle_completion_chunk(chunk):
+        """Traite les mises à jour de génération de contenu"""
+        if chunk.object == "chat.completion.chunk":
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'content') and delta.content:
+                # Diffuse le contenu à l'utilisateur
+                print(delta.content, end='', flush=True)
+                return delta.content
+
+        return ""
+    ```
+  </Tab>
+
+  <Tab title="Gestionnaire Typescript">
+    ```typescript theme={null}
+    function handleCompletionChunk(chunk: any): string {
+      if (chunk.object === "chat.completion.chunk") {
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.content) {
+          // Diffuse le contenu à l'utilisateur
+          process.stdout.write(delta.content);
+          return delta.content;
+        }
+      }
+
+      return "";
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="4-chatcompletiondone">
+  ### 4. `chat.completion.done`
+</div>
+
+Chunk final signalant la fin du flux, avec les résultats de recherche définitifs, les statistiques d&#39;utilisation et les informations de coût.
+
+<Tabs>
+  <Tab title="Structure">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441595,
+      "object": "chat.completion.done",
+      "usage": {
+        "prompt_tokens": 6,
+        "completion_tokens": 238,
+        "total_tokens": 244,
+        "search_context_size": "low",
+        "cost": {
+          "input_tokens_cost": 0.0,
+          "output_tokens_cost": 0.004,
+          "request_cost": 0.006,
+          "total_cost": 0.01
+        }
+      },
+      "search_results": [...],
+      "images": [...],
+      "choices": [{
+        "index": 0,
+        "finish_reason": "stop",
+        "message": {
+          "role": "assistant",
+          "content": "## Seattle Weather Forecast\n\nSeattle is experiencing...",
+          "reasoning_steps": [...]
+        },
+        "delta": {
+          "role": "assistant",
+          "content": ""
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Gestionnaire Python">
+    ```python theme={null}
+    def handle_completion_done(chunk):
+        """Traiter la fin du flux"""
+        if chunk.object == "chat.completion.done":
+            print("\n\n[Stream Complete]")
+
+            # Message final agrégé
+            full_message = chunk.choices[0].message.content
+
+            # Résultats de recherche définitifs
+            if hasattr(chunk, 'search_results'):
+                print(f"\nFinal sources: {len(chunk.search_results)}")
+
+            # Informations complètes d'utilisation et de coût
+            if hasattr(chunk, 'usage'):
+                usage = chunk.usage
+                print(f"\nTokens: {usage.total_tokens}")
+
+                if hasattr(usage, 'cost'):
+                    print(f"Cost: ${usage.cost.total_cost:.4f}")
+
+            return {
+                'content': full_message,
+                'search_results': getattr(chunk, 'search_results', []),
+                'images': getattr(chunk, 'images', []),
+                'usage': getattr(chunk, 'usage', None)
+            }
+    ```
+  </Tab>
+
+  <Tab title="Gestionnaire Typescript">
+    ```typescript theme={null}
+    function handleCompletionDone(chunk: any) {
+      if (chunk.object === "chat.completion.done") {
+        console.log("\n\n[Stream Complete]");
+
+        // Message final agrégé
+        const fullMessage = chunk.choices[0].message.content;
+
+        // Résultats de recherche définitifs
+        if (chunk.search_results) {
+          console.log(`\nFinal sources: ${chunk.search_results.length}`);
+        }
+
+        // Informations complètes d'utilisation et de coût
+        if (chunk.usage) {
+          console.log(`\nTokens: ${chunk.usage.total_tokens}`);
+
+          if (chunk.usage.cost) {
+            console.log(`Cost: $${chunk.usage.cost.total_cost.toFixed(4)}`);
+          }
+        }
+
+        return {
+          content: fullMessage,
+          search_results: chunk.search_results || [],
+          images: chunk.images || [],
+          usage: chunk.usage || null
+        };
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="complete-implementation-examples">
+  ## Exemples d&#39;implémentation complets
+</div>
+
+<div id="full-concise-mode-handler">
+  ### Gestionnaire complet du mode concis
+</div>
+
+<Tabs>
+  <Tab title="SDK Python">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    class ConciseStreamHandler:
+        def __init__(self):
+            self.content = ""
+            self.reasoning_steps = []
+            self.search_results = []
+            self.images = []
+            self.usage = None
+
+        def stream_query(self, query: str, model: str = "sonar-pro"):
+            """Handle a complete concise streaming request"""
+            client = Perplexity()
+
+            stream = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": query}],
+                stream=True,
+                stream_mode="concise"
+            )
+
+            for chunk in stream:
+                self.process_chunk(chunk)
+
+            return self.get_result()
+
+        def process_chunk(self, chunk):
+            """Route chunk to appropriate handler"""
+            chunk_type = chunk.object
+
+            if chunk_type == "chat.reasoning":
+                self.handle_reasoning(chunk)
+            elif chunk_type == "chat.reasoning.done":
+                self.handle_reasoning_done(chunk)
+            elif chunk_type == "chat.completion.chunk":
+                self.handle_content(chunk)
+            elif chunk_type == "chat.completion.done":
+                self.handle_done(chunk)
+
+        def handle_reasoning(self, chunk):
+            """Process reasoning updates"""
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'reasoning_steps'):
+                for step in delta.reasoning_steps:
+                    self.reasoning_steps.append(step)
+                    print(f"💭 {step.thought}")
+
+        def handle_reasoning_done(self, chunk):
+            """Process end of reasoning"""
+            if hasattr(chunk, 'search_results'):
+                self.search_results = chunk.search_results
+                print(f"\n🔍 Found {len(self.search_results)} sources")
+
+            if hasattr(chunk, 'images'):
+                self.images = chunk.images
+                print(f"🖼️  Found {len(self.images)} images")
+
+            print("\n📝 Generating response...\n")
+
+        def handle_content(self, chunk):
+            """Process content chunks"""
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'content') and delta.content:
+                self.content += delta.content
+                print(delta.content, end='', flush=True)
+
+        def handle_done(self, chunk):
+            """Process completion"""
+            if hasattr(chunk, 'usage'):
+                self.usage = chunk.usage
+                print(f"\n\n✅ Complete | Tokens: {self.usage.total_tokens}")
+
+                if hasattr(self.usage, 'cost'):
+                    print(f"💰 Cost: ${self.usage.cost.total_cost:.4f}")
+
+        def get_result(self):
+            """Return complete result"""
+            return {
+                'content': self.content,
+                'reasoning_steps': self.reasoning_steps,
+                'search_results': self.search_results,
+                'images': self.images,
+                'usage': self.usage
+            }
+
+    # Utilisation
+    handler = ConciseStreamHandler()
+    result = handler.stream_query("What's the latest news in AI?")
+
+    print(f"\n\nFinal content length: {len(result['content'])} characters")
+    print(f"Sources used: {len(result['search_results'])}")
+    ```
+  </Tab>
+
+  <Tab title="SDK TypeScript">
+    ```typescript theme={null}
+    import Perplexity from '@perplexity-ai/perplexity_ai';
+
+    interface StreamResult {
+      content: string;
+      reasoning_steps: any[];
+      search_results: any[];
+      images: any[];
+      usage: any;
+    }
+
+    class ConciseStreamHandler {
+      private content: string = "";
+      private reasoning_steps: any[] = [];
+      private search_results: any[] = [];
+      private images: any[] = [];
+      private usage: any = null;
+
+      async streamQuery(query: string, model: string = "sonar-pro"): Promise<StreamResult> {
+        const client = new Perplexity();
+
+        const stream = await client.chat.completions.create({
+          model,
+          messages: [{ role: "user", content: query }],
+          stream: true,
+          stream_mode: "concise"
+        });
+
+        for await (const chunk of stream) {
+          this.processChunk(chunk);
+        }
+
+        return this.getResult();
+      }
+
+      private processChunk(chunk: any) {
+        const chunkType = chunk.object;
+
+        switch (chunkType) {
+          case "chat.reasoning":
+            this.handleReasoning(chunk);
+            break;
+          case "chat.reasoning.done":
+            this.handleReasoningDone(chunk);
+            break;
+          case "chat.completion.chunk":
+            this.handleContent(chunk);
+            break;
+          case "chat.completion.done":
+            this.handleDone(chunk);
+            break;
+        }
+      }
+
+      private handleReasoning(chunk: any) {
+        const delta = chunk.choices[0].delta;
+
+        if (delta.reasoning_steps) {
+          for (const step of delta.reasoning_steps) {
+            this.reasoning_steps.push(step);
+            console.log(`💭 ${step.thought}`);
+          }
+        }
+      }
+
+      private handleReasoningDone(chunk: any) {
+        if (chunk.search_results) {
+          this.search_results = chunk.search_results;
+          console.log(`\n🔍 Found ${this.search_results.length} sources`);
+        }
+
+        if (chunk.images) {
+          this.images = chunk.images;
+          console.log(`🖼️  Found ${this.images.length} images`);
+        }
+
+        console.log("\n📝 Generating response...\n");
+      }
+
+      private handleContent(chunk: any) {
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.content) {
+          this.content += delta.content;
+          process.stdout.write(delta.content);
+        }
+      }
+
+      private handleDone(chunk: any) {
+        if (chunk.usage) {
+          this.usage = chunk.usage;
+          console.log(`\n\n✅ Complete | Tokens: ${this.usage.total_tokens}`);
+
+          if (this.usage.cost) {
+            console.log(`💰 Cost: $${this.usage.cost.total_cost.toFixed(4)}`);
+          }
+        }
+      }
+
+      private getResult(): StreamResult {
+        return {
+          content: this.content,
+          reasoning_steps: this.reasoning_steps,
+          search_results: this.search_results,
+          images: this.images,
+          usage: this.usage
+        };
+      }
+    }
+
+    // Utilisation
+    const handler = new ConciseStreamHandler();
+    const result = await handler.streamQuery("What's the latest news in AI?");
+
+    console.log(`\n\nFinal content length: ${result.content.length} characters`);
+    console.log(`Sources used: ${result.search_results.length}`);
+    ```
+  </Tab>
+
+  <Tab title="HTTP brut">
+    ```python theme={null}
+    import os
+    import requests
+    import json
+
+    def stream_concise_mode(query: str):
+        """Gérer le streaming concis avec du HTTP brut"""
+        url = "https://api.perplexity.ai/v1/sonar"
+        headers = {
+            "Authorization": f"Bearer {os.environ.get('PERPLEXITY_API_KEY')}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "sonar-pro",
+            "messages": [{"role": "user", "content": query}],
+            "stream": True,
+            "stream_mode": "concise"
+        }
+
+        response = requests.post(url, headers=headers, json=payload, stream=True)
+
+        content = ""
+        search_results = []
+        usage = None
+
+        for line in response.iter_lines():
+            if line:
+                line = line.decode('utf-8')
+                if line.startswith('data: '):
+                    data_str = line[6:]
+                    if data_str == '[DONE]':
+                        break
+
+                    try:
+                        chunk = json.loads(data_str)
+                        chunk_type = chunk.get('object')
+
+                        if chunk_type == 'chat.reasoning':
+                            # Traiter le raisonnement
+                            delta = chunk['choices'][0]['delta']
+                            if 'reasoning_steps' in delta:
+                                for step in delta['reasoning_steps']:
+                                    print(f"💭 {step['thought']}")
+
+                        elif chunk_type == 'chat.reasoning.done':
+                            # Traiter la fin du raisonnement
+                            if 'search_results' in chunk:
+                                search_results = chunk['search_results']
+                                print(f"\n🔍 {len(search_results)} sources trouvées\n")
+
+                        elif chunk_type == 'chat.completion.chunk':
+                            # Traiter le contenu
+                            delta = chunk['choices'][0]['delta']
+                            if 'content' in delta and delta['content']:
+                                content += delta['content']
+                                print(delta['content'], end='', flush=True)
+
+                        elif chunk_type == 'chat.completion.done':
+                            # Traiter la fin de la génération
+                            if 'usage' in chunk:
+                                usage = chunk['usage']
+                                print(f"\n\n✅ Jetons : {usage['total_tokens']}")
+
+                    except json.JSONDecodeError:
+                        continue
+
+        return {
+            'content': content,
+            'search_results': search_results,
+            'usage': usage
+        }
+
+    # Utilisation
+    result = stream_concise_mode("Quelles sont les dernières actualités en IA ?")
+    ```
+  </Tab>
+</Tabs>
+
+<div id="best-practices">
+  ## Bonnes pratiques
+</div>
+
+<Steps>
+  <Step title="Agréger le contenu côté client">
+    En mode concis, `choices.message` n&#39;est pas mis à jour de façon incrémentale. Vous devez agréger les chunks vous-même.
+
+    ```python theme={null}
+    # Suivez le contenu vous-même
+    content = ""
+    for chunk in stream:
+        if chunk.object == "chat.completion.chunk":
+            if chunk.choices[0].delta.content:
+                content += chunk.choices[0].delta.content
+    ```
+  </Step>
+
+  <Step title="Utiliser les étapes de raisonnement pour plus de transparence">
+    Affichez les étapes de raisonnement aux utilisateurs afin de renforcer la transparence et la confiance.
+
+    ```python theme={null}
+    def display_reasoning(step):
+        """Montrer le raisonnement aux utilisateurs"""
+        print(f"🔍 Searching for: {step.web_search.search_keywords}")
+        print(f"💭 {step.thought}")
+    ```
+  </Step>
+
+  <Step title="Traiter les résultats de recherche uniquement depuis les chunks « done »">
+    Les résultats de recherche et les informations d&#39;utilisation n&#39;apparaissent que dans les chunks `chat.reasoning.done` et `chat.completion.done`.
+
+    ```python theme={null}
+    # Ne cherchez pas search_results dans les autres types de chunks
+    if chunk.object in ["chat.reasoning.done", "chat.completion.done"]:
+        if hasattr(chunk, 'search_results'):
+            process_search_results(chunk.search_results)
+    ```
+  </Step>
+
+  <Step title="Mettre en place une vérification de type rigoureuse">
+    Utilisez le champ `object` pour aiguiller les chunks vers les gestionnaires appropriés.
+
+    ```python theme={null}
+    chunk_handlers = {
+        "chat.reasoning": handle_reasoning,
+        "chat.reasoning.done": handle_reasoning_done,
+        "chat.completion.chunk": handle_content,
+        "chat.completion.done": handle_done
+    }
+
+    handler = chunk_handlers.get(chunk.object)
+    if handler:
+        handler(chunk)
+    ```
+  </Step>
+
+  <Step title="Suivre le coût depuis le chunk final">
+    Les informations de coût ne sont disponibles que dans le chunk `chat.completion.done`.
+
+    ```python theme={null}
+    if chunk.object == "chat.completion.done":
+        if hasattr(chunk.usage, 'cost'):
+            total_cost = chunk.usage.cost.total_cost
+            print(f"Request cost: ${total_cost:.4f}")
+    ```
+  </Step>
+</Steps>
+
+<div id="migration-from-full-mode">
+  ## Migration depuis le mode complet
+</div>
+
+Si vous passez du mode complet au mode concis, voici les principaux changements :
+
+<Tabs>
+  <Tab title="Avant (mode complet)">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "What's the weather?"}],
+        stream=True
+        # stream_mode vaut "full" par défaut
+    )
+
+    for chunk in stream:
+        # Tous les chunks sont de type chat.completion.chunk
+        if chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="")
+
+        # Les résultats de recherche peuvent apparaître dans plusieurs chunks
+        if hasattr(chunk, 'search_results'):
+            print(f"Sources: {len(chunk.search_results)}")
+    ```
+  </Tab>
+
+  <Tab title="Après (mode concis)">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "What's the weather?"}],
+        stream=True,
+        stream_mode="concise"  # Activer le mode concis
+    )
+
+    for chunk in stream:
+        # Plusieurs types de chunks - aiguiller en conséquence
+        if chunk.object == "chat.reasoning":
+            # Nouveau : gérer les étapes de raisonnement
+            if chunk.choices[0].delta.reasoning_steps:
+                print("Reasoning in progress...")
+
+        elif chunk.object == "chat.reasoning.done":
+            # Nouveau : raisonnement terminé, résultats de recherche disponibles
+            if hasattr(chunk, 'search_results'):
+                print(f"Sources: {len(chunk.search_results)}")
+
+        elif chunk.object == "chat.completion.chunk":
+            # Chunks de contenu (comme en mode complet)
+            if chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end="")
+
+        elif chunk.object == "chat.completion.done":
+            # Chunk final avec les métadonnées complètes
+            print(f"\nTotal tokens: {chunk.usage.total_tokens}")
+    ```
+  </Tab>
+</Tabs>
+
+<div id="when-to-use-each-mode">
+  ## Quand utiliser chaque mode
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Utiliser le mode complet" icon="clipboard-list">
+    * Intégrations simples où vous souhaitez laisser le SDK gérer l&#39;agrégation
+    * Rétrocompatibilité avec les implémentations existantes
+    * Lorsque la visibilité sur le raisonnement n&#39;est pas nécessaire
+  </Card>
+
+  <Card title="Utiliser le mode concis" icon="bolt">
+    * Applications en production optimisant la bande passante
+    * Applications nécessitant une transparence du raisonnement
+    * Interfaces de chat en temps réel affichant le raisonnement
+    * Applications sensibles aux coûts
+  </Card>
+</CardGroup>
+
+<div id="resources">
+  ## Ressources
+</div>
+
+* [Guide des réponses en streaming](/fr/docs/agent-api/output-control#streaming-responses) — Documentation générale sur le streaming
+* [Guide de la Sonar API](/fr/docs/sonar/quickstart) — Guide complet de la Sonar API
+* [Référence de l&#39;API — Sonar API](/fr/api-reference/sonar-post) — Documentation de l&#39;API

@@ -1,0 +1,146 @@
+---
+title: "在 n8n 中使用 Perplexity"
+description: "使用原生 Perplexity 节点，为你的 n8n 工作流添加实时网络搜索、AI 智能体和嵌入能力。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概述
+</div>
+
+n8n 内置原生 **Perplexity 节点**，提供 Agent、Search 和 Embeddings 三种资源——均可在可视化画布中直接配置。模型从 API 动态加载，因此下拉列表始终展示最新可用选项。
+
+<Info>
+  **n8n** 是一个基于节点的工作流自动化平台，支持自托管和云端两种部署方式——下面的所有示例在两种方式下均可运行。若采用自托管，请确保实例能够对外访问 `api.perplexity.ai`。详见 [n8n.io](https://n8n.io)。
+</Info>
+
+该节点支持三种资源：
+
+* **Agent** —— 第三方 model (OpenAI、Anthropic、Google、xAI) ，支持工具调用与结构化输出
+* **Search** —— 返回排序后的原始网页结果，供你自行处理
+* **Embeddings** —— 为 RAG 与检索流程生成向量
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+* n8n 2.14.0+ (云端版 [app.n8n.cloud](https://app.n8n.cloud) 或自托管版)
+* 一个 Perplexity API key
+
+<Card title="获取 API Key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在控制台中生成你的 Perplexity API key。
+</Card>
+
+<div id="credential-setup">
+  ## 凭据设置
+</div>
+
+<Steps>
+  <Step title="打开凭据页面">
+    在 n8n 中，前往 **Settings → Credentials → Add credential**。
+  </Step>
+
+  <Step title="选择 Perplexity">
+    搜索 **Perplexity API** 并选中。
+  </Step>
+
+  <Step title="添加密钥">
+    粘贴你的 API key 并保存。节点会自动引用该凭据。
+  </Step>
+</Steps>
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_credentials.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=43dac8012eb71603e45c77afad6959e8" alt="Perplexity credential setup" />
+
+***
+
+<div id="agent">
+  ## Agent
+</div>
+
+使用 Agent 资源，可在调用第三方模型 (OpenAI、Anthropic、Google、xAI) 的同时使用 Perplexity 的 `web_search` 和 `fetch_url` 工具。
+
+将 **Resource** 设置为 `Agent`，并进行以下配置：
+
+| 参数                      | 说明                                                                |
+| ----------------------- | ----------------------------------------------------------------- |
+| **Model**               | 动态下拉列表中的任一模型 (例如 `openai/gpt-5.5`、`anthropic/claude-sonnet-4-6`)  |
+| **Input**               | 你的提示词——支持 n8n 表达式                                                 |
+| **Tools**               | 选择 `web_search`、`fetch_url` 或两者                                   |
+| **System Instructions** | 智能体的系统提示 (可选)                                                     |
+| **Response Format**     | 用于结构化输出的 JSON schema (可选)                                         |
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_agent_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=5ead62566997fab45106e72a292e8d92" alt="Agent 资源配置" />
+
+***
+
+<div id="search">
+  ## Search
+</div>
+
+获取未经 LLM 处理的原始排序网页结果。将 **Resource** 设置为 `Search`：
+
+| 参数                | 说明                            |
+| ----------------- | ----------------------------- |
+| **Query**         | 搜索查询 —— 支持 n8n 表达式            |
+| **Recency**       | `day`、`week`、`month` 或 `year` |
+| **Domain Filter** | 限定特定域名                        |
+| **Language**      | ISO 639-1 语言代码                |
+| **Country**       | 两位字母国家代码                      |
+
+每条结果包含 `title`、`url`、`snippet` 和 `date`。
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_search_results.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=ce3da801cd5fe19dddd11d293084714f" alt="Search resource results" />
+
+***
+
+<div id="embeddings">
+  ## Embeddings
+</div>
+
+为 RAG 和检索流程生成向量。将 **Resource** 设置为 `Embeddings`：
+
+| 参数        | 说明                                                           |
+| --------- | ------------------------------------------------------------ |
+| **Model** | `pplx-embed-v1-4b` (2560 维) 或 `pplx-embed-v1-0.6b` (1024 维)  |
+| **Input** | 待嵌入的文本 —— 支持 n8n 表达式                                         |
+
+该节点还支持通过 `POST /v1/contextualizedembeddings` 生成上下文嵌入，即感知文档分块的向量。
+
+<img src="https://mintcdn.com/perplexity/7hpsLV1cd8aNV3eO/docs/assets/images/n8n/n8n_embeddings_resource.png?fit=max&auto=format&n=7hpsLV1cd8aNV3eO&q=85&s=3e84f575f042b158214dab7ce8ea6db0" alt="Embeddings resource configuration" />
+
+***
+
+<div id="error-handling">
+  ## 错误处理
+</div>
+
+使用 n8n 的 **Error Trigger** 工作流或内置的 **Retry on Fail** 设置 (节点设置 → Retry on Fail) 来处理瞬时错误：
+
+* **429 Too Many Requests** — 在重试前添加 **Wait** 节点，采用指数退避
+* **401 Unauthorized** — 检查 Perplexity API 凭据是否已正确保存
+* **500 错误** — 在节点设置中启用 Retry on Fail
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="n8n 文档" icon="book" href="https://docs.n8n.io">
+    n8n 官方文档
+  </Card>
+
+  <Card title="n8n 社区" icon="users" href="https://community.n8n.io">
+    模板、工作流与社区支持
+  </Card>
+
+  <Card title="Perplexity API 参考" icon="code" href="/zh/api-reference">
+    完整 API 参考
+  </Card>
+
+  <Card title="Agent API" icon="sparkles" href="/zh/docs/agent-api/models">
+    可用的模型及其能力
+  </Card>
+</CardGroup>

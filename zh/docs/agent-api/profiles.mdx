@@ -1,0 +1,201 @@
+---
+title: "配置档案"
+description: "使用可保存、可管理的可复用版本化配置来运行 Agent API 请求。"
+---
+
+<div id="overview">
+  ## 概览
+</div>
+
+配置档案是一份可复用、带版本管理的配置，由你自行保存和维护。
+它将决定一次运行行为的各项设置——model 或 model 回退链、系统指令、推理强度、工具以及智能体循环的步数预算——统一归入一个 ID 之下。
+只需按 ID 选择配置档案，无需在每个请求中重复完整配置。
+
+配置档案与[预设](/zh/docs/agent-api/presets)相对应，区别在于它由你掌控。
+预设是由 Perplexity 维护并调优的配置。
+配置档案则是由你定义并做版本管理的配置。
+
+|      | 预设                          | 配置档案                         |
+| ---- | ------------------------------- | ------------------------------- |
+| 所有者  | Perplexity                      | 你                               |
+| 引用方式 | 名称，例如 `preset="low"`            | ID，例如 `profile_8Qw3x7tJm2N6pR4` |
+| 版本管理 | 无版本；名称始终解析为 Perplexity 当前推荐的配置。 | 有版本；可固定某个版本或始终跟随最新版本。           |
+| 适用场景 | 针对某类用例、由 Perplexity 优化过的默认配置。   | 由你自行标准化并掌控的配置。                  |
+
+<Note>
+  如果你已经在使用[预设](/zh/docs/agent-api/presets)，那么配置档案就是保存该配置并为其做版本管理的方式。
+  可以从预设的[当前取值](/zh/docs/agent-api/presets#current-preset-values)入手，再将其作为配置档案来管理，这样每个请求只需引用一个 ID。
+  一个请求只能使用预设或配置档案其中之一，不能同时使用。
+</Note>
+
+<div id="add-a-profile">
+  ## 添加配置档案
+</div>
+
+1. 打开 [API 门户中的 Profiles](https://console.perplexity.ai/project/profiles)。
+2. 选择 **Create profile**。
+3. 设置该配置档案要使用的 model、指令和工具，然后保存。
+4. 复制配置档案 ID。
+5. 在 Agent API 请求中添加 `profile` 字段：将 `type` 设为 `"custom"`，`id` 设为该配置档案 ID；同一请求中不要再设置 `preset`。
+
+本次运行会沿用该配置档案中的 model、指令、工具及其他设置，无需重复指定。
+下面的请求演示了如何运行一个配置档案。
+请将 `profile_YOUR_PROFILE_ID` 替换为你复制的 ID。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      profile={
+          "type": "custom",
+          "id": "profile_YOUR_PROFILE_ID",
+      },
+      input="Summarize this week's most important AI research.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    profile: {
+      type: 'custom',
+      id: 'profile_YOUR_PROFILE_ID',
+    },
+    input: "Summarize this week's most important AI research.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "profile": {
+        "type": "custom",
+        "id": "profile_YOUR_PROFILE_ID"
+      },
+      "input": "Summarize this weeks most important AI research."
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="override-profile-settings">
+  ## 覆盖配置档案设置
+</div>
+
+配置档案为每次运行提供默认值。
+请求中设置的任何参数都会覆盖配置档案中对应字段的值，因此你可以复用同一个配置档案，只针对单次请求调整某一项设置。
+例如，传入 `model` 就能在保留其指令、工具及其他设置的前提下，用另一个 model 运行该配置档案的配置。
+
+`tools` 是个例外：它按工具逐项合并，而非整体替换。
+列出某个工具时，只会覆盖该工具的选项，配置档案中的其他工具仍保持启用。
+
+<div id="profile-parameters">
+  ## 配置档案参数
+</div>
+
+| 字段        | 类型     | 是否必需 | 描述                               |
+| --------- | ------ | ---- | -------------------------------- |
+| `type`    | string | 是    | 必须为 `"custom"`。                  |
+| `id`      | string | 是    | 配置档案 ID，长度为 1 到 128 个字符。         |
+| `version` | string | 否    | 要绑定的版本，或填 `"latest"`。省略时绑定到最新版本。 |
+
+<div id="versioning">
+  ## 版本管理
+</div>
+
+配置档案的每个版本都是不可变的：编辑配置档案会创建一个新版本，而不会修改现有版本。
+固定到特定版本的请求始终以完全相同的配置运行，因此只有 `"latest"` 才会采用新版本。
+版本在请求被受理时即已确定，因此请求执行期间发生的变更不会影响本次运行。
+
+将生产流量固定到特定版本：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      profile={
+          "type": "custom",
+          "id": "profile_YOUR_PROFILE_ID",
+          "version": "3",
+      },
+      input="Summarize this week's most important AI research.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    profile: {
+      type: 'custom',
+      id: 'profile_YOUR_PROFILE_ID',
+      version: '3',
+    },
+    input: "Summarize this week's most important AI research.",
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "profile": {
+        "type": "custom",
+        "id": "profile_YOUR_PROFILE_ID",
+        "version": "3"
+      },
+      "input": "Summarize this weeks most important AI research."
+    }' | jq
+  ```
+</CodeGroup>
+
+使用 `"latest"` 时，任何管理员上传的新版本都会立即改变生产请求实际运行的配置。
+可在 [API Portal](https://console.perplexity.ai/project/profiles) 中查看版本历史并下载任意版本。
+
+<div id="error-handling">
+  ## 错误处理
+</div>
+
+配置档案 (profile) 有问题时，请求会在运行开始前以 `4xx` 状态失败，因此可按普通请求错误来处理。
+你可能会遇到以下几种情况：
+
+* **配置档案中指定了你无法使用的 model。** 请求失败并返回 `model "<model>" is not supported`。请修改配置档案，改用受支持的 model。
+* **配置档案 ID 有误，或你无权访问。** 请求失败并返回 `The requested profile does not exist or is not accessible.` 请检查该 ID。
+* **`version` 无效。** 请使用已存在的版本，或填写 `"latest"`。
+
+请在 [API Portal 的 Profiles 页面](https://console.perplexity.ai/project/profiles) 管理你的配置档案。如果问题仍未解决，请联系 [api@perplexity.ai](mailto:api@perplexity.ai)。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="预设" icon="sliders" href="/zh/docs/agent-api/presets">
+    通过名称使用 Perplexity 托管的配置。
+  </Card>
+
+  <Card title="模型回退" icon="arrow-right-arrow-left" href="/zh/docs/agent-api/model-fallback">
+    设置回退链，在某个模型不可用时让运行继续进行。
+  </Card>
+</CardGroup>

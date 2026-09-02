@@ -1,0 +1,198 @@
+---
+title: "Perplexity avec LiteLLM"
+description: "Utilisez l'Agent API et les presets de Perplexity via l'interface unifiée de LiteLLM — SDK Python et Proxy."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+[LiteLLM](https://litellm.ai) est un SDK Python et un serveur proxy qui offre une interface unique compatible OpenAI vers plus de 100 fournisseurs de LLM. L&#39;[Agent API](/fr/docs/agent-api/quickstart) de Perplexity — avec des modèle tiers comme GPT-5, Claude et Gemini routés via Perplexity — y est un fournisseur de premier plan.
+
+<Info>
+  **LiteLLM** vous permet de changer de fournisseur sans réécrire votre code, de déployer un proxy auto-hébergé qui rassemble tous les modèle derrière une seule clé API, et de suivre les dépenses, la latence et les erreurs par fournisseur. Pour en savoir plus, rendez-vous sur [litellm.ai](https://litellm.ai).
+</Info>
+
+<div id="installation">
+  ## Installation
+</div>
+
+```bash theme={null}
+pip install litellm
+```
+
+<div id="api-key-setup">
+  ## Configuration de la clé API
+</div>
+
+LiteLLM lit votre clé API Perplexity depuis l&#39;environnement :
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="Obtenir une clé API" icon="key" href="https://console.perplexity.ai/project/keys">
+  Générez votre clé API Perplexity depuis le portail API.
+</Card>
+
+<div id="agent-api">
+  ## Agent API
+</div>
+
+Utilisez `litellm.responses` pour appeler l&#39;[Agent API](/fr/docs/agent-api/quickstart), qui acheminne les requêtes via Perplexity vers des modèles tiers, avec orchestration des outils et presets.
+
+<div id="presets">
+  ### Presets
+</div>
+
+```python theme={null}
+from litellm import responses
+import os
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+response = responses(
+    model="perplexity/preset/low",
+    input="What are the latest developments in AI?",
+    custom_llm_provider="perplexity",
+)
+
+print(response.output)
+```
+
+Presets disponibles : `fast`, `low`, `medium`, `high`, `xhigh`.
+
+<div id="tool-use-web_search-and-fetch_url">
+  ### Utilisation des outils (`web_search` et `fetch_url`)
+</div>
+
+```python theme={null}
+from litellm import responses
+
+response = responses(
+    model="perplexity/openai/gpt-5.6-sol",
+    input="Research quantum computing breakthroughs and cite sources.",
+    custom_llm_provider="perplexity",
+    tools=[
+        {"type": "web_search"},
+        {"type": "fetch_url"},
+    ],
+    instructions="Use web_search and fetch_url to gather citations.",
+    max_output_tokens=1000,
+    temperature=0.7,
+)
+
+print(response.output)
+```
+
+<div id="structured-outputs">
+  ### Sorties structurées
+</div>
+
+```python theme={null}
+from litellm import responses
+
+response = responses(
+    model="perplexity/preset/low",
+    input="Extract key facts about the Eiffel Tower.",
+    custom_llm_provider="perplexity",
+    text={
+        "format": {
+            "type": "json_schema",
+            "name": "facts",
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "name": {"type": "string"},
+                    "height_meters": {"type": "number"},
+                    "year_built": {"type": "integer"},
+                },
+                "required": ["name", "height_meters", "year_built"],
+            },
+            "strict": True,
+        }
+    },
+)
+```
+
+<div id="supported-third-party-models-via-agent-api">
+  ### Modèles tiers pris en charge via l&#39;Agent API
+</div>
+
+Préfixez tout identifiant de modèle de l&#39;Agent API par `perplexity/` (par exemple, `perplexity/openai/gpt-5.6-sol`). Consultez la [liste des modèles de l&#39;Agent API](/fr/docs/agent-api/models) pour obtenir le catalogue de référence, tenu à jour.
+
+<div id="litellm-proxy">
+  ## Proxy LiteLLM
+</div>
+
+Exécutez LiteLLM en tant que proxy auto-hébergé qui place Perplexity (et tout autre fournisseur) derrière un point de terminaison unique compatible OpenAI.
+
+<div id="configyaml">
+  ### config.yaml
+</div>
+
+```yaml theme={null}
+model_list:
+  - model_name: perplexity-low
+    litellm_params:
+      model: perplexity/preset/low
+      api_key: os.environ/PERPLEXITY_API_KEY
+```
+
+<div id="start-the-proxy">
+  ### Démarrer le proxy
+</div>
+
+```bash theme={null}
+litellm --config /path/to/config.yaml
+```
+
+<div id="call-the-proxy">
+  ### Appeler le proxy
+</div>
+
+```bash theme={null}
+curl http://0.0.0.0:4000/v1/responses \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer anything" \
+  -d '{
+    "model": "perplexity-low",
+    "input": "What are the latest developments in AI?",
+    "tools": [{"type": "web_search"}]
+  }'
+```
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Documentation LiteLLM Perplexity" icon="book" href="https://docs.litellm.ai/docs/providers/perplexity">
+    Documentation officielle du fournisseur Perplexity pour LiteLLM.
+  </Card>
+
+  <Card title="Documentation LiteLLM" icon="globe" href="https://docs.litellm.ai">
+    Documentation complète de LiteLLM.
+  </Card>
+
+  <Card title="Agent API de Perplexity" icon="robot" href="/fr/docs/agent-api/quickstart">
+    Référence de l&#39;Agent API et presets.
+  </Card>
+
+  <Card title="Modèles de l'Agent API" icon="sparkles" href="/fr/docs/agent-api/models">
+    Modèles disponibles pour l&#39;Agent API.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Assistance
+</div>
+
+Besoin d&#39;aide pour l&#39;intégration ?
+
+* Consultez la [documentation LiteLLM](https://docs.litellm.ai)
+* Parcourez notre [FAQ](/fr/docs/resources/faq)

@@ -1,0 +1,91 @@
+---
+title: "记忆管理"
+description: "使用 LlamaIndex 构建高级对话记忆方案，打造持久化、上下文感知的应用"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="memory-management-with-llamaindex-and-perplexity-sonar-api">
+  # 使用 LlamaIndex 与 Perplexity Sonar API 实现记忆管理
+</div>
+
+<div id="overview">
+  ## 概述
+</div>
+
+本文探讨在大语言模型 (LLM) 驱动的应用中保留对话记忆的进阶方案。目标是通过在多次交互之间延续上下文来实现连贯的多轮对话，即便受限于模型的 token 上限也依然如此。
+
+<div id="problem-statement">
+  ## 问题描述
+</div>
+
+LLM 的上下文窗口有限，难以维持长期的对话记忆。若缺乏妥善的记忆管理机制，后续追问可能会偏离主题，甚至凭空生成与上下文无关的答案。
+
+<div id="approaches">
+  ## 方案
+</div>
+
+我们基于 LlamaIndex 实现了两种不同的策略来解决这一问题：
+
+<div id="1-chat-summary-memory-buffer">
+  ### 1. **对话摘要记忆缓冲区**
+</div>
+
+* **目标**：对较早的消息进行摘要，在保留关键上下文的同时不超出 token 上限。
+* **方法**：
+  * 使用 LlamaIndex 的 `ChatSummaryMemoryBuffer` 动态截断并摘要对话历史。
+  * 确保早期交互中的关键细节以精简形式得以保留。
+* **适用场景**：非常适合对记忆效率要求较高的短期对话。
+* **实现**：[查看完整指南 →](/zh/docs/cookbook/articles/memory-management/chat-summary-memory-buffer/README)
+
+<div id="2-persistent-memory-with-lancedb">
+  ### 2. **基于 LanceDB 的持久化记忆**
+</div>
+
+* **目标**：实现跨会话的长期记忆持久化。
+* **方法**：
+  * 将对话历史以向量嵌入的形式存储在 LanceDB 中。
+  * 通过语义搜索和元数据过滤检索相关的历史上下文。
+  * 集成 Perplexity 的 Sonar API，基于检索到的上下文生成回复。
+* **适用场景**：适合需要长期保留记忆并进行上下文回溯的应用。
+* **实现**：[查看完整指南 →](/zh/docs/cookbook/articles/memory-management/chat-with-persistence/README)
+
+<div id="directory-structure">
+  ## 目录结构
+</div>
+
+```
+articles/memory-management/
+├── chat-summary-memory-buffer/   # 基于摘要的记忆实现
+├── chat-with-persistence/        # 基于 LanceDB 的持久化记忆实现
+```
+
+<div id="getting-started">
+  ## 快速开始
+</div>
+
+1. 克隆仓库：
+   ```bash theme={null}
+   git clone https://github.com/ppl-ai/api-cookbook.git
+   cd api-cookbook/articles/memory-management
+   ```
+2. 参照各子目录中的 README 完成环境配置，并参考其中的使用示例。
+
+<div id="key-benefits">
+  ## 主要优势
+</div>
+
+* **上下文窗口管理**：通过摘要将 token 用量降低 43%
+* **对话连续性**：跨会话保留 92% 的上下文
+* **API 兼容性**：与 Perplexity 消息结构的兼容成功率达 100%
+* **生产就绪**：面向企业级应用的可扩展架构
+
+<div id="contributions">
+  ## 贡献
+</div>
+
+如果你使用 LlamaIndex 找到了解决同一问题的其他方法，欢迎提交 PR！更多指引请参阅我们的 [CONTRIBUTING.md](https://github.com/ppl-ai/api-cookbook/blob/main/CONTRIBUTING.md) 文件。
+
+***

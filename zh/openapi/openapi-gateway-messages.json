@@ -1,0 +1,1531 @@
+{
+  "components": {
+    "schemas": {
+      "Base64DocumentSource": {
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "media_type": {
+            "enum": [
+              "application/pdf"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "base64"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "media_type",
+          "data"
+        ],
+        "type": "object"
+      },
+      "Base64ImageSource": {
+        "properties": {
+          "data": {
+            "description": "Base64 编码的图像字节，全程以字符串形式保留。",
+            "type": "string"
+          },
+          "media_type": {
+            "enum": [
+              "image/jpeg",
+              "image/png",
+              "image/gif",
+              "image/webp"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "base64"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "media_type",
+          "data"
+        ],
+        "type": "object"
+      },
+      "CacheControl": {
+        "description": "临时缓存断点。在 1h 写入单独计费之前，ttl \"1h\" 会被拒绝（其价格为 5m 费率的 2 倍）。",
+        "properties": {
+          "ttl": {
+            "enum": [
+              "5m",
+              "1h"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "ephemeral"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "CacheCreation": {
+        "description": "按 TTL 划分的缓存写入明细。在显式 1h 断点可计费之前，1h 始终为零。",
+        "properties": {
+          "ephemeral_1h_input_tokens": {
+            "type": "integer"
+          },
+          "ephemeral_5m_input_tokens": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "ephemeral_5m_input_tokens",
+          "ephemeral_1h_input_tokens"
+        ],
+        "type": "object"
+      },
+      "ContentBlock": {
+        "discriminator": {
+          "mapping": {
+            "text": "#/components/schemas/TextBlock",
+            "thinking": "#/components/schemas/ThinkingBlock",
+            "tool_use": "#/components/schemas/ToolUseBlock"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextBlock"
+          },
+          {
+            "$ref": "#/components/schemas/ToolUseBlock"
+          },
+          {
+            "$ref": "#/components/schemas/ThinkingBlock"
+          }
+        ]
+      },
+      "ContentBlockDelta": {
+        "discriminator": {
+          "mapping": {
+            "input_json_delta": "#/components/schemas/InputJSONDelta",
+            "signature_delta": "#/components/schemas/SignatureDelta",
+            "text_delta": "#/components/schemas/TextDelta",
+            "thinking_delta": "#/components/schemas/ThinkingDelta"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextDelta"
+          },
+          {
+            "$ref": "#/components/schemas/InputJSONDelta"
+          },
+          {
+            "$ref": "#/components/schemas/ThinkingDelta"
+          },
+          {
+            "$ref": "#/components/schemas/SignatureDelta"
+          }
+        ]
+      },
+      "ContentBlockDeltaEvent": {
+        "properties": {
+          "delta": {
+            "$ref": "#/components/schemas/ContentBlockDelta"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "content_block_delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "delta"
+        ],
+        "type": "object"
+      },
+      "ContentBlockStartEvent": {
+        "properties": {
+          "content_block": {
+            "$ref": "#/components/schemas/ContentBlock"
+          },
+          "index": {
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "content_block_start"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index",
+          "content_block"
+        ],
+        "type": "object"
+      },
+      "ContentBlockStopEvent": {
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "type": {
+            "enum": [
+              "content_block_stop"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "index"
+        ],
+        "type": "object"
+      },
+      "CountMessageTokensRequest": {
+        "description": "POST /router/v1/messages/count_tokens 的请求正文——CreateMessageRequest 中用于构造提示词的子集。",
+        "properties": {
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/InputMessage"
+            },
+            "type": "array"
+          },
+          "model": {
+            "description": "公开模型 slug，例如 `anthropic/claude-sonnet-4-5`。",
+            "type": "string"
+          },
+          "system": {
+            "description": "系统提示词，可为纯文本或文本块数组。",
+            "oneOf": [
+              {
+                "title": "Text",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TextBlock"
+                },
+                "title": "Text blocks",
+                "type": "array"
+              }
+            ],
+            "x-go-type": "CreateMessageRequest_System"
+          },
+          "thinking": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ThinkingConfig"
+              }
+            ],
+            "description": "验证拒绝——llm-api 的计数载体尚不支持转发该字段。"
+          },
+          "tool_choice": {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/ToolChoice"
+              }
+            ],
+            "description": "验证拒绝——llm-api 的计数载体尚不支持转发该字段。"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "model",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "CountMessageTokensResponse": {
+        "description": "POST /router/v1/messages/count_tokens 的响应正文。",
+        "properties": {
+          "input_tokens": {
+            "description": "提示词作为 /messages 输入时会消耗的 token 数。",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "input_tokens"
+        ],
+        "type": "object"
+      },
+      "CreateMessageRequest": {
+        "description": "POST /router/v1/messages 的请求正文。",
+        "properties": {
+          "cache_control": {
+            "$ref": "#/components/schemas/CacheControl"
+          },
+          "container": {
+            "description": "验证拒绝——不支持代码执行容器。",
+            "x-go-type": "json.RawMessage"
+          },
+          "context_management": {
+            "additionalProperties": true,
+            "description": "接受但忽略——不会应用上下文编辑。以原始形式保留，以便不断演进的策略能够解码。",
+            "type": "object",
+            "x-go-type": "json.RawMessage"
+          },
+          "fallback_credit_token": {
+            "description": "会与备用模型一并被验证拒绝。",
+            "type": "string"
+          },
+          "fallbacks": {
+            "description": "验证拒绝——备用模型会按所请求的 slug 计费。",
+            "x-go-type": "json.RawMessage"
+          },
+          "inference_geo": {
+            "description": "验证拒绝——无法满足地理位置固定要求；静默忽略会违背数据驻留预期。",
+            "type": "string"
+          },
+          "max_tokens": {
+            "description": "要生成的最大 token 数。Messages API 必填。",
+            "maximum": 2147483647,
+            "minimum": 1,
+            "type": "integer"
+          },
+          "mcp_servers": {
+            "description": "验证拒绝——不支持服务器端 MCP 执行。",
+            "x-go-type": "json.RawMessage"
+          },
+          "messages": {
+            "items": {
+              "$ref": "#/components/schemas/InputMessage"
+            },
+            "type": "array"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/RequestMetadata"
+          },
+          "model": {
+            "description": "公开模型 slug，例如 `perplexity/kimi-k3`。",
+            "type": "string"
+          },
+          "output_config": {
+            "$ref": "#/components/schemas/OutputConfig"
+          },
+          "service_tier": {
+            "description": "接受但忽略——llm-api 的 service_tier 仅适用于 OpenAI。",
+            "enum": [
+              "auto",
+              "standard_only"
+            ],
+            "type": "string"
+          },
+          "speed": {
+            "description": "\"standard\" 无效；\"fast\" 被拒绝（不支持快速模式路由）。",
+            "enum": [
+              "standard",
+              "fast"
+            ],
+            "type": "string"
+          },
+          "stop_sequences": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "stream": {
+            "description": "为 true 时，以服务器发送事件形式响应。",
+            "type": "boolean"
+          },
+          "system": {
+            "description": "系统提示词，可为纯文本或文本块数组。",
+            "oneOf": [
+              {
+                "title": "Text",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TextBlock"
+                },
+                "title": "Text blocks",
+                "type": "array"
+              }
+            ]
+          },
+          "temperature": {
+            "format": "float",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "thinking": {
+            "$ref": "#/components/schemas/ThinkingConfig"
+          },
+          "tool_choice": {
+            "$ref": "#/components/schemas/ToolChoice"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/Tool"
+            },
+            "type": "array"
+          },
+          "top_k": {
+            "description": "每个后续 token 仅从概率最高的前 K 个选项中采样。",
+            "type": "integer"
+          },
+          "top_p": {
+            "format": "float",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          }
+        },
+        "required": [
+          "model",
+          "max_tokens",
+          "messages"
+        ],
+        "type": "object"
+      },
+      "DocumentBlock": {
+        "description": "文档输入。Base64 application/pdf、纯文本和 URL 来源会映射到 llm-api（非 Base64 来源以及标题/上下文仅适用于 anthropic/ 模型）；内容来源和引用配置会被验证拒绝。",
+        "properties": {
+          "cache_control": {
+            "$ref": "#/components/schemas/CacheControl"
+          },
+          "citations": {
+            "description": "非 null 的引用配置会被拒绝——Router 从不输出引用。",
+            "x-go-type": "json.RawMessage"
+          },
+          "context": {
+            "nullable": true,
+            "type": "string"
+          },
+          "source": {
+            "$ref": "#/components/schemas/DocumentSource"
+          },
+          "title": {
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "document"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "source"
+        ],
+        "type": "object"
+      },
+      "DocumentSource": {
+        "discriminator": {
+          "mapping": {
+            "base64": "#/components/schemas/Base64DocumentSource",
+            "text": "#/components/schemas/PlainTextDocumentSource",
+            "url": "#/components/schemas/URLDocumentSource"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Base64DocumentSource"
+          },
+          {
+            "$ref": "#/components/schemas/PlainTextDocumentSource"
+          },
+          {
+            "$ref": "#/components/schemas/URLDocumentSource"
+          }
+        ]
+      },
+      "ErrorObject": {
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "invalid_request_error",
+              "authentication_error",
+              "permission_error",
+              "not_found_error",
+              "request_too_large",
+              "rate_limit_error",
+              "api_error",
+              "timeout_error",
+              "overloaded_error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ],
+        "type": "object"
+      },
+      "ErrorResponse": {
+        "description": "错误封装，可作为 JSON 正文或 SSE 错误事件载荷返回。",
+        "properties": {
+          "error": {
+            "$ref": "#/components/schemas/ErrorObject"
+          },
+          "type": {
+            "enum": [
+              "error"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "error"
+        ],
+        "type": "object"
+      },
+      "ImageBlock": {
+        "properties": {
+          "cache_control": {
+            "$ref": "#/components/schemas/CacheControl"
+          },
+          "source": {
+            "$ref": "#/components/schemas/ImageSource"
+          },
+          "type": {
+            "enum": [
+              "image"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "source"
+        ],
+        "type": "object"
+      },
+      "ImageSource": {
+        "discriminator": {
+          "mapping": {
+            "base64": "#/components/schemas/Base64ImageSource",
+            "url": "#/components/schemas/URLImageSource"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Base64ImageSource"
+          },
+          {
+            "$ref": "#/components/schemas/URLImageSource"
+          }
+        ]
+      },
+      "InputContentBlock": {
+        "discriminator": {
+          "mapping": {
+            "document": "#/components/schemas/DocumentBlock",
+            "image": "#/components/schemas/ImageBlock",
+            "redacted_thinking": "#/components/schemas/RedactedThinkingBlock",
+            "search_result": "#/components/schemas/SearchResultBlock",
+            "text": "#/components/schemas/TextBlock",
+            "thinking": "#/components/schemas/ThinkingBlock",
+            "tool_result": "#/components/schemas/ToolResultBlock",
+            "tool_use": "#/components/schemas/ToolUseBlock"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextBlock"
+          },
+          {
+            "$ref": "#/components/schemas/ImageBlock"
+          },
+          {
+            "$ref": "#/components/schemas/DocumentBlock"
+          },
+          {
+            "$ref": "#/components/schemas/SearchResultBlock"
+          },
+          {
+            "$ref": "#/components/schemas/ToolUseBlock"
+          },
+          {
+            "$ref": "#/components/schemas/ToolResultBlock"
+          },
+          {
+            "$ref": "#/components/schemas/ThinkingBlock"
+          },
+          {
+            "$ref": "#/components/schemas/RedactedThinkingBlock"
+          }
+        ]
+      },
+      "InputJSONDelta": {
+        "properties": {
+          "partial_json": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "input_json_delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "partial_json"
+        ],
+        "type": "object"
+      },
+      "InputMessage": {
+        "properties": {
+          "content": {
+            "description": "消息内容，可为纯文本或内容块数组。",
+            "oneOf": [
+              {
+                "title": "Text",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/InputContentBlock"
+                },
+                "title": "Content blocks",
+                "type": "array"
+              }
+            ]
+          },
+          "role": {
+            "enum": [
+              "user",
+              "assistant",
+              "system"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "content"
+        ],
+        "type": "object"
+      },
+      "Message": {
+        "description": "非流式响应正文和 message_start 载荷。",
+        "properties": {
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/ContentBlock"
+            },
+            "type": "array"
+          },
+          "id": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "role": {
+            "enum": [
+              "assistant"
+            ],
+            "type": "string"
+          },
+          "stop_reason": {
+            "enum": [
+              "end_turn",
+              "max_tokens",
+              "stop_sequence",
+              "tool_use",
+              "pause_turn",
+              "refusal",
+              "model_context_window_exceeded"
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "stop_sequence": {
+            "nullable": true,
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "message"
+            ],
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/Usage"
+          }
+        },
+        "required": [
+          "id",
+          "type",
+          "role",
+          "model",
+          "content",
+          "stop_reason",
+          "stop_sequence",
+          "usage"
+        ],
+        "type": "object"
+      },
+      "MessageDelta": {
+        "properties": {
+          "stop_reason": {
+            "enum": [
+              "end_turn",
+              "max_tokens",
+              "stop_sequence",
+              "tool_use",
+              "pause_turn",
+              "refusal",
+              "model_context_window_exceeded"
+            ],
+            "nullable": true,
+            "type": "string"
+          },
+          "stop_sequence": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "required": [
+          "stop_reason",
+          "stop_sequence"
+        ],
+        "type": "object"
+      },
+      "MessageDeltaEvent": {
+        "properties": {
+          "delta": {
+            "$ref": "#/components/schemas/MessageDelta"
+          },
+          "type": {
+            "enum": [
+              "message_delta"
+            ],
+            "type": "string"
+          },
+          "usage": {
+            "$ref": "#/components/schemas/MessageDeltaUsage"
+          }
+        },
+        "required": [
+          "type",
+          "delta",
+          "usage"
+        ],
+        "type": "object"
+      },
+      "MessageDeltaUsage": {
+        "description": "累计用量；输入侧字段与 message_start 保持一致，以便 SDK 累加器最终一致。",
+        "properties": {
+          "cache_creation_input_tokens": {
+            "type": "integer"
+          },
+          "cache_read_input_tokens": {
+            "type": "integer"
+          },
+          "input_tokens": {
+            "type": "integer"
+          },
+          "output_tokens": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "output_tokens"
+        ],
+        "type": "object"
+      },
+      "MessageStartEvent": {
+        "properties": {
+          "message": {
+            "$ref": "#/components/schemas/Message"
+          },
+          "type": {
+            "enum": [
+              "message_start"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "message"
+        ],
+        "type": "object"
+      },
+      "MessageStopEvent": {
+        "properties": {
+          "type": {
+            "enum": [
+              "message_stop"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "OutputConfig": {
+        "properties": {
+          "effort": {
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "xhigh",
+              "max"
+            ],
+            "type": "string"
+          },
+          "format": {
+            "$ref": "#/components/schemas/OutputConfigFormat"
+          },
+          "task_budget": {
+            "description": "接受但忽略——llm-api 没有任务预算载体。",
+            "x-go-type": "json.RawMessage"
+          }
+        },
+        "type": "object"
+      },
+      "OutputConfigFormat": {
+        "properties": {
+          "schema": {
+            "additionalProperties": true,
+            "description": "响应的 JSON Schema，以原始 JSON 形式保留并原样转发。",
+            "type": "object",
+            "x-go-type": "json.RawMessage"
+          },
+          "type": {
+            "enum": [
+              "json_schema"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "schema"
+        ],
+        "type": "object"
+      },
+      "PingEvent": {
+        "properties": {
+          "type": {
+            "enum": [
+              "ping"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "PlainTextDocumentSource": {
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "media_type": {
+            "enum": [
+              "text/plain"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "media_type",
+          "data"
+        ],
+        "type": "object"
+      },
+      "RedactedThinkingBlock": {
+        "description": "经脱敏的思考重放。规范接受，但验证会拒绝。",
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "redacted_thinking"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "data"
+        ],
+        "type": "object"
+      },
+      "RequestMetadata": {
+        "properties": {
+          "user_id": {
+            "nullable": true,
+            "type": "string"
+          }
+        },
+        "type": "object"
+      },
+      "SearchResultBlock": {
+        "description": "带来源归属的 RAG 搜索结果。仅在 anthropic/ 模型上映射到 llm-api；引用配置会被验证拒绝。",
+        "properties": {
+          "cache_control": {
+            "$ref": "#/components/schemas/CacheControl"
+          },
+          "citations": {
+            "description": "非 null 的引用配置会被拒绝——Router 从不输出引用。",
+            "x-go-type": "json.RawMessage"
+          },
+          "content": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultTextBlock"
+            },
+            "type": "array"
+          },
+          "source": {
+            "description": "结果的来源 URL 或标识符。",
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "search_result"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "source",
+          "title",
+          "content"
+        ],
+        "type": "object"
+      },
+      "SearchResultTextBlock": {
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "SignatureDelta": {
+        "properties": {
+          "signature": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "signature_delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "TextBlock": {
+        "properties": {
+          "cache_control": {
+            "$ref": "#/components/schemas/CacheControl"
+          },
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "text"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "TextDelta": {
+        "properties": {
+          "text": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "text_delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "text"
+        ],
+        "type": "object"
+      },
+      "ThinkingBlock": {
+        "description": "扩展思考输出；在请求中仅作为重放的历史记录。display 为 \"omitted\" 时，允许思考文本为空。",
+        "properties": {
+          "signature": {
+            "type": "string"
+          },
+          "thinking": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "thinking"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "thinking",
+          "signature"
+        ],
+        "type": "object"
+      },
+      "ThinkingConfig": {
+        "discriminator": {
+          "mapping": {
+            "adaptive": "#/components/schemas/ThinkingConfigAdaptive",
+            "disabled": "#/components/schemas/ThinkingConfigDisabled",
+            "enabled": "#/components/schemas/ThinkingConfigEnabled"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ThinkingConfigEnabled"
+          },
+          {
+            "$ref": "#/components/schemas/ThinkingConfigAdaptive"
+          },
+          {
+            "$ref": "#/components/schemas/ThinkingConfigDisabled"
+          }
+        ]
+      },
+      "ThinkingConfigAdaptive": {
+        "description": "由模型控制的思考；映射到 llm-api 自动思考。",
+        "properties": {
+          "display": {
+            "$ref": "#/components/schemas/ThinkingDisplay"
+          },
+          "type": {
+            "enum": [
+              "adaptive"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "ThinkingConfigDisabled": {
+        "properties": {
+          "type": {
+            "enum": [
+              "disabled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "ThinkingConfigEnabled": {
+        "description": "旧版基于预算的思考；budget_tokens 映射到最接近的 llm-api reasoning-effort 层级。",
+        "properties": {
+          "budget_tokens": {
+            "type": "integer"
+          },
+          "display": {
+            "$ref": "#/components/schemas/ThinkingDisplay"
+          },
+          "type": {
+            "enum": [
+              "enabled"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "budget_tokens"
+        ],
+        "type": "object"
+      },
+      "ThinkingDelta": {
+        "properties": {
+          "thinking": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "thinking_delta"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "thinking"
+        ],
+        "type": "object"
+      },
+      "ThinkingDisplay": {
+        "enum": [
+          "summarized",
+          "omitted"
+        ],
+        "type": "string"
+      },
+      "Tool": {
+        "properties": {
+          "allowed_callers": {
+            "description": "接受但忽略——没有代码执行工具时没有意义。",
+            "x-go-type": "json.RawMessage"
+          },
+          "cache_control": {
+            "$ref": "#/components/schemas/CacheControl"
+          },
+          "defer_loading": {
+            "description": "通过延迟工具加载 beta 功能转发至 llm-api。",
+            "type": "boolean"
+          },
+          "description": {
+            "type": "string"
+          },
+          "eager_input_streaming": {
+            "description": "接受但忽略——此路径未启用细粒度工具流式传输。",
+            "type": "boolean"
+          },
+          "input_examples": {
+            "description": "接受但忽略——llm-api 没有对应载体；这是一项质量提示，而非承诺。",
+            "x-go-type": "json.RawMessage"
+          },
+          "input_schema": {
+            "additionalProperties": true,
+            "description": "工具输入的 JSON Schema，以原始 JSON 形式保留并原样转发。",
+            "type": "object",
+            "x-go-type": "json.RawMessage"
+          },
+          "name": {
+            "type": "string"
+          },
+          "strict": {
+            "description": "转发至 llm-api；在提供商支持时，保证工具输入符合 schema。",
+            "type": "boolean"
+          },
+          "type": {
+            "description": "可选的显式工具类型；`custom` 为默认值。服务器工具类型会被验证拒绝。",
+            "enum": [
+              "custom"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "input_schema"
+        ],
+        "type": "object"
+      },
+      "ToolChoice": {
+        "discriminator": {
+          "mapping": {
+            "any": "#/components/schemas/ToolChoiceAny",
+            "auto": "#/components/schemas/ToolChoiceAuto",
+            "none": "#/components/schemas/ToolChoiceNone",
+            "tool": "#/components/schemas/ToolChoiceTool"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ToolChoiceAuto"
+          },
+          {
+            "$ref": "#/components/schemas/ToolChoiceAny"
+          },
+          {
+            "$ref": "#/components/schemas/ToolChoiceTool"
+          },
+          {
+            "$ref": "#/components/schemas/ToolChoiceNone"
+          }
+        ]
+      },
+      "ToolChoiceAny": {
+        "properties": {
+          "disable_parallel_tool_use": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "any"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "ToolChoiceAuto": {
+        "properties": {
+          "disable_parallel_tool_use": {
+            "type": "boolean"
+          },
+          "type": {
+            "enum": [
+              "auto"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "ToolChoiceNone": {
+        "properties": {
+          "type": {
+            "enum": [
+              "none"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type"
+        ],
+        "type": "object"
+      },
+      "ToolChoiceTool": {
+        "properties": {
+          "disable_parallel_tool_use": {
+            "type": "boolean"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "tool"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "name"
+        ],
+        "type": "object"
+      },
+      "ToolResultBlock": {
+        "properties": {
+          "cache_control": {
+            "$ref": "#/components/schemas/CacheControl"
+          },
+          "content": {
+            "description": "工具输出，可为纯文本或内容块数组。",
+            "oneOf": [
+              {
+                "title": "Text",
+                "type": "string"
+              },
+              {
+                "items": {
+                  "$ref": "#/components/schemas/ToolResultContentBlock"
+                },
+                "title": "Content blocks",
+                "type": "array"
+              }
+            ]
+          },
+          "is_error": {
+            "type": "boolean"
+          },
+          "tool_use_id": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "tool_result"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "tool_use_id"
+        ],
+        "type": "object"
+      },
+      "ToolResultContentBlock": {
+        "discriminator": {
+          "mapping": {
+            "document": "#/components/schemas/DocumentBlock",
+            "image": "#/components/schemas/ImageBlock",
+            "search_result": "#/components/schemas/SearchResultBlock",
+            "text": "#/components/schemas/TextBlock"
+          },
+          "propertyName": "type"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/TextBlock"
+          },
+          {
+            "$ref": "#/components/schemas/ImageBlock"
+          },
+          {
+            "$ref": "#/components/schemas/DocumentBlock"
+          },
+          {
+            "$ref": "#/components/schemas/SearchResultBlock"
+          }
+        ]
+      },
+      "ToolUseBlock": {
+        "description": "工具调用，可见于 assistant 历史记录和响应中。",
+        "properties": {
+          "cache_control": {
+            "$ref": "#/components/schemas/CacheControl"
+          },
+          "id": {
+            "type": "string"
+          },
+          "input": {
+            "additionalProperties": true,
+            "description": "以原始 JSON 形式保留，确保调用方的字节（例如 int64 ID）能够原样传递。",
+            "type": "object",
+            "x-go-type": "json.RawMessage"
+          },
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "enum": [
+              "tool_use"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "id",
+          "name",
+          "input"
+        ],
+        "type": "object"
+      },
+      "URLDocumentSource": {
+        "properties": {
+          "type": {
+            "enum": [
+              "url"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "url"
+        ],
+        "type": "object"
+      },
+      "URLImageSource": {
+        "properties": {
+          "type": {
+            "enum": [
+              "url"
+            ],
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "url"
+        ],
+        "type": "object"
+      },
+      "Usage": {
+        "properties": {
+          "cache_creation": {
+            "$ref": "#/components/schemas/CacheCreation"
+          },
+          "cache_creation_input_tokens": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "cache_read_input_tokens": {
+            "nullable": true,
+            "type": "integer"
+          },
+          "input_tokens": {
+            "type": "integer"
+          },
+          "output_tokens": {
+            "type": "integer"
+          },
+          "service_tier": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "input_tokens",
+          "output_tokens",
+          "cache_creation_input_tokens",
+          "cache_read_input_tokens"
+        ],
+        "type": "object"
+      }
+    },
+    "securitySchemes": {
+      "HTTPBearer": {
+        "description": "您的 Perplexity API 密钥。",
+        "scheme": "bearer",
+        "type": "http"
+      }
+    }
+  },
+  "info": {
+    "description": "通过兼容 Anthropic Messages 的接口访问不同提供商的模型。",
+    "title": "Perplexity Router API (Anthropic-compatible)",
+    "version": "0.5.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/router/v1/messages": {
+      "post": {
+        "description": "使用 Anthropic Messages 架构向任意 Router 模型发送对话。设置 `stream: true` 以接收服务器发送事件。使用您的 Perplexity API 密钥进行身份验证——支持 `Authorization: Bearer` 和 Anthropic SDK 默认的 `x-api-key` 请求头。",
+        "operationId": "gateway_create_message",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateMessageRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Message"
+                }
+              }
+            },
+            "description": "成功响应。非流式请求返回 JSON；当 `stream` 为 true 时，返回包含类型化事件（从 `message_start` 到 `message_stop`）的 `text/event-stream`。"
+          },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "无效请求——请求正文格式错误、参数不受支持，或 Router 上没有可用的模型。"
+          },
+          "429": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "description": "超出速率限制，或上游模型过载。请在 `Retry-After` 指定的间隔后重试。"
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "summary": "创建消息"
+      }
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.perplexity.ai"
+    }
+  ]
+}

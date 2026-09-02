@@ -1,0 +1,114 @@
+---
+title: "为智能体编写提示"
+description: "将长期生效的规则（系统提示词）与本轮的问题（输入）分离，并为本次运行提供依据，让智能体围绕正确的内容搜索并作答。"
+---
+
+智能体有两个提示层面，把二者区分清楚很重要。`instructions` 是智能体的**系统提示词**，即每一轮都生效的规则；`input` 则是本轮要完成的具体任务。启用检索工具时，`input` 还决定了模型是否搜索、搜索什么。本页将划清两者的界限，并说明如何让本次运行基于检索到的证据作答。
+
+<div id="instructions-vs-input">
+  ## `instructions` 与 `input`
+</div>
+
+| 字段             | 应填写的内容                                                        |
+| -------------- | ------------------------------------------------------------- |
+| `instructions` | 系统提示词：角色、语气、输出语言、引用与格式规则，以及必须做和绝不能做的硬性约束。在循环的每一轮都会生效，与具体问题无关。 |
+| `input`        | 本轮的问题或任务。它会引导工具选择；启用检索时，模型正是基于它进行搜索，因此 `input` 越具体，检索越有针对性。   |
+
+一条实用原则：如果某条规则在用户问完全不同的问题时仍然适用，它就应放在 `instructions` (系统提示词) 里；如果它只针对本次请求，就放在 `input` 里。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      instructions=(
+          "You are a financial analyst. Always cite sources by domain, "
+          "and never speculate beyond retrieved evidence."
+      ),
+      input="Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?",
+      tools=[{"type": "web_search"}],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    instructions:
+      'You are a financial analyst. Always cite sources by domain, and never speculate beyond retrieved evidence.',
+    input: 'Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?',
+    tools: [{ type: 'web_search' as const }],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "instructions": "You are a financial analyst. Always cite sources by domain, and never speculate beyond retrieved evidence.",
+      "input": "Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?",
+      "tools": [{ "type": "web_search" }]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Note>
+  使用 `preset` 时，`instructions` 会替换 preset 中已调优的系统提示词，而不是追加在其后。若要保留 preset 的提示词，请省略 `instructions`。参见[定义运行](/zh/docs/agent-api/building-agents/define-the-run#customize-the-system-prompt-instructions)。
+</Note>
+
+<div id="ground-the-run">
+  ## 为运行建立依据
+</div>
+
+依据 (grounding) 让智能体基于检索到的证据作答，而不是依赖模型自身的先验知识。主要有两个手段：
+
+* 具体的 `input`。启用检索工具后，模型会依据 `input` 进行搜索。“Apple FY2025 10-K revenue by operating segment”比“how is Apple doing”检索到的结果更有针对性。请写明实体、时间范围以及答案所需的单位。
+* 检索工具。启用 `web_search` 及相关工具，让智能体获取实时证据。参见[提供工具](/zh/docs/agent-api/building-agents/give-it-tools)。
+
+对于硬性约束——允许的域名、日期范围、地区——请优先使用请求参数，而不是写在提示词里。参数是强制生效的，而不只是一种请求：
+
+```python theme={null}
+tools=[{
+    "type": "web_search",
+    "filters": {
+        "search_domain_filter": ["sec.gov"],
+        "search_after_date_filter": "01/01/2026",
+    },
+}]
+```
+
+<Tip>
+  像 `web_search` 和 `fetch_url` 这样的内置工具通常无需在提示词一侧做太多引导就能正常工作。与其堆砌更多指令文字，不妨优先使用 `web_search` 过滤条件和 `response_format`——参数会直接生效，不会像系统提示词中的 token 那样在每个循环步骤都被重新处理一遍。
+</Tip>
+
+<div id="read-the-sources-back">
+  ## 读取来源信息
+</div>
+
+有依据的回答会附带证据。检索工具会把结果附加到响应的 `output` 数组中 (例如与 `message` 并列的 `search_results` 条目) ，便于你展示引用或核实结论。各工具的参考页面 (可从 [Web Search → 响应结构](/zh/docs/agent-api/tools/web-search#response-shape) 开始查看) 列出了确切的响应结构。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="为其配备工具" icon="tool" href="/zh/docs/agent-api/building-agents/give-it-tools">
+    启用内置工具和你自己的自定义工具，并读取工具返回的结果。
+  </Card>
+
+  <Card title="提示词指南" icon="bulb" href="/zh/docs/agent-api/prompt-guide">
+    完整的提示词编写模式与最佳实践。
+  </Card>
+</CardGroup>

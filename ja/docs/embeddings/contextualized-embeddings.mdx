@@ -1,0 +1,358 @@
+---
+title: "コンテキスト化された埋め込み"
+description: "コンテキストを共有するチャンクに対してドキュメント全体を考慮した埋め込みを生成し、ドキュメントベースのアプリケーションにおける検索精度を向上させます。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+コンテキスト化された埋め込み (contextualized embeddings) は、コンテキストを共有するドキュメントチャンク群の埋め込みを生成します。各テキストを独立して埋め込む標準的な埋め込みとは異なり、コンテキスト化された埋め込みでは、複数のチャンクが同一のドキュメントに属していることを認識し、その関係性を埋め込みに反映します。
+
+<Info>
+  同一ドキュメント由来のチャンク (段落やセクションなど) を埋め込む場合は、コンテキスト化された埋め込みを使用してください。検索クエリや単独の文のように独立したテキストには、[標準の埋め込み](/ja/docs/embeddings/quickstart)を使用してください。
+</Info>
+
+<div id="models">
+  ## モデル
+</div>
+
+|              モデル             |  次元数 | コンテキスト | MRL |     量子化     | 価格 ($/100万トークン)  |
+| :--------------------------: | :--: | :----: | :-: | :---------: | :--------------: |
+| `pplx-embed-context-v1-0.6b` | 1024 |   32K  |  対応 | INT8/BINARY |      $0.008      |
+|  `pplx-embed-context-v1-4b`  | 2560 |   32K  |  対応 | INT8/BINARY |       $0.05      |
+
+すべてのモデルは平均プーリングを使用し、命令プレフィックスは不要です。
+
+<div id="basic-usage">
+  ## 基本的な使い方
+</div>
+
+ドキュメントはネストした配列として渡します。内側の各配列が、1つのドキュメントに含まれるチャンク群を表します。
+
+<Warning>
+  **チャンクの順序:** 各ドキュメント内のチャンクは、元のドキュメントでの出現順に送信してください。モデルは前後の文脈を利用してドキュメント全体を考慮した埋め込みを生成するため、最適な結果を得るには元の順序を保つことが不可欠です。
+</Warning>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.contextualized_embeddings.create(
+      input=[
+          # ドキュメント1: 3つのチャンク
+          [
+              "Curiosity begins in childhood with endless questions about the world.",
+              "As we grow, curiosity drives us to explore new ideas and challenge assumptions.",
+              "Scientific breakthroughs often start with a simple curious question."
+          ],
+          # ドキュメント2: 2つのチャンク
+          [
+              "The Curiosity rover explores Mars, searching for signs of ancient life.",
+              "Each discovery on Mars sparks new questions about our place in the universe."
+          ]
+      ],
+      model="pplx-embed-context-v1-4b"
+  )
+
+  for doc in response.data:
+      for chunk in doc.data:
+          print(f"Doc {doc.index}, Chunk {chunk.index}: {chunk.embedding}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.contextualizedEmbeddings.create({
+      input: [
+          // ドキュメント1: 3つのチャンク
+          [
+              "Curiosity begins in childhood with endless questions about the world.",
+              "As we grow, curiosity drives us to explore new ideas and challenge assumptions.",
+              "Scientific breakthroughs often start with a simple curious question."
+          ],
+          // ドキュメント2: 2つのチャンク
+          [
+              "The Curiosity rover explores Mars, searching for signs of ancient life.",
+              "Each discovery on Mars sparks new questions about our place in the universe."
+          ]
+      ],
+      model: "pplx-embed-context-v1-4b"
+  });
+
+  for (const doc of response.data!) {
+      for (const chunk of doc.data!) {
+          console.log(`Doc ${doc.index}, Chunk ${chunk.index}: ${chunk.embedding!}`);
+      }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/v1/contextualizedembeddings' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "input": [
+        [
+          "Curiosity begins in childhood with endless questions about the world.",
+          "As we grow, curiosity drives us to explore new ideas and challenge assumptions.",
+          "Scientific breakthroughs often start with a simple curious question."
+        ],
+        [
+          "The Curiosity rover explores Mars, searching for signs of ancient life.",
+          "Each discovery on Mars sparks new questions about our place in the universe."
+        ]
+      ],
+      "model": "pplx-embed-context-v1-4b"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="レスポンス">
+  ```json theme={null}
+  {
+    "object": "list",
+    "data": [
+      {
+        "object": "list",
+        "index": 0,
+        "data": [
+          { "object": "embedding", "index": 0, "embedding": "/* base64-encoded signed int8 values */" },
+          { "object": "embedding", "index": 1, "embedding": "/* base64-encoded signed int8 values */" },
+          { "object": "embedding", "index": 2, "embedding": "/* base64-encoded signed int8 values */" }
+        ]
+      },
+      {
+        "object": "list",
+        "index": 1,
+        "data": [
+          { "object": "embedding", "index": 0, "embedding": "/* base64-encoded signed int8 values */" },
+          { "object": "embedding", "index": 1, "embedding": "/* base64-encoded signed int8 values */" }
+        ]
+      }
+    ],
+    "model": "pplx-embed-context-v1-4b",
+    "usage": {
+      "prompt_tokens": 72,
+      "total_tokens": 72
+    }
+  }
+  ```
+</Accordion>
+
+<div id="parameters">
+  ## パラメータ
+</div>
+
+| パラメータ             | 型                    |  必須 |     デフォルト     | 説明                                                                      |
+| ----------------- | -------------------- | :-: | :-----------: | ----------------------------------------------------------------------- |
+| `input`           | array[array[string]] |  はい |       -       | ネストされた配列。内側の各配列には 1 つのドキュメントのチャンクを格納します。最大 512 ドキュメント、合計 16,000 チャンクまで。 |
+| `model`           | string               |  はい |       -       | モデル識別子: `pplx-embed-context-v1-0.6b` または `pplx-embed-context-v1-4b`     |
+| `dimensions`      | integer              | いいえ |      全次元      | Matryoshka 次元数 (0.6b は 128〜1024、4b は 128〜2560)                          |
+| `encoding_format` | string               | いいえ | `base64_int8` | 出力エンコーディング: `base64_int8` (符号付き int8) または `base64_binary` (パックされたビット列)  |
+
+<Warning>
+  **入力の制限:** 1 ドキュメントあたりの合計トークン数は 32K 以下にしてください。全ドキュメントを通じた合計チャンク数は 16,000 以下である必要があります。1 回のリクエストに含まれる全チャンクの合計は 120,000 トークンを超えられません。空文字列は使用できません。
+</Warning>
+
+<div id="golden-chunk-retrieval-example">
+  ## ゴールデンチャンク検索の例
+</div>
+
+同一ドキュメント由来のチャンク同士がコンテキストを共有する、チャンク検索システムを構築します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string):
+      """Decode a base64-encoded int8 embedding."""
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a, b):
+      return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+  # 対象のドキュメント（それぞれチャンクに分割済み）
+  documents = [
+      {
+          "title": "Machine Learning Guide",
+          "chunks": [
+              "Machine learning is a subset of AI that enables systems to learn.",
+              "Supervised learning uses labeled data for training models.",
+              "Unsupervised learning finds patterns in unlabeled data."
+          ]
+      },
+      {
+          "title": "Deep Learning Fundamentals",
+          "chunks": [
+              "Deep learning uses neural networks with multiple layers.",
+              "Convolutional networks excel at image processing tasks.",
+              "Transformers revolutionized natural language processing."
+          ]
+      }
+  ]
+
+  # 1. すべてのドキュメントチャンクを文脈を考慮して埋め込む
+  doc_chunks = [doc["chunks"] for doc in documents]
+  doc_response = client.contextualized_embeddings.create(
+      input=doc_chunks,
+      model="pplx-embed-context-v1-4b"
+  )
+
+  # インデックスを構築
+  chunk_index = []
+  for doc_obj in doc_response.data:
+      for chunk_obj in doc_obj.data:
+          chunk_index.append({
+              "doc_idx": doc_obj.index,
+              "chunk_idx": chunk_obj.index,
+              "embedding": decode_embedding(chunk_obj.embedding),
+              "text": documents[doc_obj.index]["chunks"][chunk_obj.index],
+              "doc_title": documents[doc_obj.index]["title"]
+          })
+
+  # 2. 同じコンテキスト化モデルでクエリを埋め込む
+  # 各クエリは要素が1つの内側のリストとして囲む: [[query1], [query2]]
+  query = "How do neural networks process images?"
+  query_response = client.contextualized_embeddings.create(
+      input=[[query]],
+      model="pplx-embed-context-v1-4b"
+  )
+  query_embedding = decode_embedding(query_response.data[0].data[0].embedding)
+
+  # 3. 最も関連性の高いチャンクを検索
+  results = []
+  for item in chunk_index:
+      score = cosine_similarity(query_embedding, item["embedding"])
+      results.append({**item, "score": score})
+
+  results = sorted(results, key=lambda x: x["score"], reverse=True)
+
+  print(f"Query: {query}\n")
+  print("Top results:")
+  for r in results[:3]:
+      print(f"  [{r['doc_title']}] {r['score']:.4f}: {r['text'][:60]}...")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dotProduct = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dotProduct += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // 対象のドキュメント（それぞれチャンクに分割済み）
+  const documents = [
+      {
+          title: "Machine Learning Guide",
+          chunks: [
+              "Machine learning is a subset of AI that enables systems to learn.",
+              "Supervised learning uses labeled data for training models.",
+              "Unsupervised learning finds patterns in unlabeled data."
+          ]
+      },
+      {
+          title: "Deep Learning Fundamentals",
+          chunks: [
+              "Deep learning uses neural networks with multiple layers.",
+              "Convolutional networks excel at image processing tasks.",
+              "Transformers revolutionized natural language processing."
+          ]
+      }
+  ];
+
+  // 1. すべてのドキュメントチャンクを文脈を考慮して埋め込む
+  const docChunks = documents.map(doc => doc.chunks);
+  const docResponse = await client.contextualizedEmbeddings.create({
+      input: docChunks,
+      model: "pplx-embed-context-v1-4b"
+  });
+
+  // インデックスを構築する
+  const chunkIndex = docResponse.data!.flatMap(docObj =>
+      docObj.data!.map(chunkObj => ({
+          docIdx: docObj.index,
+          chunkIdx: chunkObj.index,
+          embedding: decodeEmbedding(chunkObj.embedding!),
+          text: documents[docObj.index as number].chunks[chunkObj.index as number],
+          docTitle: documents[docObj.index as number].title
+      }))
+  );
+
+  // 2. 同じコンテキスト化モデルでクエリを埋め込む
+  // 各クエリは要素1つの内側のリストとしてラップする: [[query1], [query2]]
+  const query = "How do neural networks process images?";
+  const queryResponse = await client.contextualizedEmbeddings.create({
+      input: [[query]],
+      model: "pplx-embed-context-v1-4b"
+  });
+  const queryEmbedding = decodeEmbedding(queryResponse.data![0].data![0].embedding!);
+
+  // 3. 最も関連性の高いチャンクを検索する
+  const results = chunkIndex
+      .map(item => ({
+          ...item,
+          score: cosineSimilarity(queryEmbedding, item.embedding)
+      }))
+      .sort((a, b) => b.score - a.score);
+
+  console.log(`Query: ${query}\n`);
+  console.log("Top results:");
+  for (const r of results.slice(0, 3)) {
+      console.log(`  [${r.docTitle}] ${r.score.toFixed(4)}: ${r.text.slice(0, 60)}...`);
+  }
+  ```
+</CodeGroup>
+
+<div id="when-to-use-contextualized-vs-standard">
+  ## コンテキスト化と標準のどちらを使うべきか
+</div>
+
+| ユースケース        | 推奨             |
+| ------------- | -------------- |
+| 独立した文         | 標準の埋め込み        |
+| FAQ の項目       | 標準の埋め込み        |
+| 汎用的な検索        | 標準の埋め込み        |
+| ドキュメントの段落     | コンテキスト化された埋め込み |
+| PDF のセクション    | コンテキスト化された埋め込み |
+| 記事のチャンク       | コンテキスト化された埋め込み |
+| コードファイルのセグメント | コンテキスト化された埋め込み |
+
+<Tip>
+  **目安:** チャンクが同一のソースドキュメントに由来し、その意味が前後のコンテキストに依存する場合は、コンテキスト化された埋め込みを使用してください。各テキストが単独で意味をなす場合は、標準の埋め込みを使用します。コンテキスト化された埋め込みを使う場合、クエリも同じコンテキスト化モデルで埋め込む必要があります。その際は、各クエリを要素が 1 つだけの内側のリストとしてラップしてください (例: `[[query]]`) 。
+</Tip>
+
+<div id="related-resources">
+  ## 関連リソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="クイックスタート" icon="rocket" href="/ja/docs/embeddings/quickstart">
+    標準の埋め込みの使い方を学びましょう。
+  </Card>
+
+  <Card title="ベストプラクティス" icon="star" href="/ja/docs/embeddings/best-practices">
+    バッチ処理、キャッシュ、RAG パターン。
+  </Card>
+</CardGroup>

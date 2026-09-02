@@ -1,0 +1,520 @@
+---
+title: "Habilidades"
+description: "Dota al agente de experiencia especializada bajo demanda con habilidades integradas, en línea y personalizadas."
+---
+
+Las habilidades aportan al agente experiencia especializada bajo demanda. El modelo ve el nombre y la descripción de cada habilidad, y carga las instrucciones completas solo cuando determina que son necesarias: un patrón de divulgación progresiva descrito en [Designing, Refining, and Maintaining Agent Skills](https://research.perplexity.ai/articles/designing-refining-and-maintaining-agent-skills-at-perplexity).
+
+<div id="why-use-skills">
+  ## Por qué usar skills
+</div>
+
+* **Especializa.** Añade generación de documentos y flujos de trabajo específicos de dominio sobre el prompting base.
+* **Paga contexto solo al usarlas.** Mientras una skill no se cargue, solo consume su nombre y su descripción.
+* **Compón.** Combina skills integradas con instrucciones en línea en una misma solicitud.
+* **Reutiliza.** Sube una skill personalizada una sola vez y referénciala por su ID en cualquier solicitud.
+
+<div id="how-skills-work">
+  ## Cómo funcionan las skills
+</div>
+
+Debes pasar un array `skills` en la solicitud. Cada entrada es una selección **integrada** del catálogo, una skill **en línea** que defines para la solicitud o una skill **personalizada** que creaste y subiste a Perplexity.
+Puedes combinar hasta **16 skills** de cualquier tipo en una sola solicitud.
+
+| Etapa          | Lo que ve el modelo                                                                                                                                              |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Descubrimiento | Un índice con el nombre y la descripción de cada skill.                                                                                                          |
+| Carga          | El cuerpo completo de la skill, que se devuelve cuando el modelo llama a `load_skill`.                                                                           |
+| Archivos       | Las skills integradas y personalizadas montan sus archivos de apoyo en el sandbox al cargarse. Las skills en línea devuelven sus instrucciones y no montan nada. |
+
+La descripción es el disparador del enrutamiento. Redáctala de modo que le indique al modelo cuándo debe cargar la skill.
+
+Cargar una skill consume un paso: el modelo dedica un turno a llamar a `load_skill` y leer el cuerpo, y solo en turnos posteriores actúa en consecuencia.
+Una solicitud a un modelo directo que omite [`max_steps`](/es/docs/agent-api/building-agents/define-the-run#customize-the-loop-max-steps) ejecuta un único paso, por lo que el modelo puede cargar una skill pero nunca llega a usarla.
+Configura `max_steps` con un valor lo bastante alto para cubrir la carga y el trabajo en sí.
+
+<div id="built-in-skills">
+  ## Habilidades integradas
+</div>
+
+Selecciona una habilidad integrada con un solo objeto JSON: `{ "type": "builtin", "name": "office/pdf" }`.
+
+<Tabs>
+  <Tab title="office">
+    <Card title="Office">
+      Genera documentos PDF, Word, PowerPoint y Excel desde cero, con validación estructural y control de calidad visual. Selecciona una hoja específica o elige `office` para habilitar las cuatro a la vez y dejar que el modelo escoja el formato.
+    </Card>
+
+    | Nombre        | Descripción                                                                                  | Selección                                      |
+    | ------------- | -------------------------------------------------------------------------------------------- | ---------------------------------------------- |
+    | `office`      | Categoría general que habilita las cuatro hojas siguientes.                                  | `{ "type": "builtin", "name": "office" }`      |
+    | `office/pdf`  | Crea documentos PDF con control de calidad visual página por página.                         | `{ "type": "builtin", "name": "office/pdf" }`  |
+    | `office/docx` | Crea documentos de Word editables (OOXML).                                                   | `{ "type": "builtin", "name": "office/docx" }` |
+    | `office/pptx` | Crea presentaciones de PowerPoint con control de calidad visual diapositiva por diapositiva. | `{ "type": "builtin", "name": "office/pptx" }` |
+    | `office/xlsx` | Crea libros de Excel con fórmulas y gráficos verificados, y control de calidad visual.       | `{ "type": "builtin", "name": "office/xlsx" }` |
+
+    <Note>
+      Las habilidades de Office crean documentos desde cero. No editan los archivos que subas.
+    </Note>
+  </Tab>
+</Tabs>
+
+<div id="inline-skills">
+  ## Habilidades en línea
+</div>
+
+Usa habilidades en línea para indicaciones puntuales o específicas de una cuenta que el modelo deba cargar bajo demanda: guías de estilo, manuales de procedimientos, sistemas de diseño o normas internas.
+
+| Campo          | Descripción                                                                                |
+| -------------- | ------------------------------------------------------------------------------------------ |
+| `type`         | Obligatorio. Debe ser `"inline"`.                                                          |
+| `name`         | Obligatorio. De 1 a 64 caracteres; letras ASCII minúsculas, dígitos y guiones simples.     |
+| `description`  | Obligatorio. De 1 a 1024 bytes. Se redacta como el disparador de enrutamiento.             |
+| `instructions` | Obligatorio. De 1 a 65 536 bytes. El cuerpo de la habilidad que el modelo lee al cargarla. |
+
+```json theme={null}
+{
+  "type": "inline",
+  "name": "design-system",
+  "description": "Load when creating documents that must follow the house design system.",
+  "instructions": "Model: a 1970s letterpress broadsheet financial page. Paper #EDE9DE; body ink #232220; ..."
+}
+```
+
+Las skills en línea no tienen archivos, ni dependencias, ni montajes en el sandbox, ni una biblioteca reutilizable, y nunca se devuelven en la respuesta.
+
+<div id="example-one-off-inline-skill">
+  ### Ejemplo: skill en línea puntual
+</div>
+
+Combina `office/pdf` con un skill `design-system` en línea para generar un informe bursátil de una página sobre el sector de la IA con el estilo propio de la marca.
+Usa este enfoque mientras las indicaciones sean específicas de cada solicitud; cuando se estabilicen, súbelas como [skill personalizado](#custom-skills) y haz referencia a él por su ID.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  design_book = """
+  Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.
+
+  Colors
+  - Paper #EDE9DE; tinted boxes and alternating table rows #E3DFD2.
+  - Body ink #232220 — soft, never hard black (ink spread on newsprint).
+  - Headlines and rules may deepen to #141311; faded ink #5C5850 for captions and secondary text.
+  - No second color anywhere. Up moves: bold with a ▲. Down moves: parentheses with a ▼.
+
+  Typography
+  - Body: low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated.
+  - Headlines: bold condensed serif with a smaller deck beneath.
+  - Kickers and table headers: condensed grotesque caps (Franklin Gothic or Oswald), letterspaced.
+  - Tables: agate style — 7-8pt condensed, tabular figures.
+
+  Layout
+  - One page, ~18mm margins.
+  - Nameplate in blackletter or heavy serif, with a folio line (date, edition, price) set between an Oxford rule (thick over hairline).
+  - Ticker summary as a boxed agate strip below the nameplate.
+  - News timeline in 3-4 narrow justified columns divided by hairline column rules; each item opens with a bold caps dateline ('LONDON, JULY 17 —').
+  - Data table ruled with hairlines only.
+  - Pack the page — separate blocks with cutoff rules, not white space.
+
+  Imagery
+  - Grayscale halftone only, with a hairline keyline and an italic caption.
+
+  Avoid
+  - Second colors, gradients, shadows, rounded corners, sans-serif body text, and generous white space.
+  """
+
+  response = client.responses.create(
+      preset="xhigh",
+      background=True,
+      skills=[
+          {
+              "type": "inline",
+              "name": "design-system",
+              "description": "Load when creating documents that must follow the house design system.",
+              "instructions": design_book,
+          },
+          {"type": "builtin", "name": "office/pdf"},
+      ],
+      input=(
+          "Create a one-page AI-industry stock report. Include NVDA, MSFT, "
+          "GOOGL, AMD, and AVGO with latest price and weekly move. Include "
+          "this week's key AI news, labeled by date and tagged to the ticker "
+          "it moved. Follow the design-system skill."
+      ),
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(response.status)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const designBook = `
+  Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.
+
+  Colors
+  - Paper #EDE9DE; tinted boxes and alternating table rows #E3DFD2.
+  - Body ink #232220 — soft, never hard black (ink spread on newsprint).
+  - Headlines and rules may deepen to #141311; faded ink #5C5850 for captions and secondary text.
+  - No second color anywhere. Up moves: bold with a ▲. Down moves: parentheses with a ▼.
+
+  Typography
+  - Body: low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated.
+  - Headlines: bold condensed serif with a smaller deck beneath.
+  - Kickers and table headers: condensed grotesque caps (Franklin Gothic or Oswald), letterspaced.
+  - Tables: agate style — 7-8pt condensed, tabular figures.
+
+  Layout
+  - One page, ~18mm margins.
+  - Nameplate in blackletter or heavy serif, with a folio line (date, edition, price) set between an Oxford rule (thick over hairline).
+  - Ticker summary as a boxed agate strip below the nameplate.
+  - News timeline in 3-4 narrow justified columns divided by hairline column rules; each item opens with a bold caps dateline ('LONDON, JULY 17 —').
+  - Data table ruled with hairlines only.
+  - Pack the page — separate blocks with cutoff rules, not white space.
+
+  Imagery
+  - Grayscale halftone only, with a hairline keyline and an italic caption.
+
+  Avoid
+  - Second colors, gradients, shadows, rounded corners, sans-serif body text, and generous white space.
+  `;
+
+  let response = await client.responses.create({
+    preset: 'xhigh',
+    background: true,
+    skills: [
+      {
+        type: 'inline',
+        name: 'design-system',
+        description: 'Load when creating documents that must follow the house design system.',
+        instructions: designBook,
+      },
+      { type: 'builtin', name: 'office/pdf' },
+    ],
+    input:
+      'Create a one-page AI-industry stock report. Include NVDA, MSFT, ' +
+      'GOOGL, AMD, and AVGO with latest price and weekly move. Include ' +
+      'this week\'s key AI news, labeled by date and tagged to the ticker ' +
+      'it moved. Follow the design-system skill.',
+  });
+
+  while (response.status === 'queued' || response.status === 'in_progress') {
+    await new Promise((r) => setTimeout(r, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(response.status);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "xhigh",
+      "background": true,
+      "skills": [
+        {
+          "type": "inline",
+          "name": "design-system",
+          "description": "Load when creating documents that must follow the house design system.",
+          "instructions": "Model: a 1970s letterpress broadsheet financial page. One ink, gray paper.\nColors: paper #EDE9DE (tinted boxes and alternating table rows #E3DFD2); body ink #232220 (soft, never hard black); headlines and rules may deepen to #141311; faded ink #5C5850 for captions. No second color. Up moves: bold + ▲; down moves: parentheses + ▼.\nTypography: body low-contrast newspaper serif (Georgia, PT Serif, or Times), 9-10pt, justified and hyphenated; headlines bold condensed serif with a smaller deck; kickers and table headers condensed grotesque caps (Franklin Gothic or Oswald), letterspaced; tables agate 7-8pt condensed with tabular figures.\nLayout: one page, ~18mm margins; blackletter or heavy-serif nameplate with a folio line (date, edition, price) between an Oxford rule (thick over hairline); boxed agate ticker strip below; news timeline in 3-4 narrow justified columns with hairline column rules, items opening with bold caps datelines ('LONDON, JULY 17 —'); data table ruled with hairlines only. Pack the page — cutoff rules, not padding.\nImagery: grayscale halftone with hairline keyline and italic caption.\nAvoid: second colors, gradients, shadows, rounded corners, sans body text, generous white space."
+        },
+        { "type": "builtin", "name": "office/pdf" }
+      ],
+      "input": "Create a one-page AI-industry stock report. Include NVDA, MSFT, GOOGL, AMD, and AVGO with latest price and weekly move. Include this week'\''s key AI news, labeled by date and tagged to the ticker it moved. Follow the design-system skill."
+    }' | jq
+  ```
+</CodeGroup>
+
+Recupera los bytes del archivo mediante los endpoints de archivos descritos en [Trabajar con archivos](/es/docs/agent-api/working-with-files).
+
+<div id="custom-skills">
+  ## Skills personalizadas
+</div>
+
+Una skill personalizada es una skill que creas y subes a Perplexity: un paquete versionado de instrucciones y archivos de apoyo, gestionado en el [Portal de API](https://console.perplexity.ai/project/skills) y referenciado por ID desde cualquier solicitud.
+Las skills personalizadas utilizan el formato abierto [Agent Skills](https://agentskills.io/specification).
+
+Cada skill personalizada está vinculada a un único [Proyecto](/es/docs/getting-started/projects#what-is-a-project) y reside dentro de él.
+El Proyecto es el propietario de la skill: cualquier API key de ese Proyecto puede referenciarla, mientras que las keys de otros Proyectos no.
+Están pensadas para ejecutar la Agent API dentro de tu propio entorno: la skill contiene el procedimiento y el contrato de salida que espera tu pipeline, versionado de forma independiente de tu código.
+
+Un paquete incluye mucho más que texto. Junto con las instrucciones puedes añadir scripts `.py` y `.sh`, que el model ejecuta en el [Sandbox](/es/docs/agent-api/tools/sandbox), de modo que una skill puede llevar no solo *cómo* hacer el trabajo, sino el código exacto que lo realiza, además de los archivos de referencia que el model lea cuando los necesite.
+
+<div id="parameters">
+  ### Parámetros
+</div>
+
+| Campo     | Tipo   | Obligatorio | Descripción                                                              |
+| --------- | ------ | ----------- | ------------------------------------------------------------------------ |
+| `type`    | string | Sí          | Debe ser `"custom"`.                                                     |
+| `id`      | string | Sí          | El ID de la skill copiado del Portal de API, con el formato `skill_...`. |
+| `version` | string | No          | La versión que se cargará, o `"latest"`. Si se omite, se usa `"latest"`. |
+
+El nombre y la descripción de la skill provienen del paquete almacenado.
+
+<div id="create-a-custom-skill-bundle">
+  ### Crear un paquete de habilidades personalizado
+</div>
+
+Un paquete de habilidades es un archivo ZIP que contiene exactamente una carpeta de nivel superior y, dentro de ella, un único `SKILL.md`:
+
+```text theme={null}
+fact-check/
+├── SKILL.md
+├── scripts/
+│   └── check_factcheck.py
+└── references/
+    └── verification-rubric.md
+```
+
+<Card title="Descarga el paquete de ejemplo" icon="download" horizontal="True" href="/es/docs/assets/skills/fact-check.zip">
+  `fact-check.zip`: este mismo paquete, listo para subirlo al API Portal.
+</Card>
+
+`SKILL.md` comienza con un [frontmatter YAML](https://agentskills.io/specification#frontmatter) que define cómo el modelo descubre la skill, seguido del cuerpo de la skill:
+
+<Accordion title="Ejemplo de SKILL.md">
+  ```markdown theme={null}
+  ---
+  name: fact-check
+  description: Load before answering a question whose answer contains factual claims — dates, numbers, names, prices, or events — to verify them before responding. Do not load for opinions, code, or creative writing.
+  ---
+
+  You are the verification gate of an answer pipeline. Verify your own draft
+  before it reaches the user.
+
+  Use the `web_search` tool for every lookup. Do not run searches or fetch
+  pages from inside the sandbox; reserve the sandbox for writing and validating
+  `fact_check.json`.
+
+  1. Draft the answer, then extract every factual claim from it: dates,
+     numbers, names, prices, events.
+  2. Verify each claim with the `web_search` tool, following
+     `references/verification-rubric.md` from this skill's folder.
+  3. Correct the draft wherever a claim fails verification.
+  4. Write the audit trail to `fact_check.json` with exactly these fields:
+     `claims` (list of objects with `claim`, `verdict`, `source_url`) and
+     `corrections` (integer).
+  5. Run `python scripts/check_factcheck.py fact_check.json` from this
+     skill's folder and fix every violation it reports until it passes.
+  6. Once the check passes, give the corrected answer.
+  ```
+</Accordion>
+
+La descripción cumple además una función de salvaguarda: le indica al modelo cuándo **no** debe cargar la skill, lo que protege el presupuesto de pasos de la solicitud.
+
+| Campo         | Reglas                                                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `name`        | Obligatorio. De 1 a 64 caracteres; letras minúsculas, dígitos y guiones simples.                                                 |
+| `description` | Obligatorio. De 1 a 1024 bytes. Es el desencadenante de enrutamiento: redáctalo para indicarle al modelo cuándo cargar la skill. |
+
+Las demás claves del [frontmatter](https://agentskills.io/specification#frontmatter) se ignoran.
+Todo lo que va después del frontmatter constituye el cuerpo de la skill, que se devuelve al modelo cuando la carga.
+
+Un paquete puede incluir cualquier tipo de archivo: documentos de referencia que el modelo lee cuando los necesita y scripts `.py` o `.sh` que ejecuta en el [Sandbox](/es/docs/agent-api/tools/sandbox), que tiene acceso a la red e instala paquetes con `pip`.
+Los archivos de apoyo no consumen tokens hasta que el modelo los lee.
+Haz referencia a ellos desde el cuerpo mediante rutas relativas, como en el ejemplo anterior.
+
+<div id="manage-custom-skills">
+  ### Gestionar habilidades personalizadas
+</div>
+
+1. Abre [Skills en el portal de la API](https://console.perplexity.ai/project/skills).
+2. Selecciona **Create skill** y sube el paquete en formato `.zip`: el nombre y la descripción se leen de `SKILL.md`.
+   No se admite un archivo `SKILL.md` suelto.
+3. Copia el ID de la habilidad (`skill_...`) de la tabla.
+
+Solo un administrador puede crear, actualizar o eliminar habilidades.
+Cualquier API key del [proyecto](/es/docs/getting-started/projects) puede usarlas en sus solicitudes.
+Desde el menú de acciones de cada habilidad también puedes **Update skill** (subir archivos nuevos como una nueva versión), **Download files** (cualquier versión) y **Delete skill** (permanente; elimina todas las versiones).
+
+<div id="use-a-custom-skill">
+  ### Usar una skill personalizada
+</div>
+
+Las skills personalizadas están pensadas para ejecutar la Agent API dentro de tu propia canalización: la skill incluye un procedimiento que el modelo debe seguir y una autocomprobación que debe superar, versionada de forma independiente de tus prompts.
+La siguiente solicitud plantea una pregunta factual e indica al modelo que verifique su propia respuesta con la skill `fact-check` del paquete anterior.
+Reemplaza `YOUR_SKILL_ID` por el ID que copiaste del API Portal.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-terra",
+      max_steps=10,
+      tools=[{"type": "web_search"}],
+      skills=[{"type": "custom", "id": "YOUR_SKILL_ID"}],
+      input=(
+          "What were NVIDIA's total revenue and data center revenue in its "
+          "latest reported quarter? Use the fact-check skill to verify your "
+          "answer before responding."
+      ),
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-terra',
+    max_steps: 10,
+    tools: [{ type: 'web_search' }],
+    skills: [{ type: 'custom', id: 'YOUR_SKILL_ID' }],
+    input:
+      "What were NVIDIA's total revenue and data center revenue in its " +
+      'latest reported quarter? Use the fact-check skill to verify your ' +
+      'answer before responding.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-terra",
+      "max_steps": 10,
+      "tools": [ { "type": "web_search" } ],
+      "skills": [
+        { "type": "custom", "id": "YOUR_SKILL_ID" }
+      ],
+      "input": "What were NVIDIAs total revenue and data center revenue in its latest reported quarter? Use the fact-check skill to verify your answer before responding."
+    }' | jq
+  ```
+</CodeGroup>
+
+El modelo redacta la respuesta, verifica cada afirmación mediante búsqueda web, corrige lo que no supera la verificación y, a continuación, escribe `fact_check.json` y ejecuta el validador incluido en el sandbox, de modo que supera esa autocomprobación antes de responder.
+
+El array `output` de la respuesta registra la skill cargada como un elemento `skill_loaded`, seguido de los pasos que la ejecución realizó en el sandbox —leer el archivo de referencia de la skill, escribir `fact_check.json` y ejecutar el validador— y termina con el `message` del asistente:
+
+<Accordion title="Salida de la respuesta (truncada)">
+  ```json theme={null}
+  [
+    { "type": "skill_loaded", "name": "fact-check" },
+    {
+      "type": "sandbox_read_file",
+      "call_id": "call_...",
+      "file_path": "/home/user/workspace/skills/fact-check/references/verification-rubric.md",
+      "start_line": 1,
+      "total_lines": 22,
+      "content": "# Verification rubric\n..."
+    },
+    {
+      "type": "sandbox_write_file",
+      "call_id": "call_...",
+      "file_path": "/home/user/workspace/fact_check.json",
+      "size_bytes": 939
+    },
+    {
+      "type": "sandbox_results",
+      "call_id": "call_...",
+      "container_id": "01a0...",
+      "language": "python",
+      "code": "python scripts/check_factcheck.py fact_check.json",
+      "status": "completed",
+      "results": [
+        { "status": "completed", "exit_code": 0, "duration_ms": 1023, "stdout": "OK: fact_check.json satisfies the contract.\n", "stderr": "" }
+      ]
+    },
+    {
+      "type": "message",
+      "id": "msg_...",
+      "role": "assistant",
+      "status": "completed",
+      "content": [
+        { "type": "output_text", "text": "NVIDIA's latest reported quarter was Q2 fiscal 2027, ended July 26, 2026 ...", "annotations": [] }
+      ]
+    }
+  ]
+  ```
+</Accordion>
+
+Al usar streaming, cada carga de una skill también emite un evento `response.skill.loaded`.
+El array `skills` que enviaste en la solicitud no se devuelve en el objeto de respuesta.
+
+<div id="versioning">
+  ### Versionado
+</div>
+
+Cada carga de una habilidad personalizada crea una nueva versión.
+Cada versión es una instantánea completa e inmutable del paquete, no un delta.
+
+Si omites `version` (o pasas `"latest"`), se selecciona la versión más reciente, que se resuelve una sola vez al aceptarse la solicitud: una carga realizada a mitad de una ejecución no altera lo que carga una respuesta en curso.
+
+Fija el tráfico de producción a una versión específica:
+
+```json theme={null}
+{ "type": "custom", "id": "YOUR_SKILL_ID", "version": "2" }
+```
+
+Una `version` fijada siempre carga el mismo paquete inmutable y nunca cambia; solo `"latest"` varía: una versión subida por cualquier administrador cambia de inmediato lo que ejecutan tus solicitudes con `"latest"`.
+Consulta el historial de versiones y descarga cualquier versión en el [Portal de API](https://console.perplexity.ai/project/skills).
+
+<div id="error-handling">
+  ### Manejo de errores
+</div>
+
+Las referencias a skills personalizadas se validan al enviar la solicitud.
+Una referencia incorrecta hace fallar toda la solicitud con HTTP 400 antes de que comience la ejecución:
+
+| Mensaje                                                  | Significado                                                                                                                        | Manejo sugerido                                                                      |
+| -------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| `A requested skill does not exist or is not accessible.` | El ID no corresponde a ninguna skill de tu proyecto: una errata, una skill eliminada o una clave de otro proyecto.                 | Copia el ID desde el API Portal y confirma que la clave pertenece al mismo proyecto. |
+| `A requested skill is invalid.`                          | El ID o `version` tiene un formato incorrecto. `version` debe ser una cadena con el número de versión, como `"2"`, o `"latest"`.   | Corrige la referencia.                                                               |
+| `A requested skill conflicts with a built-in skill.`     | El nombre de la skill (definido en `SKILL.md`) coincide con el de una skill integrada.                                             | Renombra la skill en una nueva versión.                                              |
+| `Two requested skills resolve to the same name.`         | Dos entradas de `skills` comparten un mismo nombre; por ejemplo, una skill personalizada y una skill en línea con el mismo nombre. | Elimina o renombra una de ellas.                                                     |
+
+Los fallos posteriores al inicio de la ejecución se gestionan dentro del propio flujo: si una skill no puede cargarse durante la ejecución, el error se devuelve al modelo, que continúa sin ella, y la respuesta se completa igualmente.
+
+<Note>
+  Un elemento de salida `skill_loaded` registra el intento de carga y aparece incluso cuando esta falla; el texto del error va al modelo, no a la respuesta.
+</Note>
+
+<div id="limits">
+  ### Límites
+</div>
+
+El paquete debe respetar estos límites, que se verifican al subirlo:
+
+* **32 MiB** en total: se aplica tanto al ZIP subido como a su contenido descomprimido.
+* **100 archivos** como máximo.
+* Exactamente **una carpeta de nivel superior** y **un `SKILL.md`**.
+* Ningún nombre de archivo o carpeta puede superar los **255 caracteres**.
+* Hasta **500 skills personalizadas por proyecto**.
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Cookbook de habilidades de agentes" icon="book-open" href="/es/docs/cookbook/articles/agent-skills/README">
+    Recorrido completo del PDF diario de noticias bursátiles con IA, incluidas la descarga del archivo y la guía de diseño completa.
+  </Card>
+
+  <Card title="Trabajar con archivos" icon="file" href="/es/docs/agent-api/working-with-files" />
+
+  <Card title="Modo en segundo plano" icon="clock" href="/es/docs/agent-api/background-mode" />
+
+  <Card title="Referencia de la Agent API" icon="code" href="/es/api-reference/agent-post" />
+</CardGroup>

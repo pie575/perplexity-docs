@@ -1,0 +1,290 @@
+---
+title: "Tarification"
+description: "Comprendre la tarification de la Perplexity API, les tarifs par modèle, les frais par requête, la configuration de la facturation et les références des limites de débit."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+import PricingCalculator from "/snippets/fr/pricing-calculator.mdx";
+
+<Info>
+  Cette page présente les **informations tarifaires** afin de vous aider à comprendre les coûts liés à l&#39;API.
+
+  Pour la **configuration de la facturation**, les moyens de paiement et le suivi de la consommation, consultez la [section Admin](/fr/docs/getting-started/projects). Pour les **limites de débit**, reportez-vous à la page [Limites de débit et paliers d&#39;utilisation](/fr/docs/admin/rate-limits-usage-tiers).
+</Info>
+
+<div id="estimate-your-cost">
+  ## Estimez votre coût
+</div>
+
+<PricingCalculator />
+
+<div id="router-api-pricing">
+  ## Tarification de la Router API
+</div>
+
+L&#39;utilisation de la Router API est facturée au token, selon les tarifs publiés de chaque modèle — sans frais par requête. Chaque modèle dispose de ses propres tarifs d&#39;entrée et de sortie : les lectures de cache sont facturées au tarif réduit de lecture de cache du modèle, et les tokens de raisonnement au tarif de sortie. Vous êtes toujours facturé aux tarifs du modèle demandé, quelle que soit la manière dont la requête est traitée.
+
+Consultez [Models et tarification du Router](/fr/docs/router/models) pour la grille tarifaire complète par modèle, y compris les tarifs d&#39;écriture en cache et la tarification des contextes longs.
+
+<div id="agent-api-pricing">
+  ## Tarification de l&#39;Agent API
+</div>
+
+L&#39;Agent API donne accès à des modèles tiers proposés par des fournisseurs comme OpenAI, Anthropic, Google, xAI, Z.AI, Moonshot AI et NVIDIA, avec une **tarification transparente basée sur les tokens**, aux tarifs directs des fournisseurs et sans majoration.
+
+<div id="model-pricing">
+  ### Tarification des modèles
+</div>
+
+La tarification de l&#39;Agent API varie selon le fournisseur et le modèle, chaque fournisseur proposant plusieurs modèles à différents niveaux de prix.
+
+<Card title="Consulter la tarification complète des modèles tiers" icon="table" href="/fr/docs/agent-api/models">
+  Consultez le détail complet de la tarification de tous les modèles disponibles auprès d&#39;OpenAI, Anthropic, Google, xAI, Z.AI, Moonshot AI et NVIDIA, y compris les tarifs de mise en cache et les liens vers la documentation des fournisseurs, sur la [page Agent API Models](/fr/docs/agent-api/models).
+</Card>
+
+<div id="tool-pricing">
+  ### Tarification des outils
+</div>
+
+Lors de l&#39;utilisation d&#39;outils avec l&#39;Agent API :
+
+| Outil                |           Prix          | Description                                                                                                                                                                                                                                                                                                                                                                                       |
+| -------------------- | :---------------------: | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **`web_search`**     | 0,0025 $ par invocation | Effectue des recherches sur le web pour récupérer des informations à jour                                                                                                                                                                                                                                                                                                                         |
+| **`fetch_url`**      | 0,0005 $ par invocation | Récupère et extrait le contenu d&#39;URL spécifiques                                                                                                                                                                                                                                                                                                                                              |
+| **`people_search`**  |  0,005 $ par invocation | Recherche des professionnels, des employés et des personnes. 5 $ pour 1 000 invocations d&#39;outil                                                                                                                                                                                                                                                                                               |
+| **`finance_search`** |  0,005 $ par invocation | Récupère des données financières et des informations de marché. 5 $ pour 1 000 invocations d&#39;outil                                                                                                                                                                                                                                                                                            |
+| **`sandbox`**        |    0,03 $ par session   | Conteneur isolé permettant d&#39;exécuter du code pendant une requête à l&#39;Agent API. Une session couvre jusqu&#39;à 20 minutes d&#39;utilisation active à des fins de facturation — il s&#39;agit de la fenêtre de facturation, et non d&#39;une limite d&#39;exécution. Les requêtes de recherche lancées via le SDK depuis le sandbox sont facturées 0,0025 $ chacune (comme `web_search`). |
+
+<Note>
+  La plupart des outils sont facturés à l&#39;invocation. `sandbox` est facturé par session de conteneur — une fenêtre de facturation de 20 minutes par conteneur, et non une limite d&#39;exécution — auxquels s&#39;ajoute chaque requête de recherche lancée via le SDK depuis le conteneur. Les coûts des outils sont distincts des coûts de tokens du modèle.
+</Note>
+
+<div id="search-api-pricing">
+  ## Tarification de la Search API
+</div>
+
+| API            | Prix pour 1 K requêtes | Description                                           |
+| -------------- | :--------------------: | ----------------------------------------------------- |
+| **Search API** |          $5.00         | Résultats bruts de recherche web avec filtrage avancé |
+
+<Note>
+  **Unité de facturation :** la Search API facture chaque requête `POST /search` réussie, et non chaque requête de recherche qu&#39;elle contient. Une requête réussie contenant un tableau d&#39;au maximum cinq requêtes de recherche compte pour une seule unité de facturation. Les requêtes non valides, les requêtes bloquées par la limitation de débit et les échecs en amont ne sont pas facturés. Une réponse réussie est facturée même lorsqu&#39;elle ne renvoie aucun résultat. Aucuns frais supplémentaires basés sur les tokens ne s&#39;appliquent.
+</Note>
+
+<div id="sonar-api-pricing">
+  ## Tarification de la Sonar API
+</div>
+
+<SonarDeprecationNotice />
+
+<Info>
+  **Coût total par requête** = coût des tokens + frais de requête (variable selon la taille du contexte de recherche, applicable uniquement aux modèles Sonar, Sonar Pro et Sonar Reasoning Pro)
+</Info>
+
+<Tabs>
+  <Tab title="Tarification des tokens">
+    <div id="token-pricing">
+      ## Tarification des tokens
+    </div>
+
+    La **tarification des tokens** dépend du nombre de tokens présents dans votre requête et dans la réponse.
+
+    | Modèle                  | Tokens d&#39;entrée ($/1M) | Tokens de sortie ($/1M) | Tokens de citation ($/1M) | Requêtes de recherche ($/1K) | Tokens de raisonnement ($/1M) |
+    | ----------------------- | :------------------------: | :---------------------: | :-----------------------: | :--------------------------: | :---------------------------: |
+    | **Sonar**               |             $1             |            $1           |             -             |               -              |               -               |
+    | **Sonar Pro**           |             $3             |           $15           |             -             |               -              |               -               |
+    | **Sonar Reasoning Pro** |             $2             |            $8           |             -             |               -              |               -               |
+    | **Sonar Deep Research** |             $2             |            $8           |             $2            |              $5              |               $3              |
+  </Tab>
+
+  <Tab title="Tarification des requêtes">
+    <div id="request-pricing-by-search-context-size">
+      ## Tarification des requêtes selon la taille du contexte de recherche
+    </div>
+
+    Le **contexte de recherche** détermine la quantité d&#39;informations web récupérées. Plus le contexte est large, plus les résultats sont complets. Le tableau suivant indique les frais de requête de chaque modèle pour **1000 requêtes**.
+
+    | Modèle                  | Contexte de petite taille | Contexte de taille moyenne | Contexte de grande taille |
+    | ----------------------- | :-----------------------: | :------------------------: | :-----------------------: |
+    | **Sonar**               |             $5            |             $8             |            $12            |
+    | **Sonar Pro**           |             $6            |             $10            |            $14            |
+    | **Sonar Reasoning Pro** |             $6            |             $10            |            $14            |
+
+    <Note>
+      * **Low** : (par défaut) le plus rapide et le moins cher
+      * **Medium** : équilibre entre coût et qualité
+      * **High** : profondeur de recherche maximale, idéal pour les travaux de recherche approfondie
+
+      [En savoir plus sur le contexte de recherche →](https://docs.perplexity.ai/docs/sonar/filters#context-size-control)
+    </Note>
+  </Tab>
+
+  <Tab title="Tarification de Pro Search">
+    <div id="pro-search-pricing-pro-search-for-sonar-pro">
+      ## Tarification de Pro Search (Pro Search pour Sonar Pro)
+    </div>
+
+    **Pro Search** enrichit Sonar Pro d&#39;une utilisation automatisée des outils et d&#39;un raisonnement en plusieurs étapes. Une fois activé, le modèle peut effectuer plusieurs recherches web et récupérer le contenu d&#39;URL pour répondre à des requêtes complexes. [En savoir plus sur Pro Search](/fr/docs/sonar/pro-search/quickstart).
+
+    <Info>
+      Pro Search nécessite `stream: true` et s&#39;active via le paramètre `search_type` dans `web_search_options`.
+    </Info>
+
+    <div id="search-type-options">
+      ### Options de type de recherche
+    </div>
+
+    | Type de recherche | Description                                                              |     Frais de requête (par 1K)    |
+    | ----------------- | ------------------------------------------------------------------------ | :------------------------------: |
+    | **`fast`**        | (par défaut) Comportement standard de Sonar Pro                          |          $6 / $10 / $14          |
+    | **`pro`**         | Utilisation d&#39;outils en plusieurs étapes pour les requêtes complexes |          $14 / $18 / $22         |
+    | **`auto`**        | Classification automatique selon la complexité de la requête             | Variable selon la classification |
+
+    <Note>
+      Les frais de requête varient selon la taille du contexte de recherche (Low / Medium / High). La tarification des tokens reste identique à celle de Sonar Pro standard ($3 par million de tokens d&#39;entrée, $15 par million de tokens de sortie).
+    </Note>
+  </Tab>
+</Tabs>
+
+<div id="embeddings-api-pricing">
+  ## Tarification de l&#39;Embeddings API
+</div>
+
+Générez des embeddings de texte de haute qualité pour la recherche sémantique, la génération augmentée par récupération (RAG) et d&#39;autres applications de machine learning.
+
+<div id="standard-embeddings">
+  ### Embeddings standards
+</div>
+
+| Modèle               | Dimensions | Prix ($/1M tokens) |
+| -------------------- | :--------: | :----------------: |
+| `pplx-embed-v1-0.6b` |    1024    |       $0,004       |
+| `pplx-embed-v1-4b`   |    2560    |        $0,03       |
+
+<div id="contextualized-embeddings">
+  ### Embeddings contextualisés
+</div>
+
+| Modèle                       | Dimensions | Prix ($/1M de tokens) |
+| ---------------------------- | :--------: | :-------------------: |
+| `pplx-embed-context-v1-0.6b` |    1024    |         $0.008        |
+| `pplx-embed-context-v1-4b`   |    2560    |         $0.05         |
+
+<Card title="Consulter la documentation de l'Embeddings API" icon="cube" href="/fr/docs/embeddings/quickstart">
+  Découvrez comment utiliser l&#39;Embeddings API pour la recherche sémantique, le RAG et bien plus encore.
+</Card>
+
+<AccordionGroup>
+  <Accordion title="Glossaire des tokens et des coûts">
+    <div id="input-tokens">
+      ### Tokens d&#39;entrée
+    </div>
+
+    Le nombre de tokens contenus dans votre prompt ou votre message envoyé à l&#39;API. Cela comprend :
+
+    * Votre question ou votre instruction
+    * Tout contexte ou exemple que vous fournissez
+    * Les messages système et la mise en forme
+
+    **Exemple :** « Quel temps fait-il à New York ? » = ~8 tokens d&#39;entrée
+
+    <div id="output-tokens">
+      ### Tokens de sortie
+    </div>
+
+    Le nombre de tokens contenus dans la réponse de l&#39;API. Cela comprend :
+
+    * La réponse ou le contenu généré
+    * Les explications ou le contexte supplémentaire
+    * Les résultats de recherche et les références
+
+    **Exemple :** « Le temps à New York est actuellement ensoleillé, avec une température de 72 °F. » = ~15 tokens de sortie
+
+    <div id="citation-tokens">
+      ### Tokens de citation
+    </div>
+
+    Tokens utilisés spécifiquement pour générer les résultats de recherche et les références dans les réponses. S&#39;applique uniquement au modèle **Sonar Deep Research**.
+
+    **Exemple :** inclusion de liens vers les sources, de numéros de référence et d&#39;informations bibliographiques
+
+    <div id="search-context-size-vs-context-window">
+      ### Taille du contexte de recherche et fenêtre de contexte
+    </div>
+
+    La **taille du contexte de recherche** n&#39;est *pas* la même chose que la **fenêtre de contexte**.
+
+    * **Taille du contexte de recherche** : quantité d&#39;informations web récupérées pendant la recherche (influe sur la tarification de la requête)
+    * **Fenêtre de contexte** : nombre maximal de tokens que le modèle peut traiter en une seule requête (influe sur les limites de tokens)
+
+    <div id="search-queries">
+      ### Requêtes de recherche
+    </div>
+
+    Le nombre de recherches distinctes effectuées par **Sonar Deep Research** lors du traitement de la requête. Ce nombre est indépendant de votre requête utilisateur initiale.
+
+    * Le modèle détermine automatiquement le nombre de recherches nécessaires
+    * Vous ne pouvez pas contrôler le nombre exact de requêtes de recherche
+    * Le paramètre `reasoning_effort` influe sur le nombre de recherches effectuées
+    * S&#39;applique uniquement au modèle **Sonar Deep Research**
+
+    <div id="reasoning-tokens">
+      ### Tokens de raisonnement
+    </div>
+
+    Tokens utilisés pour le raisonnement logique étape par étape et la résolution de problèmes. S&#39;applique uniquement au modèle **Sonar Deep Research**.
+
+    **Exemple :** décomposition d&#39;un problème mathématique complexe en étapes successives accompagnées d&#39;explications
+
+    <Info>
+      **Calcul des tokens :** 1 token ≈ 4 caractères en anglais. Le décompte exact peut varier selon la langue et la complexité du contenu.
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+<div id="cost-examples">
+  ## Exemples de coûts
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Recherche web avec l'Agent API" icon="calculator">
+    **`openai/gpt-5.2`** • 500 tokens d&#39;entrée + 200 tokens de sortie • 1 recherche web
+
+    | Composant           | Coût          |
+    | ------------------- | ------------- |
+    | Tokens d&#39;entrée | $0,000875     |
+    | Tokens de sortie    | $0,0028       |
+    | `web_search`        | $0,0025       |
+    | **Total**           | **$0,006175** |
+  </Card>
+
+  <Card title="Preset de recherche de l'Agent API" icon="chart-area-line">
+    **Exécution représentative du preset `low`** • 2 000 tokens d&#39;entrée + 1 000 tokens de sortie • 1 recherche web + 1 récupération
+
+    | Composant                     | Coût       |
+    | ----------------------------- | ---------- |
+    | Tokens d&#39;entrée du modèle | $0,001     |
+    | Tokens de sortie du modèle    | $0,003     |
+    | `web_search`                  | $0,0025    |
+    | `fetch_url`                   | $0,0005    |
+    | **Total**                     | **$0,007** |
+  </Card>
+</CardGroup>
+
+Le coût réel d&#39;un preset varie selon le modèle sélectionné, la consommation de tokens et les appels d&#39;outils. Lorsqu&#39;il est présent dans une réponse terminée, le champ `usage.cost.total_cost` indique le coût calculé de la requête.
+
+<div id="purchase-options">
+  ## Options d&#39;achat
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Perplexity API Platform sur AWS Marketplace" icon="aws" href="/fr/docs/resources/aws-marketplace" arrow="True">
+    Achetez des crédits API via AWS Marketplace, avec facturation consolidée et achats en mode entreprise.
+  </Card>
+
+  <Card title="Contacter l'équipe commerciale" icon="file-pencil" iconType="solid" href="https://perplexity.typeform.com/to/m3WnMaG6">
+    Remplissez notre formulaire de demande entreprise pour échanger sur une tarification personnalisée, un support dédié et les fonctionnalités entreprise destinées aux équipes et aux organisations.
+  </Card>
+</CardGroup>

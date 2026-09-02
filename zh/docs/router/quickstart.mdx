@@ -1,0 +1,436 @@
+---
+title: "Perplexity Router API"
+sidebarTitle: "快速开始"
+description: "使用您的 Perplexity API key，通过 OpenAI Chat Completions、OpenAI Responses 和 Anthropic Messages API 统一访问开放权重模型。"
+---
+
+<Note>
+  Router API 目前处于私有预览阶段。如需申请访问权限，请发送邮件至 [api@perplexity.ai](mailto:api@perplexity.ai)。
+</Note>
+
+<div id="overview">
+  ## 概览
+</div>
+
+Router API 通过单一 API 和 API key，统一提供对 Perplexity 托管的开放权重 model 的访问。你可以使用 OpenAI Chat Completions、OpenAI Responses 或 Anthropic Messages 格式发送请求，从[模型目录](/zh/docs/router/models)中任选一个 model，平台会自动把每个请求路由到状态正常的部署实例——你无需分别注册各家提供商的账号，也不必接入其 SDK 或自行实现故障转移逻辑。
+
+目录中的任何 model 都可以通过任一受支持的结构调用，与该 model 的原始提供商无关。因此，Router 可以直接替换现有的 OpenAI 或 Anthropic 集成——只需更改 base URL 和 API key。
+
+若要使用自己的提示词和工具直接访问 model，请使用 Router API；若需要带内置引用来源的联网答案，请使用 [Agent API](/zh/docs/agent-api/quickstart)。
+
+base URL 为 `https://api.perplexity.ai/router/v1`，你现有的 Perplexity API key 可直接使用。
+
+<div id="installation">
+  ## 安装
+</div>
+
+Router API 支持 OpenAI Chat Completions 与 Responses 格式，以及 Anthropic Messages 格式，因此你可以使用任一提供商的官方 SDK —— 根据自己的集成方式安装对应的 SDK (也可以两个都装) ：
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install openai       # OpenAI Chat Completions 与 Responses 格式
+  pip install anthropic    # Anthropic Messages 格式
+  ```
+
+  ```bash Typescript theme={null}
+  npm install openai              # OpenAI Chat Completions 与 Responses 格式
+  npm install @anthropic-ai/sdk   # Anthropic Messages 格式
+  ```
+</CodeGroup>
+
+<div id="authentication">
+  ## 身份验证
+</div>
+
+将 API key 设置为环境变量：
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+</Tabs>
+
+请求通过 `Authorization: Bearer` 请求头进行身份验证；使用 SDK 时，该请求头会根据 `api_key` 参数自动设置。
+
+<div id="basic-usage">
+  ## 基础用法
+</div>
+
+将 OpenAI SDK 指向 Router 的基础 URL，并传入[模型目录](/zh/docs/router/models)中的任意 model id。model id 采用 `creator/model-name` 形式的标识串，因此切换提供商只需改一行代码：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  response = client.chat.completions.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+  )
+
+  print(response.choices[0].message.content)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const response = await client.chat.completions.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Explain the CAP theorem in two sentences." }
+      ]
+  });
+
+  console.log(response.choices[0].message.content);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/chat/completions' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "chatcmpl-Xr7aQ2mVb9L4tW8pDcEfGh1JkNs0y",
+    "object": "chat.completion",
+    "created": 1753747200,
+    "model": "perplexity/kimi-k3",
+    "choices": [
+      {
+        "index": 0,
+        "message": {
+          "role": "assistant",
+          "content": "The CAP theorem states that a distributed system can guarantee at most two of three properties: consistency, availability, and partition tolerance. Since network partitions are unavoidable in practice, designers must choose between consistency and availability when a partition occurs.",
+          "annotations": []
+        },
+        "logprobs": null,
+        "finish_reason": "stop"
+      }
+    ],
+    "usage": {
+      "prompt_tokens": 18,
+      "completion_tokens": 52,
+      "total_tokens": 70,
+      "prompt_tokens_details": {
+        "cached_tokens": 0
+      }
+    }
+  }
+  ```
+</Accordion>
+
+响应中会回显你请求的 model id；无论该请求实际由哪条链路处理，计费始终按该 model 的[公布费率](/zh/docs/router/models)计算。
+
+<div id="openai-responses">
+  ## OpenAI Responses
+</div>
+
+如果你的集成使用 OpenAI Responses 格式，可以在相同的 Router 基础 URL 上调用 `client.responses.create()`。Router 的 Responses 端点是无状态的，因此每次请求都需要在 `input` 中传入完整的对话内容。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  response = client.responses.create(
+      model="perplexity/kimi-k3",
+      input="Explain the CAP theorem in two sentences.",
+      max_output_tokens=1024
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const response = await client.responses.create({
+      model: "perplexity/kimi-k3",
+      input: "Explain the CAP theorem in two sentences.",
+      max_output_tokens: 1024
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/responses' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "input": "Explain the CAP theorem in two sentences.",
+      "max_output_tokens": 1024
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="streaming-chat-completions">
+  ## 流式聊天补全
+</div>
+
+设置 `stream: true` 即可通过服务器发送事件 (SSE) 逐个接收 token。若要在流式响应中获取 token 用量，还需设置 `stream_options: {"include_usage": true}` —— 用量数据会在 `data: [DONE]` 之前的最后一个数据块中返回：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from openai import OpenAI
+  import os
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router/v1"
+  )
+
+  stream = client.chat.completions.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Write a haiku about network latency."}
+      ],
+      stream=True,
+      stream_options={"include_usage": True}
+  )
+
+  for chunk in stream:
+      if chunk.choices and chunk.choices[0].delta.content:
+          print(chunk.choices[0].delta.content, end="")
+      if chunk.usage:
+          print(f"\n\nTokens used: {chunk.usage.total_tokens}")
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from 'openai';
+
+  const client = new OpenAI({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router/v1"
+  });
+
+  const stream = await client.chat.completions.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Write a haiku about network latency." }
+      ],
+      stream: true,
+      stream_options: { include_usage: true }
+  });
+
+  for await (const chunk of stream) {
+      if (chunk.choices[0]?.delta?.content) {
+          process.stdout.write(chunk.choices[0].delta.content);
+      }
+      if (chunk.usage) {
+          console.log(`\n\nTokens used: ${chunk.usage.total_tokens}`);
+      }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -N -X POST 'https://api.perplexity.ai/router/v1/chat/completions' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Write a haiku about network latency."}
+      ],
+      "stream": true,
+      "stream_options": {"include_usage": true}
+    }'
+  ```
+</CodeGroup>
+
+<div id="anthropic-messages">
+  ## Anthropic Messages
+</div>
+
+这些 model 同样以 Anthropic Messages 格式提供，端点为 `/router/v1/messages`，因此针对 Anthropic SDK 编写的代码只需修改 base URL 即可正常使用：
+
+<Info>
+  Anthropic SDK 会在 base URL 后追加 `/v1/messages`，因此请将其配置为 `https://api.perplexity.ai/router` (不带 `/v1`) 。OpenAI SDK 追加的是 `/chat/completions`，应配置为 `https://api.perplexity.ai/router/v1`。
+</Info>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from anthropic import Anthropic
+  import os
+
+  client = Anthropic(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/router"
+  )
+
+  message = client.messages.create(
+      model="perplexity/kimi-k3",
+      max_tokens=1024,
+      messages=[
+          {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+  )
+
+  print(message.content[0].text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Anthropic from '@anthropic-ai/sdk';
+
+  const client = new Anthropic({
+      apiKey: process.env.PERPLEXITY_API_KEY,
+      baseURL: "https://api.perplexity.ai/router"
+  });
+
+  const message = await client.messages.create({
+      model: "perplexity/kimi-k3",
+      max_tokens: 1024,
+      messages: [
+          { role: "user", content: "Explain the CAP theorem in two sentences." }
+      ]
+  });
+
+  console.log(message.content[0].text);
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/router/v1/messages' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "perplexity/kimi-k3",
+      "max_tokens": 1024,
+      "messages": [
+        {"role": "user", "content": "Explain the CAP theorem in two sentences."}
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="discovering-models">
+  ## 发现模型
+</div>
+
+你可以随时列出当前的模型目录——响应与 OpenAI 兼容，按 model id 排序，并包含每个 model 的基础 token 价格 (单位：美元/百万 token) ：
+
+```bash theme={null}
+curl 'https://api.perplexity.ai/router/v1/models' \
+  -H "Authorization: Bearer $PERPLEXITY_API_KEY" | jq
+```
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "object": "list",
+    "data": [
+      {
+        "id": "perplexity/deepseek-v4-flash-0731",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 0.13,
+          "output": 0.26,
+          "cache_read": 0.028,
+          "unit": "usd_per_1m_tokens"
+        }
+      },
+      {
+        "id": "perplexity/glm-5.2",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 1.4,
+          "output": 4.4,
+          "cache_read": 0.14,
+          "unit": "usd_per_1m_tokens"
+        }
+      },
+      {
+        "id": "perplexity/kimi-k3",
+        "object": "model",
+        "created": 0,
+        "owned_by": "perplexity",
+        "pricing": {
+          "input": 3,
+          "output": 15,
+          "cache_read": 0.3,
+          "unit": "usd_per_1m_tokens"
+        }
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+完整的模型目录及定价请参见[模型页面](/zh/docs/router/models)。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="模型与定价" icon="brain" href="/zh/docs/router/models">
+    模型目录及各模型的每 token 费率。
+  </Card>
+
+  <Card title="路由与可靠性" icon="arrows-shuffle" href="/zh/docs/router/routing-and-reliability">
+    请求如何路由，以及提供商出现故障时会发生什么。
+  </Card>
+
+  <Card title="Chat Completions 参考" icon="code" href="/zh/api-reference/gateway-chat-completions-post">
+    完整的请求与响应结构。
+  </Card>
+
+  <Card title="Responses 参考" icon="code" href="/zh/api-reference/gateway-responses-post">
+    兼容 OpenAI Responses 的端点结构。
+  </Card>
+
+  <Card title="Messages 参考" icon="code" href="/zh/api-reference/gateway-messages-post">
+    兼容 Anthropic 的端点结构。
+  </Card>
+</CardGroup>
+
+需要帮助？欢迎前往我们的[社区](https://community.perplexity.ai)寻求支持。

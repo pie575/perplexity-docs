@@ -1,0 +1,42 @@
+---
+title: "Crear una completación de chat"
+description: "Envía una conversación a cualquier modelo del Router usando el
+  esquema de Chat Completions de OpenAI. Define `stream: true` para recibir
+  eventos enviados por el servidor (SSE); añade `stream_options:
+  {\"include_usage\": true}` para obtener el uso de tokens en el fragmento
+  final."
+openapi: "/es/openapi/openapi-gateway-chat.json POST /router/v1/chat/completions"
+---
+
+<Info>
+  La API del Router acepta el esquema de Chat Completions de OpenAI, con un subconjunto definido de parámetros. Las solicitudes que usen un parámetro no admitido fallan con un error 400 que indica el nombre del parámetro.
+</Info>
+
+<Accordion title="Compatibilidad de parámetros">
+  **Aplicados:** `model`, `messages`, `stream`, `stream_options.include_usage`, `max_completion_tokens`, `max_tokens`, `temperature`, `top_p`, `stop`, `reasoning_effort`, `service_tier` (`auto`, `default`, `flex`, `priority`), `response_format` (`text`, `json_schema`, `json_object`), `tools`, `tool_choice` (incluido `allowed_tools`), `parallel_tool_calls`, `prompt_cache_key`, `prompt_cache_options`, `prompt_cache_retention` y los campos `prompt_cache_breakpoint` de las partes del mensaje.
+
+  **Aceptados pero no reenviados al modelo:** `user`, `safety_identifier`, `metadata`.
+
+  **Aceptados solo con sus valores predeterminados:** `n` (`1`), `logprobs` (`false`), `store` (`false`), `presence_penalty` (`0`), `frequency_penalty` (`0`).
+
+  **Rechazados con un error 400:** `seed`, `logit_bias`, `top_logprobs`, `functions` (usa `tools`), `function_call` (usa `tool_choice`), `modalities`, `audio`, `prediction`, `web_search_options`, `moderation`, `verbosity`, `stream_options.include_obfuscation` con valor `true`, además de cualquier campo de nivel superior no reconocido.
+
+  **Notas:** Si se omite `reasoning_effort`, se aplica el valor predeterminado del proveedor para ese modelo; estos valores varían según el proveedor y el modelo. `response_format.json_schema` siempre se ejecuta en modo estricto. Los mensajes del asistente y los deltas transmitidos pueden incluir `reasoning_content`; reenvíalo en un mensaje del asistente para conservar el contexto de razonamiento entre solicitudes. Las herramientas de tipo función requieren una descripción.
+</Accordion>
+
+<Accordion title="Errores">
+  Los errores usan el formato de envoltorio de OpenAI:
+
+  ```json
+  {
+    "error": {
+      "code": null,
+      "message": "Invalid model 'example/does-not-exist'. Permitted models can be found in the documentation at https://docs.perplexity.ai/docs/getting-started/models.",
+      "param": null,
+      "type": "invalid_request_error"
+    }
+  }
+  ```
+
+  `type` es `invalid_request_error` para errores 4xx, `rate_limit_error` para 429 (límite de tasa alcanzado o modelo sobrecargado: reintenta tras el intervalo indicado en `Retry-After`) y `server_error` para 5xx. Las solicitudes que fallan antes de generar resultados no se facturan.
+</Accordion>

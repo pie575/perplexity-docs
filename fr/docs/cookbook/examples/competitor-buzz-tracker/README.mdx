@@ -1,0 +1,674 @@
+---
+title: "Suivi de la notoriété concurrentielle"
+description: "Transformez un panier de recherches et de règles de mots-clés en un graphique de part de voix d'une seule page (PDF) grâce à deux requêtes Agent API enchaînées. La première effectue les recherches et les comptages dans le sandbox, puis renvoie un contrat JSON en sortie structurée. La seconde génère le diagramme à barres et le partage sous forme de fichier téléchargeable."
+---
+
+<div id="competitor-buzz-tracker">
+  # Competitor Buzz Tracker
+</div>
+
+Un exemple en ligne de commande qui transforme un produit et ses concurrents en un rapport
+de veille concurrentielle d&#39;une page (PDF) : combien d&#39;articles actuellement dans l&#39;actualité
+mentionnent chaque marque, et la part de chaque marque dans le total. Vous fournissez à l&#39;outil un **panier** — quelques
+recherches accompagnées de règles de mots-clés — et le modèle se charge du reste.
+
+Pour cela, il écrit lui-même le code. En pilotant l&#39;outil
+[`sandbox`](https://docs.perplexity.ai/docs/agent-api/tools/sandbox), le
+modèle écrit du Python, l&#39;exécute dans le sandbox et itère — recherche sur le web,
+déduplication et classification des résultats, correction de ses propres erreurs et nouvelle exécution
+— le tout côté serveur. Vous n&#39;exécutez jamais localement de code d&#39;analyse ou de génération de graphiques : le
+script se contente de soumettre les requêtes, d&#39;interroger périodiquement les réponses en arrière-plan et de télécharger
+le PDF final. Chaque chiffre du graphique est calculé, pas deviné.
+
+<Frame caption="Une exécution sur un panier de 15 requêtes d'actualité sur les téléphones : la part de voix de chaque marque, comptabilisée à partir des résultats de recherche dans le sandbox et générée sous forme de PDF.">
+  <img className="block dark:hidden" src="https://mintcdn.com/perplexity/I2Pj-LtaFLMyVVDr/docs/assets/images/cookbook/examples/competitor-buzz-tracker.png?fit=max&auto=format&n=I2Pj-LtaFLMyVVDr&q=85&s=cecc98e0e2e40256962406bbdb7c68f9" alt="PDF Competitor Buzz Tracker : diagramme à barres horizontales des mentions dans l'actualité pour Galaxy, iPhone, Pixel et Autres, chacune annotée de son total et de sa part de voix." width="560" data-path="docs/assets/images/cookbook/examples/competitor-buzz-tracker.png" />
+
+  <img className="hidden dark:block" src="https://mintcdn.com/perplexity/I2Pj-LtaFLMyVVDr/docs/assets/images/cookbook/examples/competitor-buzz-tracker-dark.png?fit=max&auto=format&n=I2Pj-LtaFLMyVVDr&q=85&s=600b4cd99b42e1c345059f22a01f2171" alt="PDF Competitor Buzz Tracker : diagramme à barres horizontales des mentions dans l'actualité pour Galaxy, iPhone, Pixel et Autres, chacune annotée de son total et de sa part de voix." width="560" data-path="docs/assets/images/cookbook/examples/competitor-buzz-tracker-dark.png" />
+</Frame>
+
+<div id="what-the-sandbox-does-here">
+  ## Ce que fait le sandbox ici
+</div>
+
+* **Il exécute l&#39;analyse sous forme de code, sans s&#39;appuyer sur sa mémoire.** À la
+  manière d&#39;un interpréteur de code, le sandbox permet au modèle de résoudre une
+  tâche quantitative en écrivant et en exécutant du Python plutôt qu&#39;en devinant.
+  Le nombre de mentions et les pourcentages de part de voix proviennent d&#39;un code
+  réellement exécuté sur les résultats de recherche — les chiffres sont donc
+  réels, et pas seulement plausibles. Le script l&#39;impose : il vérifie que la
+  réponse contient un élément `sandbox_results` et rejette le résultat dans le cas
+  contraire, afin que le modèle ne puisse pas contourner l&#39;outil et renvoyer des
+  décomptes inventés.
+* **Il interroge le web au cours de la même exécution.** Le sandbox peut accéder à
+  la recherche Perplexity depuis l&#39;exécution en cours : le modèle récupère donc
+  lui-même les articles et les classe dans la même requête — sans étape de
+  scraping distincte, sans code de liaison, sans outil supplémentaire à brancher.
+* **Il renvoie un vrai fichier sans aucune configuration de votre côté.**
+  matplotlib et l'environnement d'exécution résident dans le sandbox ; le modèle génère le
+  graphique, le partage avec `share_file`, et vous téléchargez le `.pdf` depuis la
+  réponse à partir de son identifiant. Une requête en entrée, un fichier en sortie
+  — rien à installer ni à héberger en local. Une simple complétion de chat ne
+  renverrait que du texte.
+
+<div id="without-the-sandbox">
+  ## Sans le sandbox
+</div>
+
+Pour produire ce même rapport vous-même, il vous faudrait monter un environnement d&#39;exécution : une machine avec
+Python et matplotlib, le code de recherche et de classification, et un endroit où
+l&#39;exécuter et récupérer le fichier. Avec l&#39;outil `sandbox`, le modèle écrit et
+exécute ce code côté serveur, puis vous renvoie le PDF终 finalisé — rien à installer,
+héberger ni maintenir en fonctionnement — et il adapte le code à ce que la recherche remonte,
+au lieu de vous laisser entretenir un pipeline rigide.
+
+<div id="installation">
+  ## Installation
+</div>
+
+Conservez les fichiers du projet dans le même répertoire :
+`competitor_buzz_tracker.py`, `observability.py` (importé par le script),
+`requirements.txt` et votre `basket.yaml`.
+
+1. Installez les dépendances — le [SDK Python Perplexity](https://github.com/ppl-ai/perplexity-python),
+   PyYAML (pour lire la configuration du basket) et Pydantic (pour le schéma de réponse).
+   Leurs versions sont figées dans `requirements.txt` :
+
+```text requirements.txt theme={null}
+perplexityai==0.38.0
+PyYAML==6.0.2
+pydantic==2.13.4
+```
+
+```bash theme={null}
+pip install -r requirements.txt
+```
+
+2. Définissez votre API key Perplexity :
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key-here"
+```
+
+Le SDK lit la clé depuis cette variable d&#39;environnement.
+
+<Note>
+  Cet exemple utilise l&#39;outil `sandbox` de l&#39;Agent API. Consultez la
+  [documentation Sandbox](https://docs.perplexity.ai/docs/agent-api/tools/sandbox) pour
+  les détails de configuration et d&#39;utilisation.
+</Note>
+
+<div id="usage">
+  ## Utilisation
+</div>
+
+Vous décrivez la tâche dans un petit fichier YAML : un titre de graphique, les
+requêtes de recherche à exécuter et les règles de mots-clés qui classent chaque résultat. Un même article peut
+correspondre à plusieurs mots-clés — un article qui mentionne à la fois Pixel et Galaxy compte pour
+les deux ; celui qui n&#39;en mentionne aucun est comptabilisé dans &quot;Autre&quot;. Plus il y a de requêtes, plus la
+couverture est large.
+
+```yaml basket.yaml theme={null}
+title: "iPhone vs Pixel vs Galaxy — market buzz"
+
+queries:
+  - "smartphone news today"
+  - "latest phone news"
+  - "new phone launch"
+  - "smartphone announcements"
+  - "flagship smartphone news"
+  - "Android phone news"
+  - "new phone releases"
+  - "phone review roundup"
+  - "best new phones"
+  - "upcoming smartphones"
+  - "foldable phone news"
+  - "budget phone news"
+  - "phone camera comparison"
+  - "smartphone deals this week"
+  - "mobile phone industry news"
+
+keywords:
+  - name: iPhone
+    regex: "iphone|apple phone"
+  - name: Pixel
+    regex: "pixel"
+  - name: Galaxy
+    regex: "galaxy|samsung"
+```
+
+Le `regex` de chaque mot-clé est un motif unique insensible à la casse — utilisez `|` pour
+indiquer des alternatives (par exemple `"galaxy|samsung"`). Enregistrez le fichier sous le nom `basket.yaml`, puis exécutez :
+
+```bash theme={null}
+python competitor_buzz_tracker.py --config basket.yaml [--output FILE] [--show-code]
+```
+
+Cela écrit `competitor-buzz-<date>_<time>.pdf` dans le répertoire courant. Ajoutez
+`--show-code` pour afficher également le code Python que l&#39;agent a écrit et exécuté dans le sandbox.
+
+<div id="how-it-works">
+  ## Fonctionnement
+</div>
+
+Vous décrivez la tâche en langage courant et vous fournissez au modèle l&#39;outil `sandbox` ;
+à partir de là, il écrit le code Python, l&#39;exécute, corrige ses propres erreurs et
+vous renvoie les décomptes ainsi que le graphique — sans que vous ayez à toucher
+au code d&#39;analyse.
+
+Cet exemple répartit ce travail sur deux requêtes chaînées plutôt qu&#39;une seule.
+L&#39;analyse et le rendu sont deux tâches distinctes : les séparer permet de garder
+chaque prompt court, d&#39;exécuter l&#39;étape mécanique sur un modèle moins coûteux
+(`openai/gpt-5.4`) et le rendu sur le modèle phare (`openai/gpt-5.5`), tout en
+plaçant un point de contrôle inspectable au milieu.
+
+**La requête 1 (analytique)** reçoit l&#39;outil `sandbox` et un schéma
+[`response_format`](https://docs.perplexity.ai/docs/agent-api/output-control).
+Le modèle effectue chaque requête depuis le sandbox, regroupe les résultats,
+les déduplique par URL, confronte chaque article aux règles de mots-clés par
+expressions régulières, puis compte les mentions par marque ainsi que sa part de
+voix. Le schéma transforme sa réponse en un contrat typé plutôt qu&#39;en texte libre :
+
+```python theme={null}
+class Series(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    keyword: str
+    total: int
+    share_of_voice: float
+
+
+class NewsMentions(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    title: str
+    articles: int
+    series: List[Series]
+```
+
+**La requête 2 (graphique)** ne reçoit que ce JSON et l&#39;outil `sandbox`, puis
+génère le diagramme à barres horizontales dans `report.pdf` et le partage avec `share_file`.
+
+Aucune mémoire n&#39;est partagée entre les deux : le script valide le JSON de la requête 1
+selon le schéma et le transmet à la requête 2 ; le résultat intermédiaire est donc
+constitué de simples données, que vous pouvez afficher ou soumettre à des tests unitaires avant tout tracé. Les deux requêtes s&#39;exécutent avec
+`background=True` et sont interrogées jusqu&#39;à leur achèvement, car une exécution dans le sandbox peut
+prendre un certain temps.
+
+<div id="prompting-guidance">
+  ## Conseils de prompting
+</div>
+
+Vous n&#39;écrivez pas le code d&#39;analyse : chaque requête décrit sa tâche sous forme
+d&#39;un simple prompt, à peine plus long qu&#39;un message de chat, et le modèle le
+transforme en code Python qu&#39;il exécute dans le sandbox. La requête analytique se
+contente d&#39;envoyer les requêtes du panier et les règles de mots-clés comme prompt :
+
+```text theme={null}
+Comptez le nombre d'apparitions de chaque marque dans l'actualité récente des téléphones.
+
+Recherchez sur le web chacune de ces requêtes, regroupez les résultats et supprimez les
+URL en double :
+  - smartphone news today
+  - latest phone news
+  - ...  (le reste du panier)
+
+Étiquetez chaque article à l'aide de ces expressions régulières (insensibles à la casse ; un article peut
+correspondre à plusieurs ; aucune -> "Other") :
+  - iPhone: iphone|apple phone
+  - Pixel: pixel
+  - Galaxy: galaxy|samsung
+
+Renvoyez du JSON : title, articles (nombre d'articles uniques) et series — pour chaque
+marque et pour "Other", son total et son share_of_voice.
+```
+
+Les règles de mots-clés se trouvent dans le YAML, pas dans le code : vous modifiez donc
+ce qui est suivi en éditant le panier, sans toucher à la moindre ligne de Python.
+
+<Accordion title="Voir le Python écrit par l'agent (--show-code)">
+  Avec `--show-code`, le script affiche chaque cellule sandbox exécutée par le modèle. Lors de
+  l&#39;exécution ci-dessus, l&#39;agent analytique a utilisé cinq cellules — dont une qui se contentait
+  d&#39;inspecter un résultat de recherche pour en découvrir les champs — avant d&#39;aboutir au code
+  ci-dessous. Légèrement condensé, voici ce qu&#39;il a réellement exécuté : lancer chaque requête,
+  canoniser et dédupliquer les URL, classer chaque résultat par expression régulière, compter les mentions,
+  puis afficher le JSON attendu par le schéma.
+
+  ```python theme={null}
+  import json, re
+  from urllib.parse import urlsplit, urlunsplit, parse_qsl, urlencode
+  from collections import Counter
+  import pplx_sdk  # interface de recherche disponible dans le sandbox
+
+  queries = ["smartphone news today", "latest phone news", ...]
+
+  def canon(url):                      # normaliser pour fusionner les URL quasi identiques
+      s = urlsplit(url)
+      host = s.netloc.lower().removeprefix("www.")
+      path = re.sub(r"/+", "/", s.path or "/").rstrip("/") or "/"
+      keep = [(k, v) for k, v in parse_qsl(s.query)
+              if not k.lower().startswith(("utm_", "fbclid", "gclid"))]
+      return urlunsplit((s.scheme or "https", host, path, urlencode(keep), ""))
+
+  unique = {}
+  for q in queries:
+      for h in pplx_sdk.search.web(q, limit=10):
+          url = getattr(h, "url", None)
+          if url:
+              unique.setdefault(canon(url), {
+                  "title": getattr(h, "title", "") or "",
+                  "summary": getattr(h, "summary", "") or "",
+                  "url": url,
+                  "domain": getattr(h, "domain", "") or "",
+              })
+
+  patterns = {
+      "iPhone": re.compile(r"iphone|apple phone", re.I),
+      "Pixel": re.compile(r"pixel", re.I),
+      "Galaxy": re.compile(r"galaxy|samsung", re.I),
+  }
+  counts = Counter()
+  for h in unique.values():
+      text = " ".join(h[k] for k in ("title", "summary", "url", "domain"))
+      matched = [b for b, p in patterns.items() if p.search(text)]
+      for b in (matched or ["Other"]):
+          counts[b] += 1
+
+  total = sum(counts.values())
+  print(json.dumps({                       # le contrat JSON attendu par le schéma
+      "title": "iPhone vs Pixel vs Galaxy — market buzz",
+      "articles": len(unique),
+      "series": [
+          {"keyword": k, "total": counts[k],
+           "share_of_voice": round(100 * counts[k] / total, 1)}
+          for k in ["iPhone", "Pixel", "Galaxy", "Other"]
+      ],
+  }))
+  ```
+
+  C&#39;est du Python ordinaire, que vous pouvez lire et vérifier — sans framework ni état
+  caché. Le modèle écrit un nouveau code à chaque exécution : la forme exacte varie donc d&#39;une
+  exécution à l&#39;autre. `pplx_sdk` est l&#39;interface de recherche disponible dans le sandbox.
+</Accordion>
+
+<div id="full-code">
+  ## Code complet
+</div>
+
+Le script tient dans un seul fichier ; le rapport de coûts et l&#39;utilitaire `--show-code` se trouvent dans un petit fichier `observability.py` placé juste à côté (hors du chemin critique, il est donc facile de le supprimer ou de le déplacer plus tard vers un outillage partagé).
+
+<Accordion title="Code complet — competitor_buzz_tracker.py et observability.py">
+  <CodeGroup>
+    ```python competitor_buzz_tracker.py theme={null}
+    #!/usr/bin/env python3
+    """
+    Competitor Buzz Tracker - a basket of searches and keyword rules becomes a
+    one-page market-buzz chart (PDF) via two Perplexity Agent API requests:
+    analytics (sandbox searches the web and counts -> JSON) then chart (sandbox ->
+    report.pdf, shared with share_file). See the README for details.
+    """
+
+    import argparse
+    import os
+    import sys
+    import time
+    from datetime import datetime
+    from typing import Any, List, Optional, Tuple
+
+    import yaml
+    from pydantic import BaseModel, ConfigDict
+
+    from perplexity import Perplexity
+
+    from observability import print_costs, print_sandbox_code
+
+    POLL_INTERVAL_SECONDS = 4
+    POLL_TIMEOUT_SECONDS = 900
+    MAX_STEPS = 10
+
+    # Un model moins coûteux prend en charge la recherche et le comptage
+    # mécaniques ; le model phare écrit le code du graphique.
+    ANALYTICS_MODEL = "openai/gpt-5.4"
+    CHART_MODEL = "openai/gpt-5.5"
+
+    ANALYTICS_SYSTEM = """Work in a Python sandbox: search the web, then \
+    classify and count the results with code. Don't estimate the numbers - \
+    print the final JSON from the sandbox."""
+
+
+    ANALYTICS_TEMPLATE = """Count how often each brand shows up in current \
+    phone news.
+
+    Search the web for each of these queries, pool the results, and drop \
+    duplicate URLs:
+    {query_lines}
+
+    Tag each article with these regexes (case-insensitive; an article can \
+    match several; none -> "Other"):
+    {keyword_lines}
+
+    Return JSON: title "{title}", articles (number of unique articles), and \
+    series - for each brand and "Other", its total and its share_of_voice \
+    (its total over the sum of all totals, as a percent rounded to one \
+    decimal)."""
+
+    CHART_SYSTEM = """Work in a Python sandbox with matplotlib (Agg \
+    backend). Build the chart, save it as report.pdf, and share it with \
+    share_file."""
+
+    CHART_TEMPLATE = """Make a horizontal bar chart from this data.
+
+    DATA:
+    {data_json}
+
+    One bar per entry in "series", length = its total, sorted longest \
+    first, labeled with its total and share_of_voice. Title = the "title" \
+    field; add a subtitle with the "articles" count and \
+    "snapshot {snapshot_date}". Keep it clean."""
+
+
+    class Series(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        keyword: str
+        total: int
+        share_of_voice: float
+
+
+    class NewsMentions(BaseModel):
+        model_config = ConfigDict(extra="forbid")
+        title: str
+        articles: int
+        series: List[Series]
+
+
+    def load_basket(path: str) -> dict:
+        with open(path, "r", encoding="utf-8") as fh:
+            return yaml.safe_load(fh)
+
+
+    def analytics_prompt(basket: dict) -> str:
+        keyword_lines = "\n".join(
+            f"  - {kw['name']}: {kw['regex']}" for kw in basket["keywords"]
+        )
+        return ANALYTICS_TEMPLATE.format(
+            title=basket["title"],
+            query_lines="\n".join(f"  - {q}" for q in basket["queries"]),
+            keyword_lines=keyword_lines,
+        )
+
+
+    def chart_prompt(data: NewsMentions, snapshot_date: str) -> str:
+        return CHART_TEMPLATE.format(
+            data_json=data.model_dump_json(indent=2),
+            snapshot_date=snapshot_date,
+        )
+
+
+    def final_text(response: Any) -> str:
+        chunks: List[str] = []
+        for item in getattr(response, "output", None) or []:
+            if getattr(item, "type", None) != "message":
+                continue
+            for block in getattr(item, "content", None) or []:
+                if getattr(block, "type", None) == "output_text":
+                    text = getattr(block, "text", None)
+                    if text:
+                        chunks.append(text)
+        return "\n\n".join(chunks)
+
+
+    def ran_sandbox(response: Any) -> bool:
+        return any(
+            getattr(item, "type", None) == "sandbox_results"
+            for item in getattr(response, "output", None) or []
+        )
+
+
+    def submit_and_wait(client: Perplexity, **create_kwargs: Any) -> Any:
+        response = client.responses.create(background=True, **create_kwargs)
+        print(f"Submitted response {response.id}; working...", file=sys.stderr)
+        deadline = time.time() + POLL_TIMEOUT_SECONDS
+        while response.status in ("queued", "in_progress"):
+            if time.time() > deadline:
+                raise TimeoutError("Timed out waiting for the response to finish.")
+            time.sleep(POLL_INTERVAL_SECONDS)
+            response = client.responses.retrieve(response.id)
+        if response.status != "completed":
+            raise RuntimeError(f"Request ended with status {response.status!r}.")
+        return response
+
+
+    def run_analytics(
+        client: Perplexity, basket: dict, model: str
+    ) -> Tuple[NewsMentions, Any]:
+        response = submit_and_wait(
+            client,
+            model=model,
+            instructions=ANALYTICS_SYSTEM,
+            input=analytics_prompt(basket),
+            tools=[{"type": "sandbox"}],
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "news_mentions",
+                    "schema": NewsMentions.model_json_schema(),
+                },
+            },
+            max_steps=MAX_STEPS,
+        )
+        if not ran_sandbox(response):
+            raise RuntimeError("Analytics request did not run the sandbox.")
+        return NewsMentions.model_validate_json(final_text(response)), response
+
+
+    def run_chart(
+        client: Perplexity, data: NewsMentions, snapshot_date: str, model: str
+    ) -> Any:
+        return submit_and_wait(
+            client,
+            model=model,
+            instructions=CHART_SYSTEM,
+            input=chart_prompt(data, snapshot_date),
+            tools=[{"type": "sandbox"}],
+            max_steps=MAX_STEPS,
+        )
+
+
+    def download_pdf(
+        client: Perplexity, response: Any, output: Optional[str]
+    ) -> Optional[str]:
+        files = client.responses.files.list(response.id)
+        pdf = next(
+            (f for f in files.data if f.filename.lower().endswith(".pdf")), None
+        )
+        if pdf is None:
+            names = ", ".join(f.filename for f in files.data) or "(none)"
+            print(
+                f"No PDF was shared by the sandbox. Files: {names}",
+                file=sys.stderr,
+            )
+            return None
+
+        stamp = datetime.now().strftime("%Y-%m-%d_%H-%M")
+        out_path = output or f"competitor-buzz-{stamp}.pdf"
+        content = client.responses.files.content(pdf.id, response_id=response.id)
+        content.write_to_file(out_path)
+        return out_path
+
+
+    def main() -> int:
+        parser = argparse.ArgumentParser(
+            description=(
+                "Generate a one-page market-buzz chart (PDF) from a basket "
+                "config, using two Perplexity Agent API requests (analytics, "
+                "then chart)."
+            )
+        )
+        parser.add_argument(
+            "--config",
+            default="basket.yaml",
+            help="Path to the basket YAML config (default: basket.yaml).",
+        )
+        parser.add_argument(
+            "--output",
+            help=(
+                "Output PDF path. Defaults to competitor-buzz-<time>.pdf in the "
+                "working directory."
+            ),
+        )
+        parser.add_argument(
+            "--show-code",
+            action="store_true",
+            help="Print the Python the agent wrote and ran in the sandbox.",
+        )
+        args = parser.parse_args()
+
+        if not os.environ.get("PERPLEXITY_API_KEY"):
+            print("Set PERPLEXITY_API_KEY in your environment.", file=sys.stderr)
+            return 1
+
+        basket = load_basket(args.config)
+        client = Perplexity()
+
+        names = ", ".join(kw["name"] for kw in basket["keywords"])
+        snapshot_date = datetime.now().date().isoformat()
+        try:
+            print(
+                f"[1/2] Measuring news buzz for {names}...", file=sys.stderr
+            )
+            data, analytics_response = run_analytics(
+                client, basket, ANALYTICS_MODEL
+            )
+            parts = [
+                f"{s.keyword} {s.total} ({s.share_of_voice}%)"
+                for s in data.series
+            ]
+            print(
+                f"      {data.articles} articles - {', '.join(parts)}",
+                file=sys.stderr,
+            )
+
+            print("[2/2] Rendering the report PDF...", file=sys.stderr)
+            chart_response = run_chart(
+                client, data, snapshot_date, CHART_MODEL
+            )
+        except Exception as err:  # noqa: BLE001
+            print(f"Error: {err}", file=sys.stderr)
+            return 2
+
+        out_path = download_pdf(client, chart_response, args.output)
+        if args.show_code:
+            print_sandbox_code(analytics_response, "analytics")
+            print_sandbox_code(chart_response, "chart")
+        print_costs(
+            [("Analytics", analytics_response), ("Chart", chart_response)]
+        )
+        if out_path:
+            print(f"\nSaved report to {out_path}", file=sys.stderr)
+            return 0
+        return 3
+
+
+    if __name__ == "__main__":
+        sys.exit(main())
+    ```
+
+    ```python observability.py theme={null}
+    """Optional observability helpers for the Competitor Buzz Tracker.
+
+    Kept in a separate module so the main script stays focused on the Agent API
+    calls. Nothing here is on the critical path (cost reporting and showing the
+    code the model ran), so it could later move into shared tooling or the SDK.
+    """
+
+    import sys
+    from typing import Any, List, Tuple
+
+
+    def print_costs(stages: List[Tuple[str, Any]]) -> None:
+        """Print per-request cost and the combined total to stderr."""
+        amounts: List[float] = []
+        currency = "USD"
+        for label, response in stages:
+            cost = getattr(getattr(response, "usage", None), "cost", None)
+            total = getattr(cost, "total_cost", None)
+            if total is not None:
+                currency = getattr(cost, "currency", "USD")
+                amounts.append(total)
+                print(f"{label} cost: {total:.4f} {currency}", file=sys.stderr)
+        if amounts:
+            print(f"Total cost: {sum(amounts):.4f} {currency}", file=sys.stderr)
+
+
+    def sandbox_code(response: Any) -> List[str]:
+        """Return the code cells the model wrote and ran in the sandbox."""
+        cells: List[str] = []
+        for item in getattr(response, "output", None) or []:
+            if getattr(item, "type", None) != "sandbox_results":
+                continue
+            data = item.model_dump() if hasattr(item, "model_dump") else {}
+            code = data.get("code")
+            if code:
+                cells.append(code)
+        return cells
+
+
+    def print_sandbox_code(response: Any, label: str = "") -> None:
+        """Print the code the model ran in the sandbox (for inspection)."""
+        cells = sandbox_code(response)
+        if not cells:
+            return
+        where = f" [{label}]" if label else ""
+        print(f"--- sandbox code{where} ---", file=sys.stderr)
+        for i, code in enumerate(cells, 1):
+            print(f"\n# cell {i}/{len(cells)}", file=sys.stderr)
+            print(code, file=sys.stderr)
+    ```
+  </CodeGroup>
+</Accordion>
+
+<div id="example-output">
+  ## Exemple de sortie
+</div>
+
+Une exécution réelle — `python competitor_buzz_tracker.py --config basket.yaml`
+(les résultats varient selon la couverture en temps réel) :
+
+```
+[1/2] Measuring news buzz for iPhone, Pixel, Galaxy...
+Submitted response resp_b89831b8-cb87-41ef-8756-1b9447fb19d7; working...
+      120 articles - iPhone 68 (29.6%), Pixel 52 (22.6%), Galaxy 91 (39.6%), Other 19 (8.3%)
+[2/2] Rendering the report PDF...
+Submitted response resp_93c0ab7d-325a-4101-9655-cc4ad40863c3; working...
+Analytics cost: 0.2515 USD
+Chart cost: 0.0567 USD
+Total cost: 0.3083 USD
+
+Saved report to competitor-buzz-2026-06-18_21-12.pdf
+```
+
+Le PDF est un diagramme à barres horizontales des mentions par marque, triées, chaque barre
+portant son total et sa part de voix, sous un sous-titre indiquant le nombre
+d&#39;articles et `snapshot <date>`. Chaque décompte provient de résultats de recherche que le
+modèle a réellement classés selon les règles de mots-clés — et non de ses données
+d&#39;entraînement. (Les parts sont arrondies à une décimale : leur somme peut donc ne pas
+atteindre exactement 100 %.)
+
+<div id="limitations">
+  ## Limites
+</div>
+
+* **La couverture varie.** Le résultat dépend de l&#39;actualité en temps réel : les
+  décomptes diffèrent donc selon le sujet et dans le temps.
+* **Facturation.** Deux requêtes Agent API sont effectuées : chaque exécution
+  est donc facturée pour deux ensembles de tokens de modèle et deux sessions
+  sandbox, auxquels s&#39;ajoutent les recherches réalisées dans le sandbox lors de
+  la requête 1, aux tarifs standard.
+
+<div id="resources">
+  ## Ressources
+</div>
+
+* [Outil sandbox](https://docs.perplexity.ai/docs/agent-api/tools/sandbox)
+* [Sorties structurées](https://docs.perplexity.ai/docs/agent-api/output-control)
+* [Démarrage rapide de l&#39;Agent API](https://docs.perplexity.ai/docs/agent-api/quickstart)
+* [Search API](https://docs.perplexity.ai/docs/search/quickstart)
+* [Tarifs](https://docs.perplexity.ai/docs/getting-started/pricing)
+* [SDK Python Perplexity](https://github.com/ppl-ai/perplexity-python)

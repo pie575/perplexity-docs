@@ -1,0 +1,282 @@
+---
+title: "Ejecutar código"
+description: "Dale al agente un sandbox para que calcule respuestas exactas en lugar de estimarlas, ejecute código real y devuelva los archivos generados."
+---
+
+Los modelos de lenguaje aproximan la aritmética exacta y la manipulación de datos en lugar de calcularlas. La herramienta `sandbox` proporciona al agente un contenedor Linux aislado donde ejecutar código real y usar la salida en su respuesta, ideal para resultados que deben ser exactos, como un número calculado, un conjunto de datos transformado o un informe generado. Desde dentro del contenedor, el agente también puede invocar las herramientas de Perplexity [Web Search](/es/docs/agent-api/tools/web-search), [Fetch URL Content](/es/docs/agent-api/tools/fetch-url-content) y [People Search](/es/docs/agent-api/tools/people-search) sin necesidad de añadirlas a la solicitud, y después operar sobre lo que devuelven; cada una se factura a su tarifa estándar. La [referencia de la herramienta Sandbox](/es/docs/agent-api/tools/sandbox) recoge todos los ajustes, la estructura de la respuesta y los precios.
+
+<div id="enable-the-sandbox">
+  ## Habilitar el sandbox
+</div>
+
+Agrega `{"type": "sandbox"}` al arreglo `tools`. El model decide cuándo ejecutar código según tu prompt.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Compute the compound annual growth rate from 4.2M in 2019 to 11.8M in 2025.",
+      tools=[{"type": "sandbox"}],
+      instructions="Use the sandbox to compute the exact figure before answering.",
+  )
+
+  print(get_output_text(response))
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Compute the compound annual growth rate from 4.2M in 2019 to 11.8M in 2025.',
+    tools: [{ type: 'sandbox' as const }],
+    instructions: 'Use the sandbox to compute the exact figure before answering.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Compute the compound annual growth rate from 4.2M in 2019 to 11.8M in 2025.",
+      "tools": [{ "type": "sandbox" }],
+      "instructions": "Use the sandbox to compute the exact figure before answering."
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="when-to-reach-for-it">
+  ## Cuándo utilizarlo
+</div>
+
+* Cálculos numéricos y análisis estadísticos en los que una estimación no basta
+* Limpieza, análisis sintáctico y transformación de datos
+* Ejecución de código para comprobar la lógica o reproducir un error
+* Generación de archivos y artefactos: CSV, JSON, HTML, informes o cualquier otro archivo que genere el código
+* Flujos de trabajo de varios pasos que requieren archivos intermedios o un estado calculado
+
+<Tip>
+  Combina `sandbox` con `web_search` y el agente podrá recopilar evidencia para luego procesarla dentro del contenedor. Consulta la [referencia de Sandbox](/es/docs/agent-api/tools/sandbox) para ver cómo interactúa el sandbox con otras herramientas.
+</Tip>
+
+<div id="read-the-computed-result">
+  ## Leer el resultado calculado
+</div>
+
+Cuando el agente ejecuta código, el array `output` de la respuesta incluye uno o más elementos `sandbox_results` junto al `message`. Cada uno contiene el `code` ejecutado, el `language` y un array `results` con `stdout`, `stderr`, `exit_code` y `status`. Así es como puedes verificar que el agente calculó la respuesta en lugar de adivinarla. Consulta la [referencia de la estructura de la respuesta](/es/docs/agent-api/tools/sandbox#response-shape) para ver todos los campos.
+
+Extrae ese elemento de la respuesta (aquí `response` proviene del ejemplo [Habilitar el sandbox](#enable-the-sandbox) anterior):
+
+```python Python theme={null}
+for item in response.output:
+    if item.type == "sandbox_results":
+        print(item.code)
+        print(item.results[0].stdout)
+```
+
+Para esa solicitud, el agente escribió y ejecutó este código Python en el sandbox y luego utilizó el valor impreso en su respuesta:
+
+<Accordion title="Respuesta">
+  <Tabs>
+    <Tab title="Código con formato">
+      ```python theme={null}
+      from decimal import Decimal, getcontext
+
+      getcontext().prec = 50
+      start = Decimal('4.2')
+      end = Decimal('11.8')
+      years = Decimal(2025 - 2019)
+      log_growth = (end / start).ln() / years
+      cagr = log_growth.exp() - Decimal(1)
+      print(cagr)
+      print(cagr * 100)
+      ```
+
+      ```text Output theme={null}
+      0.1878787669330553776746033271110368937629924939521
+      18.787876693305537767460332711103689376299249395210
+      ```
+    </Tab>
+
+    <Tab title="Respuesta sin procesar">
+      ```json theme={null}
+      {
+        "id": "resp_482ba96d-c94a-4b0b-8032-e29062a71cdc",
+        "created_at": 1781869590,
+        "model": "openai/gpt-5.6-sol",
+        "object": "response",
+        "output": [
+          {
+            "id": null,
+            "content": null,
+            "role": null,
+            "status": "completed",
+            "type": "sandbox_results",
+            "call_id": "call_7br1ycfTNZ2jFa4HG6otVC76",
+            "code": "from decimal import Decimal, getcontext\ngetcontext().prec=50\nstart=Decimal('4.2')\nend=Decimal('11.8')\nyears=Decimal(2025-2019)\n# Decimal fractional power via exp ln? Decimal has ln exp\ncagr=(end/start).ln()/years\nrate=cagr.exp()-Decimal(1)\nprint(rate)\nprint(rate*100)",
+            "container_id": "iuptasr65kixvn1p7s3r6",
+            "language": "python",
+            "results": [
+              {
+                "duration_ms": 274,
+                "exit_code": 0,
+                "status": "completed",
+                "stderr": "",
+                "stdout": "0.1878787669330553776746033271110368937629924939521\n18.787876693305537767460332711103689376299249395210\n"
+              }
+            ]
+          },
+          {
+            "id": "msg_8349d00e-ca88-4074-a7bd-e3dea9fe77cf",
+            "content": [
+              {
+                "text": "The compound annual growth rate (CAGR) from **4.2M in 2019** to **11.8M in 2025** is:\n\n\\[\n\\text{CAGR} = \\left(\\frac{11.8}{4.2}\\right)^{1/6} - 1\n\\]\n\n\\[\n\\text{CAGR} \\approx 18.79\\%\n\\]\n\n**Answer: 18.8% per year**.",
+                "type": "output_text",
+                "annotations": []
+              }
+            ],
+            "role": "assistant",
+            "status": "completed",
+            "type": "message"
+          }
+        ],
+        "status": "completed",
+        "background": false,
+        "error": null,
+        "usage": {
+          "input_tokens": 3262,
+          "output_tokens": 294,
+          "total_tokens": 3556,
+          "cost": {
+            "currency": "USD",
+            "input_cost": 0.01631,
+            "output_cost": 0.00882,
+            "total_cost": 0.02513,
+            "cache_creation_cost": null,
+            "cache_read_cost": null,
+            "tool_calls_cost": 0.0,
+            "tool_calls_cost_details": {
+              "sandbox": 0
+            }
+          },
+          "input_tokens_details": {
+            "cache_creation_input_tokens": null,
+            "cache_read_input_tokens": null,
+            "cached_tokens": 0
+          },
+          "tool_calls_details": {
+            "sandbox": {
+              "invocation": 1,
+              "duration_ms": 274
+            }
+          },
+          "output_tokens_details": {
+            "reasoning_tokens": 56
+          }
+        },
+        "completed_at": 1781869590,
+        "frequency_penalty": 0,
+        "incomplete_details": null,
+        "instructions": "Use the sandbox to compute the exact figure before answering.",
+        "max_output_tokens": null,
+        "max_tool_calls": null,
+        "metadata": {},
+        "parallel_tool_calls": true,
+        "presence_penalty": 0,
+        "previous_response_id": null,
+        "prompt_cache_key": null,
+        "reasoning": null,
+        "safety_identifier": null,
+        "service_tier": "default",
+        "store": true,
+        "temperature": 1,
+        "text": {
+          "format": {
+            "type": "text"
+          }
+        },
+        "tool_choice": "auto",
+        "tools": [
+          {
+            "type": "sandbox"
+          }
+        ],
+        "top_logprobs": 0,
+        "top_p": 1,
+        "truncation": "",
+        "user": null
+      }
+      ```
+    </Tab>
+  </Tabs>
+</Accordion>
+
+<div id="return-files">
+  ## Devolver archivos
+</div>
+
+Cuando el código del sandbox escribe un archivo y lo comparte, el `output` de la respuesta incluye un elemento `share_file`. Los bytes no vienen incluidos en línea: lístalos y descárgalos con los endpoints de archivos de respuestas, indexados por el `id` de la respuesta:
+
+<CodeGroup>
+  ```python Python theme={null}
+  files = client.responses.files.list(response.id)
+  for f in files.data:
+      print(f.id, f.filename, f.bytes)
+
+  content = client.responses.files.content(
+      file_id=files.data[0].id,
+      response_id=response.id,
+  )
+  content.write_to_file(files.data[0].filename)
+  ```
+
+  ```bash cURL theme={null}
+  # Lista los archivos que produjo la respuesta
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" | jq
+
+  # Descarga uno por su id de archivo
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files/$FILE_ID/content \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -o output.csv
+  ```
+</CodeGroup>
+
+<Note>
+  Las tareas prolongadas en el sandbox se complementan bien con las ejecuciones en segundo plano: envía la solicitud con `background: true` y consulta el estado por ID. Consulta [Control de salida](/es/docs/agent-api/output-control) y la [referencia de Sandbox](/es/docs/agent-api/tools/sandbox#running-in-the-background).
+</Note>
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Estructurar la salida" icon="list-details" href="/es/docs/agent-api/building-agents/shape-output">
+    Exige un JSON estructurado que tu código pueda parsear.
+  </Card>
+
+  <Card title="Referencia del sandbox" icon="box" href="/es/docs/agent-api/tools/sandbox">
+    Todos los ajustes del sandbox, la estructura de la respuesta, la recuperación de archivos y los precios.
+  </Card>
+</CardGroup>

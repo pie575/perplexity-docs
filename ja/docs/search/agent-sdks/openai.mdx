@@ -1,0 +1,377 @@
+---
+title: "OpenAI SDK で Search API を使う"
+sidebarTitle: "OpenAI"
+description: "Perplexity の Search API を OpenAI Responses API の関数ツールとして登録し、GPT モデルで標準的なツール呼び出しループを実行します。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+このガイドでは、Perplexity の [Search API](/ja/docs/search/quickstart) を関数ツールとして OpenAI のモデルに公開する方法を説明します。Responses API では、手動のツール呼び出しループを使用します。モデルが `call_id` を持つ `function_call` アイテムを出力するので、ツールを実行し (ここでは `client.search.create` の呼び出し) 、その結果を同じ `call_id` で対応付けた `function_call_output` アイテムとして返します。このループは、レスポンスに未処理の関数呼び出しが含まれなくなるまで繰り返されます。
+
+<Info>
+  このページでは、より新しい OpenAI のインターフェースである **Responses API** (`client.responses.create`) を使用します。ツールの形式はフラット (`{type: "function", name, description, parameters, strict}`) で、`function: {…}` の下にネストする従来の `chat.completions` の関数呼び出し形式とは異なります。
+</Info>
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install openai perplexityai
+  export OPENAI_API_KEY="your_openai_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+
+  ```bash Typescript theme={null}
+  npm install openai @perplexity-ai/perplexity_ai
+  export OPENAI_API_KEY="your_openai_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+</CodeGroup>
+
+<div id="tool-definition">
+  ## ツール定義
+</div>
+
+Responses API はフラットなツールオブジェクトを受け取ります。`type`、`name`、`description`、`parameters` (JSON Schema) 、および任意の `strict` です。以下の説明文は Perplexity の Search API 向けにチューニングしたものです。この文言そのものが、短くキーワード中心の良質なクエリを生み出す鍵となるため、変更せずそのまま使用してください。
+
+<CodeGroup>
+  ```python Python theme={null}
+  WEB_SEARCH_TOOL_DESCRIPTION = """\
+  Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline."""
+
+  QUERIES_PARAM_DESCRIPTION = (
+      "An array of keyword-based search queries. Each query should be short, "
+      "as longer queries may reduce performance. Do not provide more than three "
+      "queries to maintain efficiency."
+  )
+
+  WEB_SEARCH_TOOL = {
+      "type": "function",
+      "name": "web_search",
+      "description": WEB_SEARCH_TOOL_DESCRIPTION,
+      "strict": True,
+      "parameters": {
+          "type": "object",
+          "additionalProperties": False,
+          "properties": {
+              "queries": {
+                  "type": "array",
+                  "description": QUERIES_PARAM_DESCRIPTION,
+                  "items": {"type": "string"},
+              },
+          },
+          "required": ["queries"],
+      },
+  }
+  ```
+
+  ```typescript Typescript theme={null}
+  const WEB_SEARCH_TOOL_DESCRIPTION = `Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline.`;
+
+  const QUERIES_PARAM_DESCRIPTION =
+    "An array of keyword-based search queries. Each query should be short, " +
+    "as longer queries may reduce performance. Do not provide more than three " +
+    "queries to maintain efficiency.";
+
+  const WEB_SEARCH_TOOL = {
+    type: "function" as const,
+    name: "web_search",
+    description: WEB_SEARCH_TOOL_DESCRIPTION,
+    strict: true,
+    parameters: {
+      type: "object" as const,
+      additionalProperties: false,
+      properties: {
+        queries: {
+          type: "array" as const,
+          description: QUERIES_PARAM_DESCRIPTION,
+          items: { type: "string" as const },
+        },
+      },
+      required: ["queries"],
+    },
+  };
+  ```
+</CodeGroup>
+
+<Warning>
+  **strict モードの制約。** `strict: true` の場合、JSON Schema には `additionalProperties: false` を設定し、すべてのプロパティを `required` に列挙する必要があります。OpenAI は strict モードでの `maxItems`/`minItems` などの制約を受け付けません。「クエリは最大 3 件まで」というルールは description で伝えたうえで、ハンドラー側でも念のため切り詰める実装にしてください。
+</Warning>
+
+<div id="tool-handler">
+  ## ツールハンドラー
+</div>
+
+ハンドラーは `client.search.create` を薄くラップしただけのものです。Search API はクエリの配列をそのまま受け付けるため、モデルが出力した配列をそのまま渡せます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  perplexity = Perplexity()
+
+  def run_web_search(queries: list[str]) -> str:
+      """Perplexity Search を呼び出し、結果をモデル向けに整形する。"""
+      # 念のための上限 — 説明では 3 件以下としているが、何も信用しない。
+      queries = queries[:3]
+
+      response = perplexity.search.create(query=queries, max_results=5)
+
+      lines = []
+      for result in response.results:
+          snippet = (result.snippet or "").strip().replace("\n", " ")
+          if len(snippet) > 400:
+              snippet = snippet[:400] + "…"
+          lines.append(f"- {result.title}\n  {result.url}\n  {snippet}")
+      return "\n\n".join(lines) if lines else "No results."
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const perplexity = new Perplexity();
+
+  async function runWebSearch(queries: string[]): Promise<string> {
+    const capped = queries.slice(0, 3);
+
+    const response = await perplexity.search.create({
+      query: capped,
+      max_results: 5,
+    });
+
+    const lines = response.results.map((r) => {
+      const snippet = (r.snippet ?? "").trim().replace(/\n/g, " ");
+      const trimmed = snippet.length > 400 ? `${snippet.slice(0, 400)}…` : snippet;
+      return `- ${r.title}\n  ${r.url}\n  ${trimmed}`;
+    });
+    return lines.length ? lines.join("\n\n") : "No results.";
+  }
+  ```
+</CodeGroup>
+
+<div id="tool-call-loop">
+  ## ツール呼び出しループ
+</div>
+
+Responses API は `response.output` をフラットなアイテムリストとして返します。このリストを走査して `type` が `"function_call"` のアイテムを見つけ、それぞれの呼び出しを実行したうえで、対になる `function_call_output` アイテムを構築中の `input` 配列に追加します。レスポンスに関数呼び出しが含まれなくなるまで、`responses.create` の呼び出しを繰り返します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from openai import OpenAI
+
+  openai_client = OpenAI()
+
+  def chat_with_search(user_prompt: str, model: str = "gpt-5.5") -> str:
+      # Responses API の `input` は順序付きの項目リストであり、ループの進行に応じて
+      # function_call_output 項目を追加していく。
+      input_items: list[dict] = [{"role": "user", "content": user_prompt}]
+
+      while True:
+          response = openai_client.responses.create(
+              model=model,
+              input=input_items,
+              tools=[WEB_SEARCH_TOOL],
+          )
+
+          function_calls = [
+              item for item in response.output if item.type == "function_call"
+          ]
+
+          if not function_calls:
+              return response.output_text
+
+          # アシスタントの function_call 項目を会話に残す。
+          for item in response.output:
+              input_items.append(item.model_dump())
+
+          # 各関数呼び出しを実行し、対になる function_call_output を追加する。
+          for call in function_calls:
+              args = json.loads(call.arguments)
+              if call.name == "web_search":
+                  output = run_web_search(args["queries"])
+              else:
+                  output = json.dumps({"error": f"unknown tool: {call.name}"})
+              input_items.append({
+                  "type": "function_call_output",
+                  "call_id": call.call_id,
+                  "output": output,
+              })
+
+
+  if __name__ == "__main__":
+      answer = chat_with_search(
+          "What were the major AI infrastructure announcements this week?"
+      )
+      print(answer)
+  ```
+
+  ```typescript Typescript theme={null}
+  import OpenAI from "openai";
+
+  const openaiClient = new OpenAI();
+
+  async function chatWithSearch(
+    userPrompt: string,
+    model = "gpt-5.5",
+  ): Promise<string> {
+    const inputItems: OpenAI.Responses.ResponseInputItem[] = [
+      { role: "user", content: userPrompt },
+    ];
+
+    while (true) {
+      const response = await openaiClient.responses.create({
+        model,
+        input: inputItems,
+        tools: [WEB_SEARCH_TOOL],
+      });
+
+      const functionCalls = response.output.filter(
+        (item): item is OpenAI.Responses.ResponseFunctionToolCall =>
+          item.type === "function_call",
+      );
+
+      if (functionCalls.length === 0) {
+        return response.output_text;
+      }
+
+      // アシスタントの function_call 項目を会話に残す。
+      inputItems.push(...response.output);
+
+      for (const call of functionCalls) {
+        const args = JSON.parse(call.arguments) as { queries: string[] };
+        let output: string;
+        if (call.name === "web_search") {
+          output = await runWebSearch(args.queries);
+        } else {
+          output = JSON.stringify({ error: `unknown tool: ${call.name}` });
+        }
+        inputItems.push({
+          type: "function_call_output",
+          call_id: call.call_id,
+          output,
+        });
+      }
+    }
+  }
+
+  (async () => {
+    const answer = await chatWithSearch(
+      "What were the major AI infrastructure announcements this week?",
+    );
+    console.log(answer);
+  })();
+  ```
+</CodeGroup>
+
+<div id="streaming">
+  ## ストリーミング
+</div>
+
+ストリーミングでは `client.responses.stream(...)` を使用します。SDK は型付きイベントを発行します。`function_call` アイテムの開始時に `response.output_item.added`、引数 JSON のチャンクごとに `response.function_call_arguments.delta`、引数文字列が完成した時点で `response.function_call_arguments.done` が発行されます。ループの構造は、その点を除けば非ストリーミング版と同一です。
+
+<CodeGroup>
+  ```python Python theme={null}
+  with openai_client.responses.stream(
+      model="gpt-5.5",
+      input=input_items,
+      tools=[WEB_SEARCH_TOOL],
+  ) as stream:
+      for event in stream:
+          if event.type == "response.output_text.delta":
+              print(event.delta, end="", flush=True)
+      final = stream.get_final_response()
+
+  # final.output を調べて function_call アイテムを確認し、
+  # 非ストリーミング版と同じ方法でループを再開します。
+  ```
+
+  ```typescript Typescript theme={null}
+  const stream = openaiClient.responses.stream({
+    model: "gpt-5.5",
+    input: inputItems,
+    tools: [WEB_SEARCH_TOOL],
+  });
+
+  for await (const event of stream) {
+    if (event.type === "response.output_text.delta") {
+      process.stdout.write(event.delta);
+    }
+  }
+  const final = await stream.finalResponse();
+  // 非ストリーミング版と同様に、final.output を調べて function_call アイテムを確認します。
+  ```
+</CodeGroup>
+
+<div id="notes">
+  ## 注意事項
+</div>
+
+* **`call_id` がリクエストと結果を紐付けます。** すべての `function_call_output` アイテムには、呼び出し元の `call_id` を含める必要があります。1回のアシスタントターンで複数の関数呼び出しを並列に行った場合は、それぞれに対応する出力を用意します。
+* **サーバー側での状態管理。** 各ターンで `input` 配列全体を再送する代わりに、`previous_response_id=<id>` を渡して新しいアイテムだけを追加できます。長いエージェントループでは特に有用です。
+* **`output_text` のショートカット。** `response.output_text` は、アシスタントのテキストコンテンツをフラット化して返します。より細かい単位 (注釈やセグメント) でアクセスしたい場合は、`response.output` を反復処理し、メッセージアイテムから `output_text` ブロックを取り出してください。
+* **ドメインと日付。** 取得条件を固定したい場合は、`run_web_search` 内で `search_domain_filter`、`country` などの Search API パラメータを渡してください。パラメータの一覧は [Search API クイックスタート](/ja/docs/search/quickstart) を参照してください。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Anthropic SDK で使う" icon="code" href="/ja/docs/search/agent-sdks/anthropic">
+    Search API を Anthropic Messages API に組み込みます。
+  </Card>
+
+  <Card title="Gemini SDK で使う" icon="code" href="/ja/docs/search/agent-sdks/gemini">
+    Search API を Google の `google-genai` SDK に組み込みます。
+  </Card>
+
+  <Card title="Search API クイックスタート" icon="rocket" href="/ja/docs/search/quickstart">
+    Search API の全パラメータリファレンス。
+  </Card>
+
+  <Card title="検索のベストプラクティス" icon="lightbulb" href="/ja/docs/search/best-practices">
+    本番環境の検索ワークロードに適したパターン。
+  </Card>
+</CardGroup>

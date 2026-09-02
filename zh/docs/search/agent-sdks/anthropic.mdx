@@ -1,0 +1,366 @@
+---
+title: "在 Anthropic SDK 中使用 Search API"
+sidebarTitle: "Anthropic"
+description: "将 Perplexity 的 Search API 注册为 Anthropic Messages API 中的工具，并结合 Claude 运行标准的工具调用循环。"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+本指南介绍如何将 Perplexity 的 [Search API](/zh/docs/search/quickstart) 作为工具提供给 Claude 使用。Anthropic Messages API 采用手动的工具调用循环：模型输出一个 `tool_use` 块，你执行相应工具 (在本例中即调用 `client.search.create`) ，再将结果以 `tool_result` 的形式回传。如此循环，直到模型给出最终答案。
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install anthropic perplexityai
+  export ANTHROPIC_API_KEY="your_anthropic_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+
+  ```bash Typescript theme={null}
+  npm install @anthropic-ai/sdk @perplexity-ai/perplexity_ai
+  export ANTHROPIC_API_KEY="your_anthropic_key"
+  export PERPLEXITY_API_KEY="your_perplexity_key"
+  ```
+</CodeGroup>
+
+<div id="tool-definition">
+  ## 工具定义
+</div>
+
+Claude 需要一段工具描述，告诉它何时以及如何调用 `web_search`。下面这段描述是针对 Perplexity 的 Search API 专门调优的，请原样保留——正是描述的措辞和参数说明，才能生成简短、优质的关键词式查询。
+
+<CodeGroup>
+  ```python Python theme={null}
+  WEB_SEARCH_TOOL_DESCRIPTION = """\
+  Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline."""
+
+  QUERIES_PARAM_DESCRIPTION = (
+      "An array of keyword-based search queries. Each query should be short, "
+      "as longer queries may reduce performance. Do not provide more than three "
+      "queries to maintain efficiency."
+  )
+
+  WEB_SEARCH_TOOL = {
+      "name": "web_search",
+      "description": WEB_SEARCH_TOOL_DESCRIPTION,
+      "input_schema": {
+          "type": "object",
+          "properties": {
+              "queries": {
+                  "type": "array",
+                  "description": QUERIES_PARAM_DESCRIPTION,
+                  "items": {"type": "string"},
+                  "minItems": 1,
+                  "maxItems": 3,
+              },
+          },
+          "required": ["queries"],
+      },
+  }
+  ```
+
+  ```typescript Typescript theme={null}
+  const WEB_SEARCH_TOOL_DESCRIPTION = `Searches the web for current and factual information to answer user queries, returning relevant results with titles, URLs, and content snippets, similar to Google or Bing. Intended for questions about up-to-date or externally verified information beyond your knowledge cutoff. The tool works best with an array of short, keyword-focused queries. Complex queries that require multi-step reasoning are not supported. Time-sensitive queries are supported if the date is included in the query.
+
+  Best practices for using this tool:
+  - Limit the number of queries in each request to a maximum of three to maintain efficiency.
+  - For multi-entity questions, break them into separate, single-entity queries:
+    - Preferred:
+      [
+        "Brand A protein powder review",
+        "Brand B protein powder review"
+      ]
+    - Not recommended:
+      [
+        "Brand A vs Brand B protein powder review"
+      ]
+
+  - For simple queries, keep each query straightforward and focused:
+    - Preferred: ["inflation rate Canada"]
+    - Not recommended: ["What is the inflation rate in Canada?"]
+
+  Each query should be short to ensure optimal tool performance. Make sure all provided examples and generated queries follow this guideline.`;
+
+  const QUERIES_PARAM_DESCRIPTION =
+    "An array of keyword-based search queries. Each query should be short, " +
+    "as longer queries may reduce performance. Do not provide more than three " +
+    "queries to maintain efficiency.";
+
+  const WEB_SEARCH_TOOL = {
+    name: "web_search",
+    description: WEB_SEARCH_TOOL_DESCRIPTION,
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        queries: {
+          type: "array" as const,
+          description: QUERIES_PARAM_DESCRIPTION,
+          items: { type: "string" as const },
+          minItems: 1,
+          maxItems: 3,
+        },
+      },
+      required: ["queries"],
+    },
+  };
+  ```
+</CodeGroup>
+
+<div id="tool-handler">
+  ## 工具处理函数
+</div>
+
+该处理函数只是对 `client.search.create` 的一层轻量封装。Search API 原生支持传入查询数组 (最多五条) ，因此 Claude 生成的数组可以直接透传。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  perplexity = Perplexity()
+
+  def run_web_search(queries: list[str]) -> str:
+      """调用 Perplexity Search 并将结果格式化后提供给模型。"""
+      response = perplexity.search.create(query=queries, max_results=5)
+
+      lines = []
+      for result in response.results:
+          snippet = (result.snippet or "").strip().replace("\n", " ")
+          if len(snippet) > 400:
+              snippet = snippet[:400] + "…"
+          lines.append(f"- {result.title}\n  {result.url}\n  {snippet}")
+      return "\n\n".join(lines) if lines else "No results."
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+
+  const perplexity = new Perplexity();
+
+  async function runWebSearch(queries: string[]): Promise<string> {
+    const response = await perplexity.search.create({
+      query: queries,
+      max_results: 5,
+    });
+
+    const lines = response.results.map((r) => {
+      const snippet = (r.snippet ?? "").trim().replace(/\n/g, " ");
+      const trimmed = snippet.length > 400 ? `${snippet.slice(0, 400)}…` : snippet;
+      return `- ${r.title}\n  ${r.url}\n  ${trimmed}`;
+    });
+    return lines.length ? lines.join("\n\n") : "No results.";
+  }
+  ```
+</CodeGroup>
+
+<div id="tool-use-loop">
+  ## 工具调用循环
+</div>
+
+Anthropic 的 Messages API 会返回值为 `"tool_use"` 的 `stop_reason`，并在 `response.content` 中附带一个或多个 `ToolUseBlock`。你需要执行其中的每个工具调用，为每次调用构建一个 `tool_result` 块 (通过 `tool_use_id` 与调用配对) ，并在单条用户消息中将所有结果一并回传。如此循环，直到 `stop_reason` 不再是 `"tool_use"`。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+  from anthropic import Anthropic
+
+  claude = Anthropic()
+
+  def chat_with_search(user_prompt: str, model: str = "claude-sonnet-4-6") -> str:
+      messages = [{"role": "user", "content": user_prompt}]
+
+      while True:
+          response = claude.messages.create(
+              model=model,
+              max_tokens=1024,
+              tools=[WEB_SEARCH_TOOL],
+              messages=messages,
+          )
+
+          if response.stop_reason != "tool_use":
+              # 最终答案 —— 从 assistant 消息中提取文本块。
+              return "".join(
+                  block.text for block in response.content if block.type == "text"
+              )
+
+          # 将 assistant 的工具调用轮次追加到历史记录。
+          messages.append({"role": "assistant", "content": response.content})
+
+          # 执行本轮的每个工具调用，并按 tool_use_id 配对结果。
+          tool_results = []
+          for block in response.content:
+              if block.type != "tool_use":
+                  continue
+              if block.name == "web_search":
+                  output = run_web_search(block.input["queries"])
+              else:
+                  output = json.dumps({"error": f"unknown tool: {block.name}"})
+              tool_results.append({
+                  "type": "tool_result",
+                  "tool_use_id": block.id,
+                  "content": output,
+              })
+
+          messages.append({"role": "user", "content": tool_results})
+
+
+  if __name__ == "__main__":
+      answer = chat_with_search(
+          "What were the major AI infrastructure announcements this week?"
+      )
+      print(answer)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Anthropic from "@anthropic-ai/sdk";
+
+  const claude = new Anthropic();
+
+  async function chatWithSearch(
+    userPrompt: string,
+    model = "claude-sonnet-4-6",
+  ): Promise<string> {
+    const messages: Anthropic.MessageParam[] = [
+      { role: "user", content: userPrompt },
+    ];
+
+    while (true) {
+      const response = await claude.messages.create({
+        model,
+        max_tokens: 1024,
+        tools: [WEB_SEARCH_TOOL],
+        messages,
+      });
+
+      if (response.stop_reason !== "tool_use") {
+        return response.content
+          .filter((b): b is Anthropic.TextBlock => b.type === "text")
+          .map((b) => b.text)
+          .join("");
+      }
+
+      messages.push({ role: "assistant", content: response.content });
+
+      const toolResults: Anthropic.ToolResultBlockParam[] = [];
+      for (const block of response.content) {
+        if (block.type !== "tool_use") continue;
+        let output: string;
+        if (block.name === "web_search") {
+          const input = block.input as { queries: string[] };
+          output = await runWebSearch(input.queries);
+        } else {
+          output = JSON.stringify({ error: `unknown tool: ${block.name}` });
+        }
+        toolResults.push({
+          type: "tool_result",
+          tool_use_id: block.id,
+          content: output,
+        });
+      }
+
+      messages.push({ role: "user", content: toolResults });
+    }
+  }
+
+  (async () => {
+    const answer = await chatWithSearch(
+      "What were the major AI infrastructure announcements this week?",
+    );
+    console.log(answer);
+  })();
+  ```
+</CodeGroup>
+
+<div id="streaming">
+  ## 流式传输
+</div>
+
+对于流式响应，请使用 `client.messages.stream(...)`，并从事件中累积 `tool_use` 块。模型会发出携带部分 JSON 参数的 `input_json_delta` 事件；SDK 辅助方法会将这些片段累积起来，并通过 `stream.get_final_message()` (Python) 或 `stream.finalMessage()` (TypeScript) 返回完整的 `tool_use` 块。除此之外，循环结构与非流式版本完全一致。
+
+<CodeGroup>
+  ```python Python theme={null}
+  with claude.messages.stream(
+      model="claude-sonnet-4-6",
+      max_tokens=1024,
+      tools=[WEB_SEARCH_TOOL],
+      messages=messages,
+  ) as stream:
+      for text in stream.text_stream:
+          print(text, end="", flush=True)
+      final = stream.get_final_message()
+
+  # 检查 final.stop_reason 和 final.content 中的 tool_use 块，然后
+  # 以与非流式版本相同的方式继续循环。
+  ```
+
+  ```typescript Typescript theme={null}
+  const stream = claude.messages.stream({
+    model: "claude-sonnet-4-6",
+    max_tokens: 1024,
+    tools: [WEB_SEARCH_TOOL],
+    messages,
+  });
+
+  for await (const chunk of stream) {
+    if (chunk.type === "content_block_delta" && chunk.delta.type === "text_delta") {
+      process.stdout.write(chunk.delta.text);
+    }
+  }
+  const final = await stream.finalMessage();
+  // 与非流式版本一样，检查 final.stop_reason 和 final.content。
+  ```
+</CodeGroup>
+
+<div id="notes">
+  ## 说明
+</div>
+
+* **并行工具调用。** Claude 可以在单个助手回合中发出多个 `tool_use` 块。每个块都必须在*同一条*后续用户消息中有与之对应的 `tool_result`，并通过 `tool_use_id` 配对。如需禁用，请设置 `tool_choice={"type": "auto", "disable_parallel_tool_use": True}`。
+* **结果格式。** 返回给 `tool_result.content` 的字符串就是模型接下来读取的内容。在摘要片段旁附上 URL，有助于模型在生成最终回答时引用来源。
+* **错误处理。** 若要表明工具调用失败，请在 `tool_result` 块上设置 `"is_error": True`，并在 `content` 中填入简短的错误信息。模型会看到该错误并据此恢复 (例如重新组织查询) 。
+* **域名与日期。** 如果需要固定的检索约束，可在 `run_web_search` 内传入 `search_domain_filter`、`country` 等 Search API 参数。完整参数列表请参阅 [Search API 快速入门](/zh/docs/search/quickstart)。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="配合 OpenAI SDK 使用" icon="code" href="/zh/docs/search/agent-sdks/openai">
+    将 Search API 接入 OpenAI Responses API。
+  </Card>
+
+  <Card title="配合 Gemini SDK 使用" icon="code" href="/zh/docs/search/agent-sdks/gemini">
+    将 Search API 接入 Google 的 `google-genai` SDK。
+  </Card>
+
+  <Card title="Search API 快速入门" icon="rocket" href="/zh/docs/search/quickstart">
+    完整的 Search API 参数参考。
+  </Card>
+
+  <Card title="搜索最佳实践" icon="lightbulb" href="/zh/docs/search/best-practices">
+    适用于生产环境搜索负载的实践模式。
+  </Card>
+</CardGroup>

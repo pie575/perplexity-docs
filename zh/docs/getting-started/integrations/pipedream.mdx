@@ -1,0 +1,136 @@
+---
+title: "Perplexity 与 Pipedream 集成"
+description: "将 Perplexity 接入 Pipedream 工作流，与 3,000 多款应用协同联动——通过代码步骤和无代码步骤，自动完成研究、摘要与有据可循的响应生成。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概述
+</div>
+
+[Pipedream](https://pipedream.com) 是一个工作流自动化平台，提供 3,000 多个预构建的应用集成。借助 Perplexity 应用，你只需完成一次身份验证，即可在任意 Pipedream 工作流中调用 Perplexity 的 Agent API 和 Search 端点——无论该工作流是由邮件、webhook、RSS 订阅源、Slack 消息、Google Sheets 更新还是定时任务触发。
+
+<Info>
+  **Pipedream** 支持在同一个工作流中混合使用无代码可视化步骤与完整的 Node.js / Python 代码步骤。详情请见 [pipedream.com](https://pipedream.com)。
+</Info>
+
+<div id="authentication">
+  ## 身份验证
+</div>
+
+<Steps>
+  <Step title="获取你的 API key">
+    在 [API 门户](https://console.perplexity.ai/project/keys) 中生成 Perplexity API key。
+  </Step>
+
+  <Step title="在 Pipedream 中连接 Perplexity">
+    在 Pipedream 中打开任意工作流，将 **Perplexity** 应用添加到某个步骤。点击 **Connect new account**，粘贴你的 API key。Pipedream 会安全地存储该密钥，并在后续所有步骤中通过 `$auth.api_key` 引用它。
+  </Step>
+</Steps>
+
+<Card title="获取 API Key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 API 门户中生成你的 Perplexity API key。
+</Card>
+
+<div id="built-in-action-create-response">
+  ## 内置操作：Create Response
+</div>
+
+Perplexity 应用内置了 **Create Response (Agent API)** 操作，无需编写任何代码即可发起 Agent API 请求。
+
+* **端点**：`POST /v1/agent`
+* **输入**：preset 或 模型、输入内容、工具 (`web_search`、`fetch_url`) 以及可选的指令。
+* **输出**：Agent API 响应，包含 `status`、`output` 和用量信息。
+
+在步骤选择器中搜索 **Perplexity → Create Response (Agent API)** 即可添加。
+
+<div id="custom-code-step">
+  ## 自定义代码步骤
+</div>
+
+若要集成新的 模型，可使用 Pipedream 的 **Node.js 代码步骤**，通过已保存的 Perplexity 连接调用 Agent API：
+
+```javascript theme={null}
+import { axios } from "@pipedream/platform";
+
+export default defineComponent({
+  props: {
+    perplexity: {
+      type: "app",
+      app: "perplexity",
+    },
+  },
+  async run({ steps, $ }) {
+    return await axios($, {
+      method: "POST",
+      url: "https://api.perplexity.ai/v1/agent",
+      headers: {
+        Authorization: `Bearer ${this.perplexity.$auth.api_key}`,
+        "Content-Type": "application/json",
+        "X-Pplx-Integration": "pipedream/1.0",
+      },
+      data: {
+        preset: "low",
+        input: "Summarize this week's AI research.",
+      },
+    });
+  },
+});
+```
+
+你可以替换 URL 来调用任意 [Perplexity API 端点](/zh/api-reference)：
+
+* `/v1/agent` — 支持第三方 模型 和 preset 的 Agent API
+* `/search` — 原始排序网页结果
+* `/v1/embeddings` — 向量嵌入
+
+<div id="example-workflows">
+  ## 示例工作流
+</div>
+
+在 Pipedream 上使用 Perplexity 的常见模式：
+
+* **客服自动化** —— 收到邮件后触发一个 Perplexity Agent API 步骤起草回复，再将对话记录到 CRM。
+* **新闻流摘要** —— RSS 触发器获取的新文章经 Perplexity 生成摘要后，连同引用一起发布到 Slack 频道。
+* **品牌监测** —— 将社交媒体上的提及内容传入 Perplexity 进行情感分析和实体抽取，再写入 Google 表格。
+* **每日研究简报** —— 由定时 cron 触发一次 Perplexity 查询，每天早晨通过邮件发送结果或发布到聊天频道。
+
+<div id="security-credentials">
+  ## 安全与凭据
+</div>
+
+Pipedream 会以静态加密的方式存储你的 Perplexity API key，并通过 `$auth` 对象注入到每个步骤中——密钥绝不会出现在步骤界面或日志里。你可以随时在账户的 **Connected Accounts** 页面轮换密钥。
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Pipedream Perplexity 应用" icon="plug" href="https://pipedream.com/apps/perplexity">
+    Pipedream 上的官方 Perplexity 应用。
+  </Card>
+
+  <Card title="Pipedream 文档" icon="book" href="https://pipedream.com/docs">
+    完整的 Pipedream 文档。
+  </Card>
+
+  <Card title="Perplexity API 参考" icon="code" href="/zh/api-reference">
+    完整的 Perplexity API 参考。
+  </Card>
+
+  <Card title="Agent API 模型" icon="cpu" href="/zh/docs/agent-api/models">
+    对比 Agent API 支持的各个模型。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中需要帮助？
+
+* 浏览 [Pipedream 文档](https://pipedream.com/docs)
+* 查阅我们的 [常见问题](/zh/docs/resources/faq)

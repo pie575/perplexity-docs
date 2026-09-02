@@ -1,0 +1,354 @@
+---
+title: "Perplexity CLI"
+description: "Perplexity の pplx コマンドラインインターフェースをインストールし、ターミナルやコーディングエージェントからウェブ検索とクエリに関連するページスニペットの取得を行う方法を説明します。"
+---
+
+`pplx` CLI は Perplexity Search API から構造化された JSON を返すため、シェルパイプラインや対話的なターミナル作業のほか、最新のウェブ検索結果やクエリに関連するページスニペットを必要とするコーディングエージェントでも役立ちます。
+
+<div id="install">
+  ## インストール
+</div>
+
+プロジェクトでエージェントを開き、次の内容を送信します。
+
+```text wrap theme={null}
+https://github.com/perplexityai/api-platform-developers/blob/main/skills/pplx-cli/SKILL.md を読んでこのスキルをインストールし、それを使ってターミナルからウェブ検索を実行してください。
+```
+
+エージェントを使わない場合は、インストーラーを手動で実行してください:
+
+```bash theme={null}
+curl -fsSL https://github.com/perplexityai/perplexity-cli/releases/latest/download/install.sh | sh
+```
+
+<div id="authenticate">
+  ## 認証
+</div>
+
+すべてのコマンドの実行には [Perplexity API key](https://console.perplexity.ai/project/keys) が必要です。
+以下のいずれかの認証方法を選択してください。
+
+<Tabs>
+  <Tab title="環境変数">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="対話型ログイン">
+    ```bash theme={null}
+    pplx auth login
+    ```
+  </Tab>
+</Tabs>
+
+<div id="search-the-web">
+  ## ウェブを検索する
+</div>
+
+```bash theme={null}
+pplx search web "what is a bloom filter" -n 2
+```
+
+<Accordion title="レスポンス">
+  ```json wrap theme={null}
+  {
+    "total": 2,
+    "hits": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bloom_filter",
+        "title": "Bloom filter",
+        "domain": "en.wikipedia.org",
+        "snippet": "In computing, a **Bloom filter** is a space-efficient probabilistic data structure, conceived by Burton Howard ...",
+        "summary": "In computing, a **Bloom filter** is a space-efficient probabilistic data structure, conceived by Burton Howard ...",
+        "date": "2004-04-17",
+        "last_updated": "2026-07-08",
+        "trust": {
+          "level": 2,
+          "name": "trusted",
+          "description": "is trusted for community-edited general knowledge and reference articles across education, science, history, and many non-controversial topics worldwide."
+        }
+      },
+      {
+        "url": "https://systemdesign.one/bloom-filters-explained/",
+        "title": "Bloom Filters Explained - System Design",
+        "domain": "systemdesign.one",
+        "snippet": "## What is a bloom filter?\nA Bloom filter is a space-efficient probabilistic data structure that is used to te ...",
+        "summary": "## What is a bloom filter?\nA Bloom filter is a space-efficient probabilistic data structure that is used to te ...",
+        "date": "2023-03-06",
+        "last_updated": "2026-07-13",
+        "trust": {
+          "level": 1,
+          "name": "credible",
+          "description": "is credible for personally authored software system design case studies and interview preparation content without formal institutional peer review."
+        }
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+<Info>
+  `-n` のデフォルト値は `10` です。
+  フラグの全一覧と入出力の形式の概要は、`pplx search web --help` を実行して確認してください。
+</Info>
+
+<div id="filter-results">
+  ### 結果をフィルタリングする
+</div>
+
+これらのフラグは検索の範囲を絞り込みます。
+Search API のフィルターと同じものであるため、動作や制限も同一です。詳細は[ドメインフィルター](/ja/docs/search/filters/domain-filter)および[日付・時刻フィルター](/ja/docs/search/filters/date-time-filters)を参照してください。
+
+```bash theme={null}
+pplx search web "AI inference hardware" \
+  --domains arxiv.org,nvidia.com \
+  --published-after-date 07/01/2026 \
+  -n 5
+```
+
+| フラグ                       | 形式                                     | 説明                   | 例                                         |
+| ------------------------- | -------------------------------------- | -------------------- | ----------------------------------------- |
+| `--domains`               | カンマ区切りのホスト名                            | これらのドメインの結果のみを返す     | `--domains arxiv.org,nvidia.com`          |
+| `--excluded-domains`      | カンマ区切りのホスト名                            | これらのドメインの結果を除外する     | `--excluded-domains reddit.com,quora.com` |
+| `--published-after-date`  | `MM/DD/YYYY`                           | この日付以降に公開されたもの       | `--published-after-date 07/01/2026`       |
+| `--published-before-date` | `MM/DD/YYYY`                           | この日付以前に公開されたもの       | `--published-before-date 07/31/2026`      |
+| `--updated-after-date`    | `MM/DD/YYYY`                           | この日付以降に最終更新されたもの     | `--updated-after-date 07/01/2026`         |
+| `--updated-before-date`   | `MM/DD/YYYY`                           | この日付以前に最終更新されたもの     | `--updated-before-date 07/31/2026`        |
+| `--recency-filter`        | `hour`, `day`, `week`, `month`, `year` | 明示的な日付の代わりに相対的な期間を指定 | `--recency-filter week`                   |
+| `--country`               | ISO 3166-1 alpha-2 コード                 | 検索を実行する地域。既定値は `US`  | `--country DE`                            |
+
+<Note>
+  `--recency-filter` は `--published-after-date` や `--published-before-date` と併用できません。
+  併用したリクエストは `BAD_REQUEST` で失敗します。
+</Note>
+
+<div id="ask-the-same-question-several-ways">
+  ### 同じ質問を複数の言い方で尋ねる
+</div>
+
+追加の位置引数クエリは、1 つの質問を言い換えたものであり、別々の検索ではありません。
+CLI が返すのはあくまで単一のランク付けされた結果セットですが、質問の言い方を複数用意することで、最初は思いつかなかった表現にしか一致しないページも拾い上げられます。
+
+```bash theme={null}
+pplx search web \
+  "kubernetes pod OOMKilled causes" \
+  "why does k8s keep killing my pod with OOMKilled"
+```
+
+<div id="save-full-results">
+  ### 完全な結果を保存する
+</div>
+
+標準出力への出力を最小限に抑えつつ、完全な結果を保存します。
+
+```bash theme={null}
+pplx search web "kubernetes pod OOMKilled causes" \
+  --output-dir out \
+  --stdout-preview=200
+```
+
+完全なレスポンスは `out/web/` 配下に書き出され、標準出力にはそのパスが `saved_to` として含まれます。
+`--stdout-preview` が標準出力を切り詰めるのは、`--output-dir` または `PPLX_OUTPUT_DIR` も併せて指定した場合のみです。
+切り詰められた文字列は末尾が `...<truncated>` となり、レスポンスにはトップレベルの `"truncated": true` が追加されます。
+
+<div id="search-errors">
+  ### 検索のエラー
+</div>
+
+検索は成功するか、完全に失敗するかのどちらかです。失敗した場合、標準出力 には何も出力されず、JSON のエラーオブジェクトが stderr に出力されます。
+検索固有のコードは `BAD_REQUEST` で、フィルター同士が矛盾している場合 (`--recency-filter` を公開日の範囲指定と併用した場合など) にサービスから返されます。
+それ以外にここで発生し得るエラーは、すべて[共通のエラー](#handle-errors)です。
+
+<div id="generate-query-relevant-snippets">
+  ## クエリに関連するスニペットを生成する
+</div>
+
+ページ全体を取得するのではなく、クエリに関連する箇所だけを抽出します。
+
+```bash theme={null}
+pplx content snippets "how does a bloom filter decide set membership" \
+  https://en.wikipedia.org/wiki/Bloom_filter
+```
+
+<Accordion title="レスポンス">
+  ```json wrap theme={null}
+  {
+    "results": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bloom_filter",
+        "text": "In computing, a **Bloom filter** is a space-efficient probabilistic data structure, conceived by Burton Howard Bloom in 1970, that is used to test whether an element is a member of a set. False positive matches are possible, but false negatives are not ...",
+        "tokens_count": 1047
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+`text` には、ページのうちクエリに関連する箇所のみが含まれます。その間の省略された部分は `…` 文字で示されます。
+
+<Info>
+  `content snippets` を使用するには CLI v0.2.3 以降が必要です。
+  それより古いバイナリの場合は、まず `pplx update` を実行してください。
+</Info>
+
+<Note>
+  `pplx content fetch` は非推奨であり、今後動作しなくなります。`content snippets` を使用してください。
+</Note>
+
+<div id="cover-several-pages-in-one-call">
+  ### 1回の呼び出しで複数のページをカバーする
+</div>
+
+追加の位置引数として渡すURLは、言い換えではなく別々のページとして扱われます。`pplx search web` では追加の位置引数が1つの質問を言い換えるものでしたが、ここでは各URLが同じクエリに対して個別にスニペット化されます。
+1回の呼び出しで最大50件のURLを指定できます:
+
+```bash theme={null}
+pplx content snippets "bloom filter false positive rate" \
+  https://en.wikipedia.org/wiki/Bloom_filter \
+  https://systemdesign.one/bloom-filters-explained/ \
+  --max-tokens-per-page 256
+```
+
+<Accordion title="レスポンス">
+  ```json wrap theme={null}
+  {
+    "results": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bloom_filter",
+        "text": "More generally, fewer than 10 bits per element are required for a 1% false positive probability, independent of the size or number of elements in the set.\n\n…\n\nIf all are 1, then either the element is in the set, *or* the bits have by chance been set to 1 during the insertion of other elements, resulting in a false positive. ...",
+        "tokens_count": 261
+      },
+      {
+        "url": "https://systemdesign.one/bloom-filters-explained/",
+        "text": "### Bloom filter false positive\n\nIn Figure 5, the bloom filter is queried to check the membership of item *green*, which is not a member of the bloom filter. ...",
+        "tokens_count": 262
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+<div id="budget-the-tokens">
+  ### tokenの上限を設定する
+</div>
+
+返されるテキスト量は、2つのフラグで制限できます。
+
+| フラグ                     | 範囲          | デフォルト                   | 説明                                                 |
+| ----------------------- | ----------- | ----------------------- | -------------------------------------------------- |
+| `--max-tokens`          | `1`–`16384` | `4096`                  | 全スニペット合計の最大token数                                  |
+| `--max-tokens-per-page` | `1`–`4096`  | `min(1024, max_tokens)` | 1ページあたりのスニペットの最大token数。`--max-tokens` を超えることはできません |
+
+上限はあくまで目安です。上記の `tokens_count` の値が示すとおり、スニペットが上限を数token超える場合があります。
+
+<div id="snippet-errors">
+  ### スニペットのエラー
+</div>
+
+`pplx content snippets` は、失敗をコマンド単位ではなく URL 単位で報告します。
+スニペットを生成できないページがあっても、実行全体が失敗することはありません。コマンドは終了コード `0` で終了し、その URL の結果には `text` が含まれず、代わりに `error` メッセージが返されます。
+
+```bash theme={null}
+pplx content snippets "example domain reserved documentation" \
+  https://www.iana.org/help/example-domains \
+  https://www.example.com/nonexistent/
+```
+
+<Accordion title="レスポンス">
+  ```json wrap theme={null}
+  {
+    "results": [
+      {
+        "url": "https://www.iana.org/help/example-domains",
+        "text": "1. Instructions and Guides\n\n# Example Domains\n\nAs described in RFC 2606 and RFC 6761, a number of domains such as example.com and example.org are maintained for documentation purposes. ...",
+        "tokens_count": 152
+      },
+      {
+        "url": "https://www.example.com/nonexistent/",
+        "error": "no snippet could be generated under the requested token budget"
+      }
+    ]
+  }
+  ```
+</Accordion>
+
+呼び出しが成功しても、すべてのページでスニペットが生成されるとは限りません。`text` を利用する前に、各結果の `error` を必ず確認してください。
+
+<div id="keep-large-responses-out-of-stdout">
+  ### 大きなレスポンスを標準出力に出さない
+</div>
+
+多数のURLにまたがるスニペットは、積み重なるとかなりの量になります。
+`--output-dir` を指定するとレスポンス全体が `<dir>/snippets/` 配下に書き出され、`--stdout-preview` を指定すると標準出力上の長い文字列が切り詰められます:
+
+```bash theme={null}
+pplx content snippets "how does a bloom filter decide set membership" \
+  https://en.wikipedia.org/wiki/Bloom_filter \
+  --output-dir out \
+  --stdout-preview=200
+```
+
+<Accordion title="レスポンス">
+  ```json wrap theme={null}
+  {
+    "results": [
+      {
+        "url": "https://en.wikipedia.org/wiki/Bloom_filter",
+        "text": "In computing, a **Bloom filter** is a space-efficient probabilistic data structure, conceived by Burton Howard Bloom in 1970, that is used to test whether an element is a member of a set. False positi...<truncated>",
+        "tokens_count": 1047
+      }
+    ],
+    "saved_to": "out/snippets/c6989ad7.json",
+    "truncated": true
+  }
+  ```
+</Accordion>
+
+標準出力 には `saved_to` の保存先パスと `"truncated": true` だけが出力されるため、完全なテキストはディスク上に残したまま、ターミナルの表示は読みやすく保てます。
+
+<div id="handle-errors">
+  ## エラーを処理する
+</div>
+
+以下は、すべての `pplx` コマンドに共通するエラーです。
+コマンドが失敗すると、JSON のエラーオブジェクトが 1 件 stderr に出力されます:
+
+```json theme={null}
+{
+  "error": {
+    "code": "AUTHENTICATION",
+    "message": "...",
+    "command": "search.web",
+    "hint": "Set the PERPLEXITY_API_KEY environment variable"
+  }
+}
+```
+
+`error.code` で分岐します。
+
+<Accordion title="エラーコード">
+  | コード                                          | 発生する条件                                            |
+  | -------------------------------------------- | ------------------------------------------------- |
+  | `AUTHENTICATION`                             | キーが未設定、またはキーが無効                                   |
+  | `FORBIDDEN`                                  | リクエストした対象へのアクセス権がキーにない                            |
+  | `RATE_LIMIT`                                 | レート制限を超過している                                      |
+  | `BAD_REQUEST`                                | サービスがリクエストを拒否した (例: `--recency-filter` と日付範囲の併用)  |
+  | `VALIDATION`                                 | サービスがフィールド値を拒否した                                  |
+  | `NOT_FOUND`                                  | リクエストしたリソースが存在しない                                 |
+  | `TIMEOUT`                                    | リクエストに時間がかかりすぎた                                   |
+  | `CONNECT`                                    | CLI が API に到達できなかった                               |
+  | `INTERNAL_SERVER`                            | サービス側で処理が失敗した                                     |
+  | `UNKNOWN_ARGUMENT`                           | そのコマンドに該当するフラグが存在しない                              |
+  | `INVALID_VALUE`, `VALUE_VALIDATION`          | フラグの値の形式が不正、または範囲外                                |
+  | `MISSING_REQUIRED_ARGUMENT`, `MISSING_QUERY` | 必須の引数またはクエリが指定されていない                              |
+  | `ARGUMENT_ERROR`                             | その他の引数解析エラー                                       |
+</Accordion>
+
+フラグの存在を前提にする前に、`pplx <command> --help` を実行して確認してください。CLI の出力はすでに JSON なので、`--json` フラグは不要です。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+リリースノート、手動インストール、アンインストールの手順については、[`perplexity-cli` リポジトリ](https://github.com/perplexityai/perplexity-cli)を参照してください。

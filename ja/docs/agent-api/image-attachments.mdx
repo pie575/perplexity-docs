@@ -1,0 +1,257 @@
+---
+title: "画像の添付"
+description: "base64エンコードまたはHTTPS URLを使って画像をアップロードし、解析する方法を解説します"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+Agent API は、画像を直接アップロードすることで画像解析に対応しています。画像は、データ URI 内の base64 エンコード文字列として指定するか、標準的な HTTPS URL として指定できます。
+
+<Warning>
+  * base64 エンコードを使用する場合、現在 API がサポートするのは 1 枚あたり最大 50 MB までの画像です。
+  * base64 エンコード画像でサポートされる形式: PNG (image/png)、JPEG (image/jpeg)、WEBP (image/webp)、GIF (image/gif)。
+  * HTTPS URL を使用する場合、モデルは指定された URL から画像の取得を試みます。URL が一般公開されていることを確認してください。
+</Warning>
+
+<div id="examples">
+  ## 例
+</div>
+
+<Tabs>
+  <Tab title="Base64エンコードデータ">
+    <Info>画像ファイルがローカルにあり、リクエストのペイロードに直接埋め込みたい場合は、この方法を使用してください。サイズ上限は50MB、対応形式はPNG、JPEG、WEBP、GIFである点にご注意ください。</Info>
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import base64
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      # 画像を読み込んでbase64にエンコードする
+      def encode_image(image_path):
+          with open(image_path, "rb") as image_file:
+              return base64.b64encode(image_file.read()).decode("utf-8")
+
+      image_path = "image.png"
+      base64_image = encode_image(image_path)
+
+      # 画像を解析する
+      response = client.responses.create(
+          model="openai/gpt-5.6-sol",
+          input=[
+              {
+                  "role": "user",
+                  "content": [
+                      {"type": "input_text", "text": "what's in this image?"},
+                      {
+                          "type": "input_image",
+                          "image_url": f"data:image/png;base64,{base64_image}",
+                      },
+                  ],
+              }
+          ],
+      )
+
+      print(response.output_text)
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+      import * as fs from 'fs';
+
+      const client = new Perplexity();
+
+      // 画像を読み込んでbase64にエンコードする
+      const imageBuffer = fs.readFileSync('image.png');
+      const base64Image = imageBuffer.toString('base64');
+      const imageDataUri = `data:image/png;base64,${base64Image}`;
+
+      // 画像を解析する
+      const response = await client.responses.create({
+          model: 'openai/gpt-5-mini',
+          input: [
+              {
+                  role: 'user',
+                  content: [
+                      { type: 'input_text', text: "What's in this image?" },
+                      { type: 'input_image', image_url: imageDataUri }
+                  ]
+              }
+          ],
+      } as any);
+
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "openai/gpt-5-mini",
+          "input": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "What'\''s in this image?"
+                },
+                {
+                  "type": "input_image",
+                  "image_url": "data:image/png;base64,$BASE64_ENCODED_IMAGE"
+                }
+              ]
+            }
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </Tab>
+
+  <Tab title="HTTPS URL">
+    <Info>一般公開されている画像URLがある場合は、この方法を使用してください。モデルは指定されたURLから画像を取得します。</Info>
+
+    <CodeGroup>
+      ```python Python theme={null}
+      from perplexity import Perplexity
+
+      client = Perplexity()
+
+      image_url = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+
+      # 画像を解析する
+      response = client.responses.create(
+          model="openai/gpt-5.6-sol",
+          input=[
+              {
+                  "role": "user",
+                  "content": [
+                      {"type": "input_text", "text": "Can you describe the image at this URL?"},
+                      {
+                          "type": "input_image",
+                          "image_url": image_url,
+                      },
+                  ],
+              }
+          ],
+      )
+
+      print(response.output_text)
+      ```
+
+      ```typescript TypeScript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+
+      const client = new Perplexity();
+
+      const imageHttpsUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg";
+
+      // 画像を解析する
+      const response = await client.responses.create({
+          model: 'openai/gpt-5-mini',
+          input: [
+              {
+                  role: 'user',
+                  content: [
+                      { type: 'input_text', text: 'Can you describe the image at this URL?' },
+                      { type: 'input_image', image_url: imageHttpsUrl }
+                  ]
+              }
+          ],
+      } as any);
+
+      console.log(response.output_text);
+      ```
+
+      ```bash cURL theme={null}
+      curl https://api.perplexity.ai/v1/agent \
+        -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+          "model": "openai/gpt-5-mini",
+          "input": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Can you describe the image at this URL?"
+                },
+                {
+                  "type": "input_image",
+                  "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/d/dd/Gfp-wisconsin-madison-the-nature-boardwalk.jpg/2560px-Gfp-wisconsin-madison-the-nature-boardwalk.jpg"
+                }
+              ]
+            }
+          ]
+        }' | jq
+      ```
+    </CodeGroup>
+  </Tab>
+</Tabs>
+
+<div id="request-format">
+  ## リクエスト形式
+</div>
+
+<div id="agent-api">
+  ### Agent API
+</div>
+
+メッセージ配列形式を使用する場合、画像は `input` 配列内に埋め込む必要があります。各画像は次の構造で指定してください:
+
+```json theme={null}
+{
+  "role": "user",
+  "content": [
+    {
+      "type": "input_text",
+      "text": "What's in this image?"
+    },
+    {
+      "type": "input_image",
+      "image_url": "<IMAGE_URL_OR_BASE64_DATA>"
+    }
+  ]
+}
+```
+
+`image_url` フィールドは、次のいずれかを受け付けます。
+
+* **画像のURL**: 画像ファイルを直接指す、一般公開されたHTTPS URL
+* **base64エンコードされた画像データ**: `data:image/{format};base64,{base64_content}` 形式のデータURI
+
+<div id="pricing">
+  ## 料金
+</div>
+
+画像は、次の計算式に従ってピクセル寸法に基づきトークン化されます。
+
+```
+tokens = (width px × height px) / 750
+```
+
+**例:**
+
+* 1024×768 の画像の場合: (1024 × 768) / 750 = 1,048 token を消費
+* 512×512 の画像の場合: (512 × 512) / 750 = 349 token を消費
+
+これらの画像 token は、使用している model の入力 token 料金に基づいて課金されます。画像 token は、テキスト token とあわせてリクエストの合計 token 数に加算されます。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API クイックスタート" icon="rocket" href="/ja/docs/agent-api/quickstart">
+    Agent API を使い始める
+  </Card>
+
+  <Card title="Web 検索" icon="settings-bolt" href="/ja/docs/agent-api/tools/web-search">
+    `web_search` ツールについて学ぶ。
+  </Card>
+</CardGroup>

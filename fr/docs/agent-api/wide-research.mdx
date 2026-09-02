@@ -1,0 +1,151 @@
+---
+title: "Wide Research"
+description: "Menez des recherches à la fois larges et approfondies avec le preset wide-research — constituez en arrière-plan de vastes collections étayées par des sources."
+---
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+`wide-research` est le preset conçu pour constituer de vastes collections étayées par des sources. Confiez-lui une tâche du type « trouver toutes les entreprises correspondant à X et citer une source pour chacune » : il identifie les entités qui répondent aux critères, réunit les éléments probants pour chacune d&#39;elles, puis écrit les résultats dans un fichier que vous pouvez télécharger.
+
+C&#39;est précisément le type de tâche mesuré par le [benchmark WANDR](https://research.perplexity.ai/articles/wandr-benchmark-evaluating-research-agents-that-must-search-wide-and-deep) (Wide ANd Deep Research) de Perplexity : découvrir un large ensemble d&#39;éléments (wide) et approfondir chacun d&#39;eux suffisamment pour étayer chaque affirmation par une source (deep). C&#39;est une catégorie de recherche pour laquelle l&#39;Agent API a été conçue : le système d&#39;orchestration de recherche de Perplexity est en tête du benchmark WANDR, et `wide-research` place cette même configuration derrière un unique preset.
+
+<div id="quickstart">
+  ## Démarrage rapide
+</div>
+
+Les exécutions de recherche étendue prennent plusieurs minutes : soumettez-les avec `background=true`, interrogez la réponse par son id jusqu&#39;à ce qu&#39;elle soit terminée, puis téléchargez le fichier produit par l&#39;agent.
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 1. Soumettre en arrière-plan
+  response = client.responses.create(
+      preset="wide-research",
+      background=True,
+      input=(
+          "Find at least 70 US-based companies with a CEO or CFO appointment first "
+          "announced between March 1 and April 30, 2026. For each, cite an authoritative "
+          "page that names the company and appointee and gives the role and date. Write "
+          "the results to results.jsonl, one JSON record per line with fields: "
+          "company, appointee, role, announcement_date, url."
+      ),
+  )
+
+  # 2. Interroger jusqu'à ce que l'exécution atteigne un statut terminal
+  while response.status not in ("completed", "failed", "cancelled", "incomplete"):
+      time.sleep(5)
+      response = client.responses.retrieve(response.id)
+
+  # 3. Télécharger tous les fichiers produits par l'exécution
+  for file in client.responses.files.list(response.id).data:
+      client.responses.files.content(
+          file_id=file.id, response_id=response.id
+      ).write_to_file(file.filename)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  // 1. Soumettre en arrière-plan
+  let response = await client.responses.create({
+    preset: 'wide-research',
+    background: true,
+    input:
+      'Find at least 70 US-based companies with a CEO or CFO appointment first ' +
+      'announced between March 1 and April 30, 2026. For each, cite an authoritative ' +
+      'page that names the company and appointee and gives the role and date. Write ' +
+      'the results to results.jsonl, one JSON record per line with fields: ' +
+      'company, appointee, role, announcement_date, url.',
+  });
+
+  // 2. Interroger jusqu'à ce que l'exécution atteigne un statut terminal
+  while (!['completed', 'failed', 'cancelled', 'incomplete'].includes(response.status)) {
+    await new Promise((r) => setTimeout(r, 5000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  // 3. Lister les fichiers produits par l'exécution, puis télécharger chacun par son id
+  const files = await client.responses.files.list(response.id);
+  for (const file of files.data) {
+    console.log(file.id, file.filename, file.bytes);
+  }
+  ```
+
+  ```bash cURL theme={null}
+  # 1. Soumettre en arrière-plan — récupérer l'id de la réponse
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "wide-research",
+      "background": true,
+      "input": "Find at least 70 US-based companies with a CEO or CFO appointment first announced between March 1 and April 30, 2026. For each, cite an authoritative page that names the company and appointee and gives the role and date. Write the results to results.jsonl, one JSON record per line with fields: company, appointee, role, announcement_date, url."
+    }'
+
+  # 2. Interroger par id jusqu'à ce que le statut soit completed, failed, cancelled ou incomplete
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+
+  # 3. Lister et télécharger les fichiers produits par l'exécution
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files/$FILE_ID/content \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -o results.jsonl
+  ```
+</CodeGroup>
+
+<div id="how-it-works">
+  ## Fonctionnement
+</div>
+
+Une exécution en recherche étendue comporte trois parties, chacune décrite sur sa propre page de fonctionnalité :
+
+<Steps>
+  <Step title="Soumettre en arrière-plan">
+    Définissez `preset="wide-research"` et `background=true`, puis transmettez la tâche via `input`. L&#39;appel de soumission renvoie immédiatement un `id` de réponse et le statut `queued` ; l&#39;exécution se poursuit côté serveur même si votre client se déconnecte. Consultez [Mode arrière-plan](/fr/docs/agent-api/background-mode).
+  </Step>
+
+  <Step title="Interroger jusqu'à la fin de l'exécution">
+    Récupérez la réponse via son `id` jusqu&#39;à ce que son `status` soit terminal — `completed`, `failed`, `cancelled` ou `incomplete`. Vous pouvez également diffuser l&#39;exécution en direct et vous reconnecter après une coupure ; consultez [Mode arrière-plan](/fr/docs/agent-api/background-mode#stream-and-reconnect).
+  </Step>
+
+  <Step title="Télécharger les résultats">
+    L&#39;agent écrit la collection dans un fichier au sein du sandbox et le transmet : il apparaît donc sous forme d&#39;élément `share_file` dans l&#39;`output` de la réponse. Listez-le et téléchargez-le via l&#39;`id` de la réponse. Consultez [Travailler avec les fichiers](/fr/docs/agent-api/working-with-files).
+  </Step>
+</Steps>
+
+<Tip>
+  La qualité d&#39;une recherche étendue est proportionnelle à la précision avec laquelle vous définissez la tâche. Fixez un objectif concret (« au moins 70 entreprises »), des règles de qualification claires (dates, zone géographique, seuils), une source obligatoire par enregistrement et un format de sortie explicite — nommez le fichier et énumérez les champs exacts de chaque ligne. Une sortie structurée et sourcée est plus facile à vérifier et à exploiter en aval.
+</Tip>
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Mode arrière-plan" icon="clock" href="/fr/docs/agent-api/background-mode">
+    Soumettez, interrogez, diffusez et reconnectez des exécutions de longue durée.
+  </Card>
+
+  <Card title="Travailler avec les fichiers" icon="file" href="/fr/docs/agent-api/working-with-files">
+    Listez et téléchargez les fichiers générés par une exécution.
+  </Card>
+
+  <Card title="Presets" icon="sliders" href="/fr/docs/agent-api/presets">
+    Découvrez chaque preset et les paramètres qu&#39;il configure.
+  </Card>
+
+  <Card title="Benchmark WANDR" icon="chart-bar" href="https://research.perplexity.ai/articles/wandr-benchmark-evaluating-research-agents-that-must-search-wide-and-deep">
+    Consultez les travaux de recherche à l&#39;origine de l&#39;évaluation en largeur et en profondeur.
+  </Card>
+</CardGroup>

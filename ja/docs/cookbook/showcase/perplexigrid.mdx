@@ -1,0 +1,94 @@
+---
+title: "PerplexiGrid | インタラクティブな分析ダッシュボード"
+description: "Perplexity Sonar API 経由のライブデータを活用し、自然言語から分析ダッシュボードを即座に生成します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+**PerplexiGrid** は、自然言語から情報量豊富でインタラクティブなダッシュボードを生成します。自社のデータを接続してライブWebデータと組み合わせ、質問を投げかければ、あとは Sonar API にお任せです。ドラッグ＆ドロップによるレイアウト調整、AI によるウィジェット生成、ECharts を用いた可視化まで一通り揃っています。
+
+<div id="features">
+  ## 機能
+</div>
+
+* **自然言語からダッシュボードを生成**: 平易な英語のプロンプトを、25種類以上のウィジェットに対応した実用的な分析ダッシュボードに変換します
+* **ライブデータ連携**: 自社のデータソースとリアルタイムのウェブデータを組み合わせ、多角的なインサイトを獲得できます
+* **インタラクティブなグリッドレイアウト**: ドラッグ＆ドロップ操作でダッシュボードのレイアウトやスタイルをカスタマイズできます
+* **AIによる調整**: 対話形式の指示でウィジェットを調整・追加できます
+* **エクスポートと共有**: PDFエクスポート、高解像度画像、共有可能なダッシュボードリンクを生成できます
+
+<div id="how-it-uses-sonar">
+  ## Sonar の活用方法
+</div>
+
+PerplexiGrid は、4 つの専用モードで Sonar API を活用しています。
+
+* **フルダッシュボード生成 (f1)**: Sonar Pro の高度な機能を用いて、複数のウィジェットを備えた包括的なダッシュボードを作成します
+* **軽量モード (l1)**: 組み込みシステムやリアルタイムアプリケーション向けに、可視化を素早く生成します
+* **ダッシュボード更新 (r1)**: コンテキストを保持したまま、自然言語による動的な変更を可能にします
+* **ウィジェット調整 (r2)**: 個々のウィジェットの更新を精密に制御できます
+
+このシステムは構造化された JSON スキーマのレスポンスを利用し、インタラクティブな可視化としてそのままレンダリングできる、一貫した ECharts 互換の出力を保証します。
+
+<div id="usage">
+  ## 使い方
+</div>
+
+1. アプリを開き、新しいダッシュボードを作成します
+2. 次のようなプロンプトを入力します: *「2024年のAIスタートアップの市場トレンドを見せて」* (Sonarがチャート設定を生成し、それが解析されてライブウィジェットとして描画されます) 
+
+![Prompt #1](https://www.perplexigrid.com/guide/prompt_dark.gif)
+
+3. グリッドインターフェースでウィジェットの配置やスタイルを調整します
+
+![Prompt #2](https://www.perplexigrid.com/guide/move_dark.gif)
+![Prompt #3](https://www.perplexigrid.com/guide/customize_dark.gif)
+
+5. 独自のデータソースを追加し、自社のデータをライブWebデータと掛け合わせます
+
+![Prompt #4](https://www.perplexigrid.com/guide/datasource_dark.gif)
+
+6. テキストプロンプトで調整したり、必要に応じてダッシュボードをエクスポートしたりします
+7. 共同作業や共有も簡単に行えます
+
+![Prompt #5](https://www.perplexigrid.com/guide/invite_dark.gif)
+
+<div id="code-explanation">
+  ## コードの説明
+</div>
+
+ユーザーが送信したメッセージはプロンプトに変換され、Perplexity Sonar API をラップした Supabase Edge Function に渡されます。
+モード (`f1`、`l1`、`r1`、`r2`) に応じて、この関数はダッシュボード向けの完全な構造化出力、軽量な可視化、または対象を絞った更新のいずれかを生成します。
+生成されたレイアウトは構造化されたウィジェット定義としてパースされ、ウィジェット生成エンジンに渡されます。
+
+[メインの sonar-api サービスはこちらをご覧ください。](https://github.com/PetarRan/perplexigrid/blob/main/server/supabase/functions/_shared/perplexityService.ts)
+
+<div id="prompt-modes">
+  ## プロンプトモード
+</div>
+
+| モード  | 説明             | ユースケース                              | 備考                                  |
+| ---- | -------------- | ----------------------------------- | ----------------------------------- |
+| `f1` | 初回のダッシュボード全体生成 | ユーザーが空のキャンバスから開始し、最初のプロンプトを入力する     | 複数のウィジェットを含む完全なダッシュボードレイアウトを生成      |
+| `l1` | 軽量なダッシュボード生成   | 最小限のtokenで手早くインサイトやプレビューを得たい場合に使用   | 高速かつ低コストだが、返されるウィジェット数は少なく、指示の反映も浅い |
+| `r1` | ダッシュボード全体の再生成  | 既存のウィジェットすべてを新しいプロンプトで置き換えたい場合      | レイアウトを維持したままダッシュボード全体を再構築           |
+| `r2` | 特定ウィジェットの更新    | 特定のウィジェットを変更したい場合 (例:「これを円グラフにする」)  | 新しい指示に基づき、選択したウィジェットのみを変更           |
+
+<div id="tech-stack">
+  ## 技術スタック
+</div>
+
+* **フロントエンド**: React + Vite (Typescript)、ECharts、react-grid-layout
+* **バックエンド**: Supabase Edge Functions (Deno 上で動作する Typescript)
+* **AI エンジン**: Perplexity Sonar Pro
+* **インフラ**: Supabase (PostgreSQL、RLS、Auth)、Vercel へのデプロイ
+
+<div id="links">
+  ## リンク
+</div>
+
+* [GitHubリポジトリ](https://github.com/PetarRan/perplexigrid)
+* [ライブデモ](https://app.perplexigrid.com)
+* [ウェブサイト](https://www.perplexigrid.com)

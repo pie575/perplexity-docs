@@ -1,0 +1,331 @@
+---
+title: "API Analytics"
+description: "Interrogez par programmation les données d'utilisation Perplexity de votre organisation grâce à une clé API gratuite, limitée à votre organisation"
+---
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+L&#39;API Analytics donne aux organisations Perplexity Enterprise un accès programmatique aux statistiques d&#39;utilisation de l&#39;organisation sur l&#39;ensemble de Perplexity — crédits, volume de requêtes, membres actifs, connecteurs, artefacts, compétences, espaces, workflows et durées des tâches — sous forme de séries temporelles agrégées par intervalles, que vous pouvez importer dans vos outils de BI ou vos rapports internes. La consommation de crédits et le volume de requêtes peuvent également être ventilés [par membre](#per-member-usage).
+
+Les requêtes Analytics sont gratuites et ne consomment pas de crédits API.
+
+<Info>
+  Cette API est réservée aux organisations Perplexity Enterprise. Si l&#39;option API Analytics décrite ci-dessous n&#39;apparaît pas, c&#39;est que la fonctionnalité n&#39;est peut-être pas encore activée pour votre organisation — contactez votre représentant Perplexity.
+</Info>
+
+<div id="getting-access">
+  ## Obtenir l&#39;accès
+</div>
+
+L&#39;accès est géré par les administrateurs de votre organisation depuis l&#39;application web Perplexity :
+
+<Steps>
+  <Step title="Activer l'API Analytics">
+    Dans l&#39;application web Perplexity, ouvrez les paramètres **Computer** de votre organisation et repérez la section **Analytics**. Activez **API Analytics** pour provisionner l&#39;accès à l&#39;API pour votre organisation.
+  </Step>
+
+  <Step title="Générer votre clé API">
+    Dans la ligne qui s&#39;affiche sous l&#39;interrupteur, sélectionnez **Generate key**.
+  </Step>
+</Steps>
+
+Quelques caractéristiques des clés API analytics :
+
+* **Portée organisation, gérée par les administrateurs** — la clé appartient à votre organisation, et non à l&#39;administrateur qui l&#39;a créée. Tout administrateur de l&#39;organisation peut consulter la clé actuelle et la régénérer.
+* **Une seule clé active** — votre organisation ne peut avoir qu&#39;une seule clé analytics active à la fois. La régénération révoque la clé précédente.
+* **Analytics uniquement** — la clé authentifie uniquement les points de terminaison analytics ; elle ne peut pas appeler les autres API Perplexity et n&#39;est associée à aucune facturation.
+* **La désactivation révoque la clé** — désactiver l&#39;interrupteur API Analytics révoque définitivement la clé.
+
+<div id="authentication">
+  ## Authentification
+</div>
+
+Transmettez la clé sous forme de token bearer :
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v1/analytics/computer/usage?dataset=credit_usage&start_time=1746057600" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+<div id="querying-usage">
+  ## Interroger l&#39;utilisation
+</div>
+
+`GET /v1/analytics/computer/usage` renvoie une seule série temporelle par requête, pour un unique jeu de données.
+
+<div id="parameters">
+  ### Paramètres
+</div>
+
+| Paramètre      | Requis | Description                                                                                                                                                                                  |
+| -------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`      | Oui    | L&#39;une des valeurs `credit_usage`, `query_volume`, `daily_active_users`, `connectors`, `artifacts`, `skills`, `spaces`, `workflows`, `task_durations`. Voir [Jeux de données](#datasets). |
+| `start_time`   | Oui    | Début de la fenêtre, en secondes unix (UTC). Borne incluse. Aligné vers le bas sur la grille des intervalles.                                                                                |
+| `end_time`     | Non    | Fin de la fenêtre, en secondes unix (UTC). Borne exclue. Par défaut, l&#39;instant présent ; les valeurs futures sont ramenées à l&#39;instant présent.                                      |
+| `bucket_width` | Non    | `1d` (par défaut) ou `1h`. Les intervalles s&#39;alignent sur la grille UTC. `query_volume` et `daily_active_users` n&#39;acceptent que `1d`.                                                |
+| `limit`        | Non    | Intervalles par page. `1d` : 7 par défaut, 31 au maximum. `1h` : 24 par défaut, 168 au maximum.                                                                                              |
+| `page`         | Non    | Curseur de pagination opaque issu du champ `next_page` d&#39;une réponse précédente. Valable uniquement avec les paramètres de requête pour lesquels il a été émis.                          |
+| `user_email`   | Non    | Limite les résultats à un seul membre de votre organisation. Non disponible pour `query_volume` ni `daily_active_users`. Voir [Filtrage par membre](#filtering-by-member).                   |
+
+<div id="datasets">
+  ### Jeux de données
+</div>
+
+Chaque jeu de données mesure un aspect différent. La plupart acceptent à la fois une largeur d&#39;intervalle et un filtre par membre ; `query_volume` et `daily_active_users` sont agrégés quotidiennement pour l&#39;ensemble de l&#39;organisation et n&#39;acceptent ni l&#39;un ni l&#39;autre.
+
+| Jeu de données       | Décompte                            | Axes de répartition                                    | Granularité et portée         |
+| -------------------- | ----------------------------------- | ------------------------------------------------------ | ----------------------------- |
+| `credit_usage`       | Crédits                             | `Model`, `Credit Source`                               | `1d` ou `1h`                  |
+| `query_volume`       | Requêtes                            | `Feature`, `Model`, `Model Family`, `Project`, `Comet` | `1d`, organisation uniquement |
+| `daily_active_users` | Membres distincts actifs ce jour-là | Aucun                                                  | `1d`, organisation uniquement |
+| `connectors`         | Fils de discussion                  | `Connector`                                            | `1d` ou `1h`                  |
+| `artifacts`          | Fils de discussion                  | `Artifact Type`                                        | `1d` ou `1h`                  |
+| `skills`             | Fils de discussion                  | `Skill`                                                | `1d` ou `1h`                  |
+| `spaces`             | Fils de discussion                  | `Space`                                                | `1d` ou `1h`                  |
+| `workflows`          | Fils de discussion                  | `Workflow`                                             | `1d` ou `1h`                  |
+| `task_durations`     | Fils de discussion terminés         | `Task Duration`                                        | `1d` ou `1h`                  |
+
+Demander `bucket_width=1h` pour un jeu de données quotidien, ou `user_email` pour un jeu de données limité à l&#39;organisation, renvoie une erreur `400` au lieu d&#39;une série vide. Pour le volume de requêtes par membre, utilisez le [point de terminaison v2](#per-member-usage).
+
+<div id="response">
+  ### Réponse
+</div>
+
+```json theme={null}
+{
+  "categories": ["Model", "Credit Source"],
+  "data": [
+    {
+      "start_time": 1746057600,
+      "end_time": 1746144000,
+      "count": 350,
+      "by_categories": {
+        "Model": [
+          { "category": "claude-opus-4-8", "count": 210 },
+          { "category": "claude-sonnet-4-6", "count": 120 }
+        ],
+        "Credit Source": [
+          { "category": "paid", "count": 250 },
+          { "category": "promo", "count": 80 }
+        ]
+      }
+    }
+  ],
+  "has_more": false,
+  "next_page": null
+}
+```
+
+* `categories` répertorie les axes de répartition exposés par le jeu de données, dans l&#39;ordre d&#39;affichage canonique — voir [Jeux de données](#datasets). La plupart des jeux de données comportent un seul axe, `credit_usage` en comporte deux, `query_volume` cinq, et `daily_active_users` aucun (`categories` vaut `[]` et le champ `by_categories` de chaque intervalle vaut `{}`).
+* `data` contient tous les intervalles de la fenêtre de la page, par ordre chronologique. Les intervalles sans données portent `count: 0` et une liste vide sous chaque axe de `by_categories`.
+* `by_categories` associe chaque libellé d&#39;axe à sa répartition pour l&#39;intervalle. Les catégories d&#39;un axe correspondent aux valeurs de dimension du jeu de données — noms de connecteurs pour `connectors`, types d&#39;artefacts pour `artifacts`, plages de durée pour `task_durations`, `paid`/`promo` pour l&#39;axe `Credit Source` de `credit_usage`, noms de modèles pour l&#39;axe `Model` de `credit_usage`, et les titres que vos membres ont donnés aux éléments pour `spaces`/`skills`/`workflows`.
+* Pour `query_volume`, `Feature` répartit chaque requête entre `Search` et `Computer`, tandis que `Model`/`Model Family` indiquent le modèle qui y a répondu (`Model` correspond à la sélection exacte, `Model Family` au regroupement plus large). `Project` et `Comet` sont des sous-ensembles qui se recoupent, et non des partitions — une requête exécutée dans un projet est aussi une requête `Search` ou `Computer` — de sorte que la somme de ces axes ne correspond pas à `count`.
+* Pour `credit_usage`, `count` peut dépasser la somme de n&#39;importe quelle répartition prise isolément : la consommation sans attribution de catégorie est comptabilisée dans le total, mais pas dans la répartition.
+
+<div id="time-windows-and-buckets">
+  ### Fenêtres temporelles et intervalles
+</div>
+
+L&#39;API ne renvoie que les **intervalles complets de la grille UTC** :
+
+* `start_time` est aligné sur le début de son intervalle : le premier intervalle peut donc inclure de l&#39;utilisation antérieure à la date de début demandée.
+* `end_time` est exclusif et plafonné à l&#39;heure actuelle, puis aligné vers le bas — l&#39;intervalle en cours n&#39;est jamais renvoyé. Avec `bucket_width=1d`, l&#39;intervalle du jour même n&#39;est pas inclus ; utilisez `1h` pour des données infrajournalières.
+* Une fenêtre valide ne contenant aucun intervalle complet renvoie un `200` avec un champ `data` vide.
+
+<Note>
+  **Fraîcheur des données.** Le magasin analytique est synchronisé périodiquement, et non en temps réel. Un `count` à `0` dans un intervalle récent peut signifier que les données ne sont pas encore synchronisées, et non que l&#39;utilisation est nulle. Lorsque `has_more` vaut `false`, vous avez atteint la limite actuelle des données disponibles — relancez la requête plus tard pour obtenir des intervalles plus récents.
+</Note>
+
+<div id="pagination">
+  ### Pagination
+</div>
+
+Lorsque la fenêtre couvre plus d&#39;intervalles que `limit`, la réponse renvoie `has_more: true` ainsi qu&#39;un curseur `next_page`. Transmettez-le comme paramètre `page`, en conservant tous les autres paramètres à l&#39;identique : les curseurs font l&#39;objet d&#39;une validation stricte et un curseur utilisé avec des paramètres différents renvoie une erreur `400`.
+
+```python theme={null}
+import requests
+
+BASE_URL = "https://api.perplexity.ai/v1/analytics/computer/usage"
+HEADERS = {"Authorization": "Bearer YOUR_API_KEY"}
+
+params = {
+    "dataset": "credit_usage",
+    "start_time": 1746057600,
+    "bucket_width": "1d",
+}
+
+buckets = []
+while True:
+    response = requests.get(BASE_URL, headers=HEADERS, params=params)
+    response.raise_for_status()
+    payload = response.json()
+    buckets.extend(payload["data"])
+    if not payload["has_more"]:
+        break
+    params["page"] = payload["next_page"]
+
+print(f"Fetched {len(buckets)} buckets")
+```
+
+<div id="filtering-by-member">
+  ### Filtrage par membre
+</div>
+
+Transmettez `user_email` pour limiter la série à un seul membre de votre organisation :
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v1/analytics/computer/usage?dataset=credit_usage&start_time=1746057600&user_email=member@example.com" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+Tous les jeux de données acceptent `user_email`, à l&#39;exception de `query_volume` et `daily_active_users`, qui sont agrégés par organisation et le rejettent avec une erreur `400`. Pour obtenir le volume de requêtes par membre, utilisez le [point de terminaison v2](#per-member-usage).
+
+L&#39;adresse e-mail doit correspondre à un membre actuel de votre organisation. Toute autre valeur — y compris les adresses e-mail sans compte Perplexity — renvoie la même erreur générique `400` :
+
+```json theme={null}
+{
+  "error": {
+    "message": "user_email does not match a member of this organization.",
+    "type": "invalid_request",
+    "code": 400
+  }
+}
+```
+
+<div id="per-member-usage">
+  ## Utilisation par membre
+</div>
+
+`GET /v2/analytics/computer/usage` ventile un jeu de données **par membre** au lieu de fournir un total unique pour l&#39;organisation. Il renvoie des intervalles quotidiens, chacune contenant une ligne par membre ayant enregistré une utilisation ce jour-là, indexée par e-mail. Il utilise la même clé API, la même enveloppe d&#39;erreur et les mêmes limites que la v1.
+
+Deux jeux de données prennent aujourd&#39;hui en charge le regroupement par membre, avec une granularité quotidienne :
+
+* `credit_usage` — les crédits du membre, avec la même ventilation `Model` et `Credit Source` que celle de la v1.
+* `query_volume` — les requêtes du membre, avec les ventilations `Feature`, `Project` et `Comet`.
+
+`group_by` est un paramètre : d&#39;autres regroupements pourront donc être ajoutés par la suite sans rupture de compatibilité.
+
+```bash theme={null}
+curl --request GET \
+  --url "https://api.perplexity.ai/v2/analytics/computer/usage?dataset=credit_usage&group_by=user_email&start_time=1746057600" \
+  --header "Authorization: Bearer YOUR_API_KEY"
+```
+
+<div id="parameters-2">
+  ### Paramètres
+</div>
+
+| Paramètre    | Requis | Description                                                                                                                                                                       |
+| ------------ | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dataset`    | Oui    | `credit_usage` ou `query_volume` — les jeux de données offrant à ce jour un regroupement par membre.                                                                              |
+| `group_by`   | Oui    | Doit être `user_email` — le seul regroupement disponible à ce jour.                                                                                                               |
+| `start_time` | Oui    | Début de la fenêtre, en secondes unix (UTC). Inclus. Arrondi à l&#39;inférieur sur la grille journalière.                                                                         |
+| `end_time`   | Non    | Fin de la fenêtre, en secondes unix (UTC). Exclue. Par défaut, l&#39;instant présent ; les valeurs futures sont ramenées à l&#39;instant présent.                                 |
+| `limit`      | Non    | Nombre de lignes de membres par page. 50 par défaut, 100 au maximum. Une page peut couvrir plusieurs jours.                                                                       |
+| `page`       | Non    | Curseur de pagination opaque issu du champ `next_page` d&#39;une réponse précédente. Valide uniquement avec les mêmes paramètres de requête que ceux pour lesquels il a été émis. |
+
+<div id="response-2">
+  ### Réponse
+</div>
+
+```json theme={null}
+{
+  "categories": ["Model", "Credit Source"],
+  "data": [
+    {
+      "start_time": 1746057600,
+      "end_time": 1746144000,
+      "results": [
+        {
+          "user_email": "alice@example.com",
+          "count": 900,
+          "by_categories": {
+            "Model": [{ "category": "claude-opus-4-8", "count": 900 }],
+            "Credit Source": [{ "category": "paid", "count": 900 }]
+          }
+        },
+        {
+          "user_email": "bob@example.com",
+          "count": 500,
+          "by_categories": {
+            "Model": [{ "category": "claude-sonnet-4-6", "count": 500 }],
+            "Credit Source": [{ "category": "promo", "count": 500 }]
+          }
+        }
+      ]
+    }
+  ],
+  "has_more": true,
+  "next_page": "eyJwayI6ICJPUkcjLi4uIn0="
+}
+```
+
+* Chaque entrée `data` correspond à un jour UTC ; `results` contient une ligne par membre ayant enregistré une utilisation ce jour-là, dans l&#39;ordre `(day, member)`. Les jours sans utilisation sont omis plutôt que renvoyés vides.
+* `user_email` identifie le membre. `count` correspond aux crédits ou aux requêtes du membre pour la journée, selon `dataset`, et `by_categories` contient les axes de ce jeu de données — ceux répertoriés dans le champ `categories` de premier niveau de la réponse.
+* La sémantique de la fenêtre temporelle et des intervalles est identique à celle du mode `1d` de la v1 — uniquement des jours UTC complets, et la même réserve concernant la [fraîcheur](#time-windows-and-buckets) s&#39;applique.
+
+<div id="paginating-members">
+  ### Pagination des membres
+</div>
+
+La v2 pagine par **lignes de membres**, et non par jours : une même page peut couvrir plusieurs jours, et la journée de chaque membre compte pour une ligne au regard de `limit`. Paginez jusqu&#39;à ce que `has_more` vaille `false`, en repassant `next_page` dans `page` et en laissant tous les autres paramètres inchangés :
+
+```python theme={null}
+import requests
+
+BASE_URL = "https://api.perplexity.ai/v2/analytics/computer/usage"
+HEADERS = {"Authorization": "Bearer YOUR_API_KEY"}
+
+params = {
+    "dataset": "credit_usage",
+    "group_by": "user_email",
+    "start_time": 1746057600,
+}
+
+days = []
+while True:
+    response = requests.get(BASE_URL, headers=HEADERS, params=params)
+    response.raise_for_status()
+    payload = response.json()
+    days.extend(payload["data"])
+    if not payload["has_more"]:
+        break
+    params["page"] = payload["next_page"]
+
+print(f"Fetched {len(days)} daily buckets")
+```
+
+<div id="errors">
+  ## Erreurs
+</div>
+
+Les erreurs utilisent une enveloppe uniforme :
+
+```json theme={null}
+{
+  "error": {
+    "message": "Human-readable description.",
+    "type": "machine_readable_type",
+    "code": 400
+  }
+}
+```
+
+| Statut | `type`                        | Signification                                                                                                                                                                                                                                                                                                                       |
+| ------ | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `bad_request`                 | Un paramètre n&#39;a pas passé la validation (type incorrect, valeur mal formée).                                                                                                                                                                                                                                                   |
+| `400`  | `invalid_request`             | Les paramètres sont bien formés mais sémantiquement invalides — par exemple `start_time` postérieur à `end_time`, une fenêtre supérieure à 90 jours, un curseur de pagination mal utilisé, un `user_email` ne correspondant à aucun membre, ou un `dataset` utilisé avec un `bucket_width` non pris en charge ou avec `user_email`. |
+| `401`  | `unauthorized`                | Clé API manquante ou invalide.                                                                                                                                                                                                                                                                                                      |
+| `404`  | `feature_disabled`            | L&#39;API Analytics n&#39;est pas activée pour votre organisation.                                                                                                                                                                                                                                                                  |
+| `429`  | `request_rate_limit_exceeded` | Limite de débit dépassée. Les requêtes sont limitées par organisation, toutes ses clés confondues ; réessayez avec un délai progressif.                                                                                                                                                                                             |
+
+<div id="limits">
+  ## Limites
+</div>
+
+* Les fenêtres temporelles sont limitées à **90 jours** par requête (paginez à l&#39;intérieur de la fenêtre pour couvrir de longues périodes).
+* Les requêtes sont soumises à une limitation de débit **par organisation** : toutes les clés créées par votre organisation partagent le même quota.

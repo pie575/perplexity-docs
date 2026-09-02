@@ -1,0 +1,363 @@
+---
+title: "Sandbox"
+description: "Agent API リクエストの内部で、隔離されたコンテナ内でコードを実行します。"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+`sandbox` ツールを使うと、Agent API リクエストの処理中にモデルがコードを実行できます。エージェントは隔離されたコンテナ内でコードを実行し、その出力を確認したうえで、結果を最終的な回答に利用します。
+
+コードを用意する必要はありません。ツールを有効にするだけで、プロンプトと instructions に基づいてモデル自身がコードを記述・実行し、その `stdout`/`stderr` を読み取って回答に反映します。モデルが実際に実行したコードはレスポンスに含めて返されるため ([レスポンスの構造](#response-shape)を参照) 、何が実行されたかを検証できます。
+
+ツールを有効にするには、`tools` 配列に追加します。呼び出すタイミングは、プロンプトと instructions に基づいてモデルが判断します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory's stated fix version.",
+      tools=[{"type": "sandbox"}, {"type": "web_search"}],
+      instructions="Use the sandbox and web search to gather and verify the advisories before answering.",
+  )
+
+  print(get_output_text(response))
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: "For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory's stated fix version.",
+    tools: [{ type: 'sandbox' as const }, { type: 'web_search' as const }],
+    instructions: 'Use the sandbox and web search to gather and verify the advisories before answering.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory'\''s stated fix version.",
+      "tools": [
+        {
+          "type": "sandbox"
+        },
+        {
+          "type": "web_search"
+        }
+      ],
+      "instructions": "Use the sandbox and web search to gather and verify the advisories before answering."
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="use-cases">
+  ## ユースケース
+</div>
+
+* ウェブ検索
+* 数値計算・統計分析
+* データのクリーニング、パース、変換
+* ロジックの検証やエラーの再現のためのコード実行
+* CSV、JSON、レポートなどの構造化された成果物の生成
+* 中間ファイルや計算結果の状態を必要とする多段階のワークフロー
+
+<div id="how-the-container-works">
+  ## コンテナの仕組み
+</div>
+
+sandbox は隔離された Linux コンテナです。何ができて何ができないかを把握しておくと、モデルがどんなときに sandbox を使うか、どのような結果が返ってくるかを予測しやすくなります。
+
+| プロパティ           | 挙動                                                                                                                                                                         |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **言語**          | モデルは計算には **Python**、シェルコマンドには **bash** を使用します。各実行の `language` はレスポンスに含まれます。                                                                                                |
+| **インターネットアクセス** | コンテナはネットワークにアクセスできるため、モデルのコードは実行時に必要なパッケージをインストールしたり、外部エンドポイントに接続したりできます。                                                                                                  |
+| **レスポンス内での状態**  | 1 つのレスポンス内の複数の実行は同じコンテナを共有します。前のステップで書き込まれたファイルやインストールされたパッケージは、後続のステップでもそのまま利用できます。これにより、複数ステップのワークフローや中間ファイルの受け渡しが可能になります。                                               |
+| **出力の取得**       | `stdout` と `stderr` は実行ごとに取得されます。非常に大きな出力は切り詰められる (ストリームあたり ~1 MiB 程度) ため、大きな結果はそのまま出力させるのではなく、モデルにファイルへ書き出させて返させてください ([生成されたファイルの取得](#retrieving-generated-files) を参照) 。 |
+| **実行時間の上限**     | 各実行には実行時間の上限があります。これを超えると、その実行の `status` は `timed_out` になります ([エラー処理](#error-handling) を参照) 。長時間かかるジョブには [バックグラウンドモード](#running-in-the-background) を使用してください。              |
+
+<div id="calling-other-tools-from-inside-the-sandbox">
+  ### sandbox 内部から他のツールを呼び出す
+</div>
+
+コンテナには Perplexity SDK がプリインストールされているため、モデル が sandbox 内で実行するコードから [Web Search](/ja/docs/agent-api/tools/web-search)、[Fetch URL Content](/ja/docs/agent-api/tools/fetch-url-content)、[People Search](/ja/docs/agent-api/tools/people-search) を直接呼び出し (リクエストにこれらのツールを追加する必要はありません) 、その結果をもとに計算を行えます。これらの呼び出しはいずれも、標準の呼び出しごとの料金で課金されます ([料金](#pricing)を参照) 。
+
+<div id="use-connectors-in-the-sandbox">
+  ## sandbox でコネクターを使用する
+</div>
+
+一部のコネクターでは、その認証情報を sandbox 内のコマンドから利用できます。
+
+<Note>
+  **プレビュー:** コネクターはプレビュー段階です。対応サービスや動作は変更される可能性があります。
+</Note>
+
+<div id="github-connector">
+  ### GitHub コネクター
+</div>
+
+[GitHub コネクター](/ja/docs/agent-api/tools/connectors#use-connectors-in-the-sandbox)を使うと、sandbox 内のコマンドで、接続済みの GitHub 認証情報をモデル が利用できるようになります。
+リクエストでは `sandbox` と GitHub コネクターの両方を有効にしてください。
+これにより モデル は `git` と `gh` を使って、プライベートリポジトリのクローン、コードの変更、変更のコミット、プルリクエストの作成や更新を行えます。
+アクセスできるリポジトリと実行できる操作は、接続した GitHub アカウントで許可されている範囲に限られます。
+
+リクエストの形式と GitHub の例については、[コネクター](/ja/docs/agent-api/tools/connectors)を参照してください。
+
+<div id="running-in-the-background">
+  ## バックグラウンドでの実行
+</div>
+
+実行に時間のかかる sandbox 呼び出しでは、`background: true` を指定してリクエストを送信し、完了するまで ID を指定してレスポンスをポーリングします。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Create a CSV with the first 10 Fibonacci numbers and their squares.",
+      tools=[{"type": "sandbox"}],
+      background=True,
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(get_output_text(response))
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Create a CSV with the first 10 Fibonacci numbers and their squares.',
+    tools: [{ type: 'sandbox' as const }],
+    background: true,
+  });
+
+  while (response.status === 'queued' || response.status === 'in_progress') {
+    await new Promise((r) => setTimeout(r, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  # 1. background: true を指定して送信する
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Create a CSV with the first 10 Fibonacci numbers and their squares.",
+      "tools": [{ "type": "sandbox" }],
+      "background": true
+    }'
+
+  # 2. status が completed、failed、cancelled、incomplete のいずれかになるまで、ID を指定してレスポンスをポーリングする
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="error-handling">
+  ## エラー処理
+</div>
+
+sandbox のエラーは、通常の Agent API レスポンスとして返されます。
+
+| ケース           | 確認できる内容                                                                                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **タイムアウト**    | `results[]` 内の該当エントリ (およびそれを含む `sandbox_results` 項目) の `status` が `timed_out` になります。リクエストを完了できない場合は、トップレベルのレスポンスステータスが `failed` となり、`error` オブジェクトが返されます。 |
+| **実行時エラー**    | `results[]` 内の該当エントリに、ゼロ以外の `exit_code` と `stderr` のエラー出力が含まれます。コンテナが正常に実行された場合は、Agent API のレスポンス自体は完了することがあります。                                          |
+| **クォータまたは上限** | レスポンスは失敗し、該当する上限を示す `error` オブジェクトが返されます。Agent API のレート制限も引き続き適用されます。                                                                                     |
+
+<div id="limits-and-quotas">
+  ## 制限とクォータ
+</div>
+
+sandbox は Agent API リクエスト内で実行されるため、Agent API のレート制限の対象となります。ティア別のリクエスト制限については [Rate Limits &amp; Usage Tiers](/ja/docs/admin/rate-limits-usage-tiers#agent-api-rate-limits) を参照してください。
+
+<div id="response-shape">
+  ## レスポンスの構造
+</div>
+
+モデルが sandbox ツールを呼び出すと、Agent API のレスポンスの `output` 配列に、`message` 項目とあわせて `sandbox_results` 項目が含まれます。モデルが sandbox を複数回呼び出した場合、1 つのレスポンスに複数の `sandbox_results` 項目が含まれることがあります。
+
+各 `sandbox_results` 項目は 1 回の sandbox 呼び出しを表し、実行ごとの出力を `results` 配列内に入れ子で保持します。
+
+| フィールド          | 型        | 説明                                                           |
+| -------------- | -------- | ------------------------------------------------------------ |
+| `type`         | `string` | 常に `sandbox_results`。                                        |
+| `call_id`      | `string` | この sandbox ツール呼び出しの識別子。                                      |
+| `container_id` | `string` | コードを実行した隔離コンテナの識別子。                                          |
+| `language`     | `string` | sandbox がコードを実行した言語 (例: `python`) 。                          |
+| `code`         | `string` | sandbox 内で実行されたコード。                                          |
+| `status`       | `string` | sandbox 呼び出し全体のステータス。`completed`、`timed_out`、`failed` のいずれか。 |
+| `results`      | `array`  | コンテナ内の実行 1 回につき 1 エントリ。フィールドは以下を参照。                          |
+
+`results` の各エントリには次のフィールドがあります。
+
+| フィールド         | 型         | 説明                                                 |
+| ------------- | --------- | -------------------------------------------------- |
+| `stdout`      | `string`  | 実行時にキャプチャされた標準出力。                                  |
+| `stderr`      | `string`  | 実行時にキャプチャされた標準エラー出力。                               |
+| `exit_code`   | `integer` | プロセスの終了コード。0 以外は実行時エラーを示します。                       |
+| `duration_ms` | `integer` | 実行に要した実時間 (ミリ秒) 。                                  |
+| `status`      | `string`  | 実行ごとのステータス。`completed`、`timed_out`、`failed` のいずれか。 |
+
+例:
+
+```json theme={null}
+{
+  "type": "sandbox_results",
+  "call_id": "call_Y1Lo4H6cGFgNVsn4mwC0oSgc",
+  "code": "vals = [(i, i*i) for i in range(1, 11)]\nprint('\\n'.join(f'{a},{b}' for a, b in vals))",
+  "container_id": "i6dr97ven2qfm0sdtvfzc",
+  "language": "python",
+  "results": [
+    {
+      "duration_ms": 9011,
+      "exit_code": 0,
+      "status": "completed",
+      "stderr": "",
+      "stdout": "1,1\n2,4\n3,9\n4,16\n5,25\n6,36\n7,49\n8,64\n9,81\n10,100\n"
+    }
+  ],
+  "status": "completed"
+}
+```
+
+リクエストとレスポンスの完全なスキーマについては、[Agent API リファレンス](/ja/api-reference/agent-post)を参照してください。
+
+<div id="retrieving-generated-files">
+  ## 生成されたファイルの取得
+</div>
+
+sandbox 内のコードがファイルを書き出し、`share_file` ツールで受け渡すと、レスポンスの `output` 配列に `share_file` 項目が含まれます。ファイルの内容はインラインでは返されないため、レスポンスの `id` を使ってレスポンスファイル用エンドポイントから取得してください。
+
+レスポンスが生成したファイルの一覧を取得するには、次のようにします。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  files = client.responses.files.list("resp_abc123")
+
+  for file in files.data:
+      print(file.id, file.filename, file.bytes)
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" | jq
+  ```
+</CodeGroup>
+
+```json theme={null}
+{
+  "data": [
+    {
+      "bytes": 8002,
+      "created_at": 1780923289,
+      "filename": "anthropic_news.csv",
+      "id": "9198548a-490b-4119-858f-fd3676b60319",
+      "object": "file"
+    }
+  ],
+  "object": "list"
+}
+```
+
+各エントリには次のフィールドがあります。
+
+| フィールド        | 型         | 説明                                              |
+| ------------ | --------- | ----------------------------------------------- |
+| `id`         | `string`  | ファイル識別子。コンテンツのダウンロードに使用します。レスポンスの `id` とは異なります。 |
+| `filename`   | `string`  | sandbox がファイルに付けた名前。                            |
+| `bytes`      | `integer` | ファイルサイズ (バイト単位) 。                               |
+| `created_at` | `integer` | ファイルが作成された時刻の Unix タイムスタンプ。                     |
+| `object`     | `string`  | 常に `file`。                                      |
+
+ファイルのコンテンツは `id` を指定してダウンロードします。このエンドポイントは JSON ではなく生のファイルバイト列を返し、`Content-Type` にはそのファイルに対応する値が、`Content-Disposition: attachment` ヘッダーには元のファイル名が設定されます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  content = client.responses.files.content(
+      file_id="9198548a-490b-4119-858f-fd3676b60319",
+      response_id="resp_abc123",
+  )
+  content.write_to_file("anthropic_news.csv")
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files/$FILE_ID/content \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -o anthropic_news.csv
+  ```
+</CodeGroup>
+
+<div id="pricing">
+  ## 料金
+</div>
+
+`sandbox` の課金は次の3つの軸で行われます。
+
+| 軸                | 価格             | 備考                                                                                                                                                                                                                       |
+| ---------------- | -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **token**        | モデルごと        | モデルのtoken使用量は、Agent APIのtoken料金に従って別途課金されます。モデル別の料金は [Models](/ja/docs/agent-api/models) を参照してください。                                                                                                                     |
+| **sandboxセッション** | セッションあたり $0.03 | sandboxコンテナごとに1回課金されます。セッションとは単一の隔離コンテナのライフサイクルを指し、課金上は最大20分間のアクティブな利用が対象となります。これは課金の対象期間であり、実行時間の上限ではありません。                                                                                                             |
+| **使用したツール**      | ツールごと          | sandbox内で実行されるコードからは、[Web Search](/ja/docs/agent-api/tools/web-search)、[Fetch URL Content](/ja/docs/agent-api/tools/fetch-url-content)、[People Search](/ja/docs/agent-api/tools/people-search) の各ツールを呼び出せます。いずれも標準の呼び出し単価で課金されます。 |
+
+sandboxの呼び出し回数は `usage.tool_calls_details.sandbox.invocation` に集計されます。
+
+Agent APIのツール料金表の全体は [Pricing](/ja/docs/getting-started/pricing#tool-pricing) を参照してください。

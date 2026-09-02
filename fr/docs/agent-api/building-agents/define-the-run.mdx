@@ -1,0 +1,119 @@
+---
+title: "Définir l'exécution"
+description: "Configurez l'exécution de l'agent : partez d'un preset, puis personnalisez le prompt système, la limite de boucle et le model."
+---
+
+Chaque exécution d&#39;agent débute par une requête à l&#39;Agent API. Avant même les prompts, les outils ou le format de sortie, vous définissez ce qui s&#39;exécute et jusqu&#39;où l&#39;exécution peut aller. Le moyen le plus rapide de démarrer est d&#39;utiliser un `preset` — un ensemble optimisé regroupant model, prompt système, configuration de recherche et outils — que vous affinez ensuite paramètre par paramètre selon vos besoins. Cette page met en place l&#39;appel sur lequel s&#39;appuie le reste de cette section.
+
+<div id="start-from-a-preset">
+  ## Partir d&#39;un preset
+</div>
+
+Un `preset` vous donne un agent opérationnel en un seul champ.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="low",
+      input="Give me a thorough overview of the current state of solid-state battery commercialization.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    preset: 'low',
+    input: 'Give me a thorough overview of the current state of solid-state battery commercialization.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "low",
+      "input": "Give me a thorough overview of the current state of solid-state battery commercialization."
+    }' | jq
+  ```
+</CodeGroup>
+
+Les autres presets établissent un compromis entre profondeur, latence et coût. Consultez [Presets](/fr/docs/agent-api/presets) pour savoir ce que chacun regroupe et comment leurs mises à jour sont gérées.
+
+<div id="customize-the-system-prompt-instructions">
+  ## Personnaliser le prompt système : `instructions`
+</div>
+
+Un `preset` est livré avec son propre prompt système optimisé. Le champ `instructions` **constitue** le prompt système de l&#39;agent : les règles permanentes valables à chaque tour de la boucle, à savoir le rôle, le ton, les citations et l&#39;ancrage. Elles s&#39;appliquent quelle que soit la demande de l&#39;utilisateur à un tour donné.
+
+```python theme={null}
+instructions="You are a research assistant. Cite every claim by source domain, and never speculate beyond the retrieved evidence."
+```
+
+Définir `instructions` **remplace** le prompt système du preset au lieu de s&#39;y ajouter. Omettez `instructions` pour conserver le prompt du preset.
+
+<Note>
+  Gardez le prompt système concis. Chaque token qu&#39;il contient est retraité à chaque étape de la boucle, ce qui finit par peser au fil des appels d&#39;outils. Pour obtenir une sortie exploitable par machine ou imposer des contraintes de récupération, privilégiez les paramètres de requête (voir [Structurer la sortie](/fr/docs/agent-api/building-agents/shape-output) et [Fournir des outils](/fr/docs/agent-api/building-agents/give-it-tools)) plutôt que des règles rédigées en prose.
+</Note>
+
+<div id="customize-the-loop-max_steps">
+  ## Personnaliser la boucle : `max_steps`
+</div>
+
+Une exécution d&#39;agent est une boucle : le modèle raisonne, appelle éventuellement des outils, lit les résultats et recommence jusqu&#39;à produire une réponse. Une étape correspond à un passage dans ce cycle — un seul tour du modèle, susceptible d&#39;appeler des outils. `max_steps` plafonne le nombre d&#39;étapes qu&#39;une exécution peut effectuer. Utilisez ce paramètre pour éviter les boucles incontrôlées et arbitrer entre latence et profondeur. Lorsqu&#39;une exécution atteint ce plafond, l&#39;agent ne renvoie pas d&#39;erreur : il effectue un dernier passage pour répondre à partir de ce qu&#39;il a rassemblé jusque-là.
+
+Une valeur faible de `max_steps` limite le nombre de fois où l&#39;agent peut exploiter les résultats des outils. Avec `max_steps: 1`, les outils directs peuvent toujours s&#39;exécuter, mais l&#39;agent ne peut pas reboucler pour raisonner sur leurs résultats. Les outils nécessitant un tour d&#39;initialisation, dont `finance_search`, risquent de ne pas s&#39;exécuter du tout.
+
+Lorsque vous spécifiez `model` ou `models` sans preset, l&#39;omission de `max_steps` limite l&#39;exécution à 1 étape par défaut. Définissez-le explicitement dès que vos outils requièrent plusieurs tours. Pour les requêtes vers un modèle direct qui activent `finance_search`, utilisez `max_steps: 3` ou plus, afin que l&#39;agent dispose de la marge nécessaire pour initialiser et exécuter l&#39;outil. Les presets fournissent leur propre budget d&#39;étapes, sauf si vous le remplacez.
+
+```python theme={null}
+response = client.responses.create(
+    preset="low",
+    input="Give me a thorough overview of the current state of solid-state battery commercialization.",
+    max_steps=20,
+)
+```
+
+Si vous transmettez `max_steps` avec un `preset`, cette valeur remplace celle du preset, dans la limite du plafond propre au preset pour les presets de type chat.
+
+<div id="customize-the-model-model-or-models">
+  ## Personnaliser le model : `model` ou `models`
+</div>
+
+Un preset choisit un model pour vous. Si vous voulez garder la maîtrise totale du model qui répond, indiquez-en un explicitement, à la place du preset ou en complément :
+
+| Champ    | Description                                                                                                 |
+| -------- | ----------------------------------------------------------------------------------------------------------- |
+| `model`  | Un seul model, au format `provider/model`, par exemple `openai/gpt-5.6-sol`.                                |
+| `models` | Une chaîne de repli de 5 models au maximum, essayés dans l&#39;ordre jusqu&#39;à ce que l&#39;un aboutisse. |
+
+Si vous renseignez `models`, ce champ prime sur `model`. Consultez [Models](/fr/docs/agent-api/models) pour le catalogue et la tarification, et [Repli de model](/fr/docs/agent-api/model-fallback) pour savoir comment la chaîne est résolue.
+
+<Tip>
+  Partez d&#39;un `preset`, puis passez à un `model` explicite (ou à une chaîne `models`) lorsque vous devez figer le moteur exact.
+</Tip>
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Envoyer une requête à l'agent" icon="message" href="/fr/docs/agent-api/building-agents/prompt-the-agent">
+    Séparez le prompt système de la question et ancrez l&#39;exécution.
+  </Card>
+
+  <Card title="Presets" icon="stack-2" href="/fr/docs/agent-api/presets">
+    Découvrez les presets optimisés qui peuvent vous servir de point de départ.
+  </Card>
+</CardGroup>

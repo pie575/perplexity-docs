@@ -1,0 +1,371 @@
+---
+title: "ツールを与える"
+description: "組み込みツールや独自のカスタムツールを tools 配列で有効にし、呼び出すタイミングはモデルに任せて、結果をレスポンスから読み取ります。"
+---
+
+モデル単体では、すでに学習した知識の範囲でしか回答できません。ツールを使えば、エージェントはその枠を超えて、リアルタイムのウェブを検索したり、ページを取得したり、コードを実行したり、自社システムを呼び出したりできます。ツールを有効にするには `tools` 配列に列挙するだけで、あとはプロンプトに応じてモデルが各ツールを呼び出すタイミングを判断します。このページでは、ツールの組み込み方と出力の読み取り方を説明します。個々のツールの設定項目については、リンク先のリファレンスページを参照してください。
+
+<div id="three-kinds-of-tools">
+  ## 3種類のツール
+</div>
+
+| 種類      | 仕組み                                                                                                                          |
+| ------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| 組み込みツール | Perplexityがホストする機能。ウェブ検索、URLフェッチ、人物検索、金融検索、コード実行用のsandboxがあります。それぞれ `type` で有効化すれば、Perplexityが実行し、結果をインラインで返します。             |
+| MCPサーバー | 自分で用意したリモート[MCP](/ja/docs/agent-api/tools/mcp)サーバー。modelは組み込みツールと同じように、サーバー側のツールを自動で検出して呼び出します。Perplexityが各呼び出しをお使いのサーバーへ中継します。 |
+| カスタムツール | 自前のツール、つまりお客様が制御する関数です。スキーマを宣言しておくと、modelがそのツールを呼び出した時点で実行が一時停止し、引数が渡されます。結果を返すと処理が再開されます。                                   |
+
+<div id="enable-built-in-tools">
+  ## 組み込みツールを有効化する
+</div>
+
+各ツールは `type` を指定して `tools` 配列に追加します。ほとんどの組み込みツールは type を指定するだけで動作しますが、一部は任意の設定を受け付けます (各リファレンスページに記載) 。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="What are the leading approaches to grid-scale energy storage, and how do they compare?",
+      tools=[
+          {"type": "web_search"},
+          {"type": "fetch_url"},
+      ],
+      max_steps=10,
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'What are the leading approaches to grid-scale energy storage, and how do they compare?',
+    tools: [
+      { type: 'web_search' as const },
+      { type: 'fetch_url' as const },
+    ],
+    max_steps: 10,
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "What are the leading approaches to grid-scale energy storage, and how do they compare?",
+      "tools": [
+        { "type": "web_search" },
+        { "type": "fetch_url" }
+      ],
+      "max_steps": 10
+    }' | jq
+  ```
+</CodeGroup>
+
+組み込みツールの一覧は以下のとおりです。各ツールには、設定の詳細、レスポンス形式、料金を記載したリファレンスページがあります。
+
+| ツール                                                          | `type`           | 用途                                                                           |
+| ------------------------------------------------------------ | ---------------- | ---------------------------------------------------------------------------- |
+| [Sandbox](/ja/docs/agent-api/tools/sandbox)                     | `sandbox`        | 隔離されたコンテナでコードを実行する — [コードを実行する](/ja/docs/agent-api/building-agents/run-code)を参照 |
+| [Web Search](/ja/docs/agent-api/tools/web-search)               | `web_search`     | ドメイン・日付・地域のフィルタを使ってリアルタイムのウェブを検索する                                           |
+| [Fetch URL Content](/ja/docs/agent-api/tools/fetch-url-content) | `fetch_url`      | 特定のURLからコンテンツを取得・抽出する                                                        |
+| [People Search](/ja/docs/agent-api/tools/people-search)         | `people_search`  | 専門家や人物を検索する                                                                  |
+| [Finance Search](/ja/docs/agent-api/tools/finance-search)       | `finance_search` | 構造化された金融・市場データを取得する                                                          |
+
+<Tip>
+  判断はモデルに任せましょう。ツールを有効化しておけば、`input` と `instructions` をもとに、モデルがそのツールを呼び出すかどうか、またいつ呼び出すかを決定します。
+</Tip>
+
+<div id="connect-an-mcp-server">
+  ## MCP サーバーを接続する
+</div>
+
+各ツールを自前でホストする代わりに、`type: mcp` を指定してリモートの [Model Context Protocol](/ja/docs/agent-api/tools/mcp) (MCP) サーバーを接続できます。Agent API はリクエスト開始時にサーバーのツールを検出し、model が組み込みツールと同様に自動で呼び出すため、個々の呼び出しを自分で処理する必要はありません。以下の例では、認証不要の公開 [DeepWiki](https://deepwiki.com) MCP サーバーに接続します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Use DeepWiki to explain what the perplexityai/perplexity-py repository does.",
+      tools=[
+          {
+              "type": "mcp",
+              "server_label": "deepwiki",
+              "server_url": "https://mcp.deepwiki.com/mcp",
+          }
+      ],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Use DeepWiki to explain what the perplexityai/perplexity-py repository does.',
+    tools: [
+      {
+        type: 'mcp',
+        server_label: 'deepwiki',
+        server_url: 'https://mcp.deepwiki.com/mcp',
+      },
+    ] as any, // 現行の SDK の型定義には MCP ツールがまだ含まれていません。
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Use DeepWiki to explain what the perplexityai/perplexity-py repository does.",
+      "tools": [
+        {
+          "type": "mcp",
+          "server_label": "deepwiki",
+          "server_url": "https://mcp.deepwiki.com/mcp"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+認証、レスポンス項目、ツール設定の詳細については、[MCP リファレンス](/ja/docs/agent-api/tools/mcp)を参照してください。
+
+<div id="add-your-custom-tool">
+  ## カスタムツールを追加する
+</div>
+
+カスタムツール (`type: function`) を使うと、エージェントが自分で管理するコード (自社のデータベースや社内APIなど) を呼び出せるようになります。宣言時には `name`、`description`、そして `parameters` のJSON Schemaを指定します。引数を埋めるのはmodel、関数を実行するのはあなたです。こうすることで、エージェントは自力では知り得ないデータ (ここでは社内システム上の注文の現在のステータス) にアクセスできます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  tools = [
+      {
+          "type": "function",
+          "name": "get_order_status",
+          "description": "Look up the current status of an internal order by its order ID.",
+          "parameters": {
+              "type": "object",
+              "properties": {"order_id": {"type": "string"}},
+              "required": ["order_id"],
+          },
+          "strict": True,
+      }
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="What's the status of order ORD-10042?",
+      tools=tools,
+  )
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const tools = [
+    {
+      type: 'function' as const,
+      name: 'get_order_status',
+      description: 'Look up the current status of an internal order by its order ID.',
+      parameters: {
+        type: 'object',
+        properties: { order_id: { type: 'string' } },
+        required: ['order_id'],
+      },
+      strict: true,
+    },
+  ];
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: "What's the status of order ORD-10042?",
+    tools,
+  });
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "What is the status of order ORD-10042?",
+      "tools": [
+        {
+          "type": "function",
+          "name": "get_order_status",
+          "description": "Look up the current status of an internal order by its order ID.",
+          "parameters": {
+            "type": "object",
+            "properties": { "order_id": { "type": "string" } },
+            "required": ["order_id"]
+          },
+          "strict": true
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+modelが関数を実行することはありません。APIはあなたのコードを実行できないためです。代わりに実行がいったん停止し、呼び出しがあなたに引き渡されます。レスポンスの `output` 配列には、関数名とmodelが埋めた引数を持つ `function_call` 項目が含まれます。
+
+```json theme={null}
+{
+  "type": "function_call",
+  "id": "fc_abc123",
+  "call_id": "call_xyz789",
+  "name": "get_order_status",
+  "arguments": "{\"order_id\":\"ORD-10042\"}"
+}
+```
+
+レスポンスからそのアイテムを取り出し、自分側で関数を実行したら、その結果を送り返して実行を継続します。続くリクエストでは、それまでの会話——元の質問、モデルが発行した `function_call`、そして同じ `call_id` に結果を格納した `function_call_output` ——をそのまま再送します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import json
+
+  function_call = next(item for item in response.output if item.type == "function_call")
+
+  def get_order_status(order_id: str) -> dict:
+      orders = {"ORD-10042": {"status": "in_transit", "carrier": "DHL", "eta": "2026-06-23"}}
+      return orders.get(order_id, {"error": "order not found"})
+
+  result = get_order_status(**json.loads(function_call.arguments))
+
+  followup = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input=[
+          {"role": "user", "content": "What's the status of order ORD-10042?"},
+          {
+              "type": "function_call",
+              "call_id": function_call.call_id,
+              "name": function_call.name,
+              "arguments": function_call.arguments,
+          },
+          {
+              "type": "function_call_output",
+              "call_id": function_call.call_id,
+              "output": json.dumps(result),
+          },
+      ],
+      tools=tools,
+  )
+
+  print(followup.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  const functionCall = response.output.find((item) => item.type === 'function_call');
+  if (functionCall?.type !== 'function_call') throw new Error('No function call returned.');
+
+  function getOrderStatus(orderId: string) {
+    const orders: Record<string, unknown> = {
+      'ORD-10042': { status: 'in_transit', carrier: 'DHL', eta: '2026-06-23' },
+    };
+    return orders[orderId] ?? { error: 'order not found' };
+  }
+
+  const args = JSON.parse(functionCall.arguments) as { order_id: string };
+  const result = getOrderStatus(args.order_id);
+
+  const followup = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: [
+      { type: 'message', role: 'user', content: "What's the status of order ORD-10042?" },
+      {
+        type: 'function_call',
+        call_id: functionCall.call_id,
+        name: functionCall.name,
+        arguments: functionCall.arguments,
+      },
+      {
+        type: 'function_call_output',
+        call_id: functionCall.call_id,
+        output: JSON.stringify(result),
+      },
+    ],
+    tools,
+  });
+
+  console.log(followup.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": [
+        { "role": "user", "content": "What is the status of order ORD-10042?" },
+        {
+          "type": "function_call",
+          "call_id": "call_xyz789",
+          "name": "get_order_status",
+          "arguments": "{\"order_id\":\"ORD-10042\"}"
+        },
+        {
+          "type": "function_call_output",
+          "call_id": "call_xyz789",
+          "output": "{\"status\": \"in_transit\", \"carrier\": \"DHL\", \"eta\": \"2026-06-23\"}"
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Note>
+  `call_id` は両者を紐付けるキーです。model が発行する `function_call` と、こちらから返す `function_call_output` には同じ値を指定する必要があります。パラメータスキーマを厳格に適用したい場合は、カスタムツールに `strict: true` を設定します。実行を継続するには、それまでの項目を `input` 配列に再度並べて渡します。このとき `function_call` とその `function_call_output` をセットで渡すことで、model は自身のリクエストと返された結果の両方を確認できます。
+</Note>
+
+<div id="read-tool-results">
+  ## ツールの実行結果を読み取る
+</div>
+
+組み込みツールは、レスポンスの `output` 配列内で `message` 項目の隣に出力を追加します。実行されたツールに応じて、`search_results`、`finance_results`、`sandbox_results` などの項目が含まれます。この配列を反復処理して、引用元、生成されたファイル、計算結果などを取り出してください。結果の正確な構造は各ツールのリファレンスページに記載されています。一例として [Web Search → レスポンスの形式](/ja/docs/agent-api/tools/web-search#response-shape) を参照してください。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="コードを実行する" icon="terminal" href="/ja/docs/agent-api/building-agents/run-code">
+    エージェントに sandbox を与え、正確な答えを計算させてファイルを返させます。
+  </Card>
+
+  <Card title="出力を構造化する" icon="list-details" href="/ja/docs/agent-api/building-agents/shape-output">
+    コードでパースできる構造化 JSON を強制的に出力させます。
+  </Card>
+</CardGroup>

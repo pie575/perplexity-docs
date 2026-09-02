@@ -1,0 +1,114 @@
+---
+title: "Formuler le prompt de l'agent"
+description: "Séparez les règles permanentes (le prompt système) de la question (input), et ancrez l'exécution pour que l'agent recherche et réponde sur le bon sujet."
+---
+
+Un agent possède deux surfaces de prompt, et il importe de bien les distinguer. `instructions` constitue le **prompt système** de l&#39;agent : les règles qui s&#39;appliquent à chaque tour. `input` désigne la tâche précise à accomplir lors du tour en cours. Lorsque les outils de récupération sont activés, `input` sert aussi au modèle à déterminer s&#39;il doit effectuer une recherche, et sur quoi. Cette page trace la frontière entre les deux et montre comment ancrer l&#39;exécution sur les éléments récupérés.
+
+<div id="instructions-vs-input">
+  ## `instructions` ou `input`
+</div>
+
+| Champ          | Ce qu&#39;il contient                                                                                                                                                                                                                            |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `instructions` | Le prompt système : rôle, ton, langue de sortie, règles de citation et de mise en forme, et interdictions strictes. Appliqué à chaque tour de la boucle, indépendamment de la question.                                                           |
+| `input`        | La question ou la tâche du tour en cours. Il oriente la sélection des outils et, lorsque la recherche est activée, c&#39;est sur cette base que le modèle effectue ses recherches : un `input` plus précis donne donc une recherche plus ciblée. |
+
+Un principe utile : si une règle doit rester valable même lorsque l&#39;utilisateur pose une question totalement différente, sa place est dans `instructions` (le prompt système). Si elle ne concerne que cette requête, sa place est dans `input`.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      instructions=(
+          "You are a financial analyst. Always cite sources by domain, "
+          "and never speculate beyond retrieved evidence."
+      ),
+      input="Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?",
+      tools=[{"type": "web_search"}],
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    instructions:
+      'You are a financial analyst. Always cite sources by domain, and never speculate beyond retrieved evidence.',
+    input: 'Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?',
+    tools: [{ type: 'web_search' as const }],
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "instructions": "You are a financial analyst. Always cite sources by domain, and never speculate beyond retrieved evidence.",
+      "input": "Which operating segments did Apple report in its most recent annual 10-K, and how did each contribute to revenue?",
+      "tools": [{ "type": "web_search" }]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Note>
+  Avec un `preset`, `instructions` remplace le prompt système optimisé du preset au lieu de s&#39;y ajouter. Omettez `instructions` pour conserver le prompt du preset. Voir [Définir l&#39;exécution](/fr/docs/agent-api/building-agents/define-the-run#customize-the-system-prompt-instructions).
+</Note>
+
+<div id="ground-the-run">
+  ## Ancrer l&#39;exécution
+</div>
+
+L&#39;ancrage fait en sorte que l&#39;agent réponde à partir des éléments récupérés plutôt qu&#39;à partir de ses propres a priori. Deux leviers font l&#39;essentiel du travail :
+
+* Un `input` précis. Lorsque les outils de récupération sont activés, le model effectue ses recherches à partir de l&#39;`input`. « Apple FY2025 10-K revenue by operating segment » donne des résultats bien plus ciblés que « how is Apple doing ». Nommez les entités, les plages de dates et l&#39;unité de la réponse.
+* Les outils de récupération. Activez `web_search` et les outils associés pour que l&#39;agent collecte des éléments à jour. Voir [Lui donner des outils](/fr/docs/agent-api/building-agents/give-it-tools).
+
+Pour les contraintes strictes — domaines autorisés, plages de dates, région —, privilégiez les paramètres de requête plutôt que les consignes en prose : ils sont appliqués, et non simplement suggérés :
+
+```python theme={null}
+tools=[{
+    "type": "web_search",
+    "filters": {
+        "search_domain_filter": ["sec.gov"],
+        "search_after_date_filter": "01/01/2026",
+    },
+}]
+```
+
+<Tip>
+  Les outils intégrés comme `web_search` et `fetch_url` fonctionnent généralement sans grand effort de formulation côté prompt. Privilégiez les filtres de `web_search` et `response_format` avant d&#39;ajouter des instructions supplémentaires en texte libre : les paramètres sont appliqués directement et ne sont pas retraités à chaque étape de la boucle, contrairement aux tokens du prompt système.
+</Tip>
+
+<div id="read-the-sources-back">
+  ## Consulter les sources
+</div>
+
+Une réponse sourcée s&#39;accompagne de ses éléments de preuve. Les outils de recherche joignent leurs résultats au tableau `output` de la réponse (par exemple des éléments `search_results` aux côtés du `message`), ce qui vous permet d&#39;afficher des citations ou de vérifier des affirmations. Consultez les pages de référence propres à chaque outil — à commencer par [Recherche web → Structure de la réponse](/fr/docs/agent-api/tools/web-search#response-shape) — pour connaître la structure exacte des réponses.
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Lui donner des outils" icon="tool" href="/fr/docs/agent-api/building-agents/give-it-tools">
+    Activez les outils intégrés ainsi que vos propres outils personnalisés, puis exploitez leurs résultats.
+  </Card>
+
+  <Card title="Guide de prompting" icon="bulb" href="/fr/docs/agent-api/prompt-guide">
+    Tous les schémas de prompts et les bonnes pratiques.
+  </Card>
+</CardGroup>

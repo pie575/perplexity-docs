@@ -1,0 +1,401 @@
+---
+title: "ディープリサーチのワークフロー"
+description: "Agent API の medium preset で包括的な多段階リサーチを実行する — 同期的な利用、バッチ並列実行、結果の処理、本番運用パターン"
+---
+
+このガイドでは、Agent API の `medium` preset を使って包括的な多段階リサーチタスクを実行する方法を説明します。ディープリサーチでは、広範なウェブリサーチを行い、情報源をたどりながら詳細な回答を組み立てます。ここでは、ディープリサーチのクエリを実行する方法、結果を処理する方法、長時間実行されるリクエストへの対処、バッチリサーチのワークフローの実行方法を学びます。
+
+<Info>
+  Agent API の `medium` preset は、多段階のウェブリサーチを実行し、情報源をたどって包括的な回答を組み立てます。最適な model を自動的に選択し、ディープリサーチ向けにツールを構成します。preset の詳細については、[Agent API Presets](/ja/docs/agent-api/presets) のドキュメントを参照してください。
+</Info>
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+Perplexity SDK をインストールします。
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+API key をまだお持ちでない場合:
+
+<Card title="Perplexity API key を取得する" icon="key" arrow="True" horizontal="True" iconType="solid" cta="こちらをクリック" href="https://perplexity.ai/account/api">
+  API ポータルの **API Keys** タブを開き、新しいキーを生成します。
+</Card>
+
+続いて、API key を環境変数としてエクスポートします。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="basic-deep-research">
+  ## 基本的なディープリサーチ
+</div>
+
+包括的なリサーチクエリには `medium` preset を使用します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="medium",
+      input=(
+          "Provide a comprehensive analysis of the current state of nuclear fusion research. "
+          "Cover the main approaches (tokamak, stellarator, inertial confinement, laser-driven), "
+          "key milestones achieved in the past 2 years, major private companies involved, "
+          "and realistic timelines for commercial fusion power."
+      ),
+  )
+
+  print(f"Model: {response.model}")
+  print(f"\n{response.output_text}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      preset: "medium",
+      input: "Provide a comprehensive analysis of the current state of nuclear fusion research. Cover the main approaches (tokamak, stellarator, inertial confinement, laser-driven), key milestones achieved in the past 2 years, major private companies involved, and realistic timelines for commercial fusion power.",
+  });
+
+  console.log(`Model: ${response.model}`);
+  console.log(`\n${response.output_text}`);
+  ```
+
+  ```bash curl theme={null}
+  curl "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "medium",
+      "input": "Provide a comprehensive analysis of the current state of nuclear fusion research."
+    }'
+  ```
+</CodeGroup>
+
+<Tip>
+  `medium` preset は最適な model を自動で選択し、マルチステップのリサーチに適したツールを構成します。preset を使う場合、model やツールを指定する必要はありません。
+</Tip>
+
+<div id="processing-deep-research-results">
+  ## ディープリサーチ結果の処理
+</div>
+
+ディープリサーチのレスポンスから主要な部分を抽出して整形します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def deep_research(query: str) -> dict:
+      """ディープリサーチのクエリを実行し、構造化された結果を抽出する。"""
+      print(f"Researching: {query[:80]}...")
+
+      response = client.responses.create(
+          preset="medium",
+          input=query,
+      )
+
+      content = response.output_text
+      usage = response.usage
+
+      return {
+          "content": content,
+          "model": response.model,
+          "tokens": {
+              "input": usage.input_tokens if usage else 0,
+              "output": usage.output_tokens if usage else 0,
+          },
+          "word_count": len(content.split()),
+      }
+
+
+  if __name__ == "__main__":
+      output = deep_research(
+          "What is the current state of solid-state battery technology? "
+          "Cover the leading companies, technical challenges remaining, "
+          "and expected timeline for mass production in EVs."
+      )
+      print(f"\nModel: {output['model']}")
+      print(f"Words: {output['word_count']}")
+      print(f"Tokens: {output['tokens']['input']} in, {output['tokens']['output']} out")
+      print(f"\n{'='*60}\n")
+      print(output["content"][:2000])
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  async function deepResearch(query: string) {
+      console.log(`Researching: ${query.slice(0, 80)}...`);
+
+      const response = await client.responses.create({
+          preset: "medium",
+          input: query,
+      });
+
+      const content = response.output_text;
+      const usage = response.usage;
+
+      return {
+          content,
+          model: response.model,
+          tokens: {
+              input: usage?.input_tokens ?? 0,
+              output: usage?.output_tokens ?? 0,
+          },
+          wordCount: content.split(/\s+/).length,
+      };
+  }
+
+  const output = await deepResearch(
+      "What is the current state of solid-state battery technology? Cover the leading companies, technical challenges remaining, and expected timeline for mass production in EVs."
+  );
+
+  console.log(`\nModel: ${output.model}`);
+  console.log(`Words: ${output.wordCount}`);
+  console.log(`Tokens: ${output.tokens.input} in, ${output.tokens.output} out`);
+  console.log(`\n${"=".repeat(60)}\n`);
+  console.log(output.content.slice(0, 2000));
+  ```
+</CodeGroup>
+
+<div id="deep-research-with-domain-filtering">
+  ## ドメインフィルターを用いたディープリサーチ
+</div>
+
+ディープリサーチとドメインフィルターを組み合わせることで、対象を絞った信頼性の高い調査を実施できます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 政府機関および学術ソースに限定したディープリサーチ
+  response = client.responses.create(
+      model="openai/gpt-5.2",
+      input=(
+          "Analyze the current regulatory landscape for AI in healthcare. "
+          "Cover FDA guidance, EU AI Act implications, and recent enforcement actions."
+      ),
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": [".gov", ".europa.eu", "who.int", "nature.com", ".edu"],
+          },
+      }],
+      instructions=(
+          "Conduct thorough research using only government and academic sources. "
+          "Provide specific regulatory references, dates, and policy details."
+      ),
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.2",
+      input: "Analyze the current regulatory landscape for AI in healthcare. Cover FDA guidance, EU AI Act implications, and recent enforcement actions.",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: [".gov", ".europa.eu", "who.int", "nature.com", ".edu"],
+          },
+      }],
+      instructions: "Conduct thorough research using only government and academic sources. Provide specific regulatory references, dates, and policy details.",
+  });
+
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="batch-research-with-concurrency">
+  ## 並行処理によるバッチリサーチ
+</div>
+
+asyncio と Perplexity SDK を使用して、複数のディープリサーチクエリを並行実行します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import time
+  from perplexity import AsyncPerplexity
+
+
+  async def single_research(client: AsyncPerplexity, query: str) -> dict:
+      """単一のディープリサーチクエリを実行する。"""
+      start = time.time()
+      try:
+          response = await client.responses.create(
+              preset="medium",
+              input=query,
+          )
+          return {
+              "query": query,
+              "content": response.output_text,
+              "model": response.model,
+              "elapsed": time.time() - start,
+          }
+      except Exception as e:
+          return {"query": query, "error": str(e), "elapsed": time.time() - start}
+
+
+  async def batch_research(queries: list[str], max_concurrent: int = 3) -> list[dict]:
+      """並行数を制限しつつ複数のディープリサーチクエリを実行する。"""
+      semaphore = asyncio.Semaphore(max_concurrent)
+
+      async def limited_research(client, query):
+          async with semaphore:
+              return await single_research(client, query)
+
+      async with AsyncPerplexity() as client:
+          tasks = [limited_research(client, q) for q in queries]
+          return await asyncio.gather(*tasks)
+
+
+  if __name__ == "__main__":
+      queries = [
+          "What are the latest advances in room-temperature superconductors?",
+          "What is the current state of quantum error correction?",
+          "What are the most promising approaches to carbon capture and storage?",
+      ]
+
+      print(f"Starting batch research: {len(queries)} queries\n")
+      results = asyncio.run(batch_research(queries, max_concurrent=3))
+
+      for r in results:
+          status = "OK" if "content" in r else f"FAILED ({r.get('error')})"
+          word_count = len(r.get("content", "").split()) if "content" in r else 0
+          print(f"  [{r['elapsed']:.0f}s] {r['query'][:60]}... → {status} ({word_count} words)")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  interface ResearchResult {
+    query: string;
+    content?: string;
+    model?: string;
+    elapsed: number;
+    error?: string;
+  }
+
+  const client = new Perplexity();
+
+  async function singleResearch(query: string): Promise<ResearchResult> {
+    const start = Date.now();
+    try {
+      const response = await client.responses.create({
+        preset: 'medium',
+        input: query,
+      });
+      return {
+        query,
+        content: response.output_text,
+        model: response.model,
+        elapsed: (Date.now() - start) / 1000,
+      };
+    } catch (e) {
+      return { query, error: String(e), elapsed: (Date.now() - start) / 1000 };
+    }
+  }
+
+  async function batchResearch(queries: string[], maxConcurrent = 3) {
+    const results: ResearchResult[] = [];
+    const queue = [...queries];
+    async function worker() {
+      while (queue.length) {
+        const q = queue.shift()!;
+        results.push(await singleResearch(q));
+      }
+    }
+    await Promise.all(
+      Array.from({ length: maxConcurrent }, () => worker())
+    );
+    return results;
+  }
+
+  const queries = [
+    'What are the latest advances in room-temperature superconductors?',
+    'What is the current state of quantum error correction?',
+    'What are the most promising approaches to carbon capture and storage?',
+  ];
+
+  console.log(`Starting batch research: ${queries.length} queries\n`);
+  const results = await batchResearch(queries, 3);
+
+  for (const r of results) {
+    const status = r.content ? 'OK' : `FAILED (${r.error})`;
+    const words = r.content ? r.content.split(/\s+/).length : 0;
+    console.log(`  [${r.elapsed.toFixed(0)}s] ${r.query.slice(0, 60)}... → ${status} (${words} words)`);
+  }
+  ```
+</CodeGroup>
+
+<Warning>
+  ディープリサーチのクエリは多くの計算リソースを消費します。レート制限を超えずスロットリングを避けるため、同時リクエスト数は 3〜5 に抑えてください。具体的なしきい値は[レート制限](/ja/docs/admin/rate-limits-usage-tiers)を参照してください。
+</Warning>
+
+<div id="tips-and-best-practices">
+  ## ヒントとベストプラクティス
+</div>
+
+1. **最もシンプルに統合するには `medium` preset を使用してください。** 最適な model が自動的に選択され、ツールも設定されます。
+
+2. **信頼できる情報源が必要な場合は、ドメインフィルターと組み合わせてください。** `search_domain_filter` を使って特定のドメインに限定できます。
+
+3. **`instructions` を使って**、リサーチの深さと焦点を調整してください。取り上げる観点を具体的に指定します。
+
+4. **同時実行数を制限してください。** ディープリサーチのクエリを同時に大量実行すると、レート制限に達する可能性があります。セマフォを使って同時リクエストを3〜5件に抑えてください。
+
+5. **バッチ処理には非同期クライアントを使用してください。** `AsyncPerplexity` を使えば、ブロッキングせずに並行リクエストを実行できます。
+
+6. **`max_output_tokens` を設定してください。** 網羅的なレポートではなく短い要約が必要な場合に、コストを抑えられます。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API のpreset" icon="settings" href="/ja/docs/agent-api/presets">
+    medium を含む、利用可能なpresetの完全なリファレンス。
+  </Card>
+
+  <Card title="Agent API クイックスタート" icon="rocket" href="/ja/docs/agent-api/quickstart">
+    マルチプロバイダーアクセスとツールを利用できる Agent API を使い始めましょう。
+  </Card>
+
+  <Card title="ドメインフィルタリング" icon="filter" href="/ja/docs/cookbook/articles/search-domain-filtering/README">
+    検索に含めるドメインと除外するドメインを制御します。
+  </Card>
+
+  <Card title="レート制限" icon="gauge-max" href="/ja/docs/admin/rate-limits-usage-tiers">
+    リサーチやバッチ処理のワークフローにおけるレート制限を理解しましょう。
+  </Card>
+</CardGroup>

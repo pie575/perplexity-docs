@@ -1,0 +1,176 @@
+---
+title: "Perplexity avec Composio"
+description: "Exposez les API Agent, Search et Embeddings de Perplexity sous forme d'outils MCP ou d'actions API directes, pour n'importe quel framework d'agents IA, via Composio."
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+[Composio](https://composio.dev) est une passerelle d&#39;outils universelle pour les agents IA. Le toolkit Perplexity de Composio expose les API Agent, Search et Embeddings de Perplexity sous forme d&#39;outils que n&#39;importe quel framework d&#39;agents peut appeler via une URL MCP unique ou une intégration directe à l&#39;API.
+
+<Info>
+  **Composio** gère l&#39;authentification, le stockage sécurisé des identifiants, les flux OAuth et le routage des outils pour plus de 1 000 applications. Pour en savoir plus, rendez-vous sur [composio.dev](https://composio.dev).
+</Info>
+
+Le toolkit propose les actions Perplexity suivantes :
+
+* **Execute Agent** — `POST /v1/agent` (réponses de l&#39;Agent API)
+* **Perplexity Search (Raw Results)** — `POST /search`
+* **Create Embeddings** — `POST /v1/embeddings`
+* **Create Contextualized Embeddings** — `POST /v1/contextualizedembeddings`
+* **List Models** — `GET /v1/models`
+
+<div id="prerequisites">
+  ## Prérequis
+</div>
+
+* Un [compte Composio](https://composio.dev) et une clé API
+* Une clé API Perplexity
+
+<Card title="Obtenir une clé API" icon="key" href="https://console.perplexity.ai/project/keys">
+  Générez votre clé API Perplexity depuis le portail API.
+</Card>
+
+<div id="installation">
+  ## Installation
+</div>
+
+```bash theme={null}
+pip install composio
+```
+
+Pour les intégrations avec des frameworks d&#39;agents, installez le SDK de votre framework en plus de Composio (Composio prend en charge Claude Agent SDK, OpenAI Agents SDK, LangChain, LlamaIndex, Mastra, Pydantic AI, AutoGen, CrewAI, Google ADK, et bien d&#39;autres).
+
+<div id="quick-start-tool-router-mcp">
+  ## Démarrage rapide : Tool Router (MCP)
+</div>
+
+Le Tool Router expose Perplexity comme un serveur MCP auquel votre agent peut se connecter. Il fonctionne avec tout client compatible MCP (Claude Code, Cursor, OpenCode, etc.).
+
+```python theme={null}
+from composio import Composio
+
+composio = Composio(api_key="your-composio-api-key")
+session = composio.create(user_id="your-user-id")
+url = session.mcp.url
+
+print(f"MCP URL: {url}")
+```
+
+Intégrez cette URL dans la configuration MCP de votre agent :
+
+```python theme={null}
+import asyncio
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+
+options = ClaudeAgentOptions(
+    permission_mode="bypassPermissions",
+    mcp_servers={
+        "tool_router": {
+            "type": "http",
+            "url": url,
+            "headers": {"x-api-key": "your-composio-api-key"},
+        }
+    },
+    system_prompt="You are a helpful assistant with access to Perplexity tools.",
+    max_turns=10,
+)
+
+async def main():
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query("Summarize the latest AI research papers")
+        async for message in client.receive_response():
+            if hasattr(message, "content"):
+                for block in message.content:
+                    if hasattr(block, "text"):
+                        print(block.text)
+
+asyncio.run(main())
+```
+
+<div id="quick-start-direct-api-actions">
+  ## Démarrage rapide : actions API directes
+</div>
+
+Vous pouvez également exécuter des actions Perplexity directement depuis Composio, sans couche MCP :
+
+```python theme={null}
+from composio import Composio
+
+composio = Composio(api_key="your-composio-api-key")
+
+# Connectez une seule fois le compte Perplexity de l'utilisateur
+composio.toolkits.authorize(
+    user_id="your-user-id",
+    toolkit="perplexityai",
+)
+
+# Exécutez une requête Agent API
+result = composio.tools.execute(
+    slug="PERPLEXITYAI_EXECUTE_AGENT",
+    user_id="your-user-id",
+    arguments={
+        "model": "openai/gpt-5.6-sol",
+        "tools": [{"type": "web_search"}],
+        "input": "What are the latest fusion-energy headlines?",
+    },
+)
+
+print(result["data"])
+```
+
+<div id="supported-agent-frameworks">
+  ## Frameworks d&#39;agents pris en charge
+</div>
+
+Le toolkit Perplexity de Composio fonctionne avec tous les frameworks d&#39;agents pris en charge par Composio, notamment :
+
+* ChatGPT, OpenAI Agents SDK, Codex
+* Claude Agents SDK, Claude Code
+* Cursor, VS Code, OpenCode
+* Google ADK, LangChain, AI SDK, Mastra AI
+* LlamaIndex, CrewAI, Pydantic AI, AutoGen
+
+Chaque framework dispose d&#39;un guide de configuration dédié sur la page [Composio Perplexity toolkit](https://composio.dev/toolkits/perplexityai).
+
+<div id="authentication">
+  ## Authentification
+</div>
+
+Composio stocke votre clé API Perplexity de manière sécurisée et l&#39;injecte dans chaque requête. Vous ne fournissez votre clé qu&#39;une seule fois, lors du flux d&#39;autorisation du toolkit — soit depuis le tableau de bord Composio, soit par programmation via `composio.toolkits.authorize(...)`. Composio se charge du renouvellement des tokens, de la gestion des portées et de la signature des requêtes à chaque appel.
+
+<div id="links-resources">
+  ## Liens et ressources
+</div>
+
+<CardGroup cols={2}>
+  <Card title="toolkit Perplexity de Composio" icon="toolbox" href="https://composio.dev/toolkits/perplexityai">
+    Documentation complète du toolkit, avec des guides propres à chaque framework.
+  </Card>
+
+  <Card title="Documentation Composio" icon="book" href="https://docs.composio.dev">
+    Documentation de la plateforme Composio.
+  </Card>
+
+  <Card title="Référence de l'API Perplexity" icon="code" href="/fr/api-reference">
+    Référence complète de l&#39;API Perplexity.
+  </Card>
+
+  <Card title="Modèles de l'Agent API" icon="sparkles" href="/fr/docs/agent-api/models">
+    Modèles disponibles et tarifs.
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## Assistance
+</div>
+
+Besoin d&#39;aide pour l&#39;intégration ?
+
+* Parcourez la [documentation Composio](https://docs.composio.dev)
+* Consultez notre [FAQ](/fr/docs/resources/faq)

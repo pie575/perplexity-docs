@@ -1,0 +1,405 @@
+---
+title: "Agente de memorandos de inversión de capital de riesgo con LangGraph"
+description: "Crea un agente de investigación de capital riesgo auditable y respaldado por citas con LangGraph y la Agent API de Perplexity, y elige el mejor proveedor de búsqueda con un marco de evaluación de LangSmith."
+---
+
+import SonarDeprecationNotice from "/snippets/es/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+En esta guía construirás un agente que recibe el nombre de una empresa y devuelve un memorando de inversión de capital de riesgo respaldado por citas, con siete secciones: resumen, equipo, finanzas, producto, mercado, riesgos y una tesis que cierra con una recomendación de una sola línea. **Cada afirmación es trazable hasta una fuente primaria.**
+
+Se ejecuta sobre la [Agent API de Perplexity](/es/docs/agent-api/quickstart) y sus herramientas integradas `web_search` y `finance_search`, orquestadas con [LangGraph](https://langchain-ai.github.io/langgraph/) y evaluadas en [LangSmith](https://docs.langchain.com/langsmith/home). Todo el proceso tarda unos noventa segundos y cuesta aproximadamente $0,40 por memorando.
+
+La lección de diseño se aplica mucho más allá del ámbito financiero: **separar la búsqueda de la síntesis es una solución estructural para la fiabilidad de un agente de investigación.** Cuatro nodos de investigación se ramifican en paralelo y cada uno llama a la Agent API con sus propias herramientas. El nodo sintetizador final no dispone de herramientas y solo puede citar la evidencia que ya recopilaron los nodos de investigación, por lo que el memorando no puede inventarse una fuente.
+
+<img src="https://mintcdn.com/perplexity/PUYTpeKNbln7dn87/docs/cookbook/static/img/langchain-vc-memo-architecture.png?fit=max&auto=format&n=PUYTpeKNbln7dn87&q=85&s=7d8be1fd753996f5128676f5a3e18b2f" alt="El nombre de la empresa entra en START y se ramifica hacia cuatro nodos de investigación en paralelo (equipo, finanzas, producto, mercado), que alimentan un único nodo sintetizador que produce el memorando en END." />
+
+<div id="features">
+  ## Funcionalidades
+</div>
+
+* **Investigación paralela en abanico.** Cuatro nodos de investigación especializados (equipo, finanzas, producto, mercado) se ejecutan de forma concurrente, cada uno con sus propias herramientas y su propio presupuesto de búsqueda.
+* **Sintetizador sin herramientas.** El memorando final se redacta únicamente a partir de la evidencia recopilada aguas arriba, lo que constituye una salvaguarda estructural contra las citas inventadas.
+* **Herramientas integradas de la Agent API.** `web_search` y `finance_search` funcionan sin configuración adicional; no se requiere infraestructura de búsqueda del lado del cliente para el agente principal.
+* **Auditable en LangSmith.** Se registran las llamadas a herramientas y las salidas de cada nodo, de modo que cualquier afirmación puede rastrearse hasta el resultado de búsqueda que la originó.
+* **Marco de evaluación de proveedores.** Una comparación en LangSmith que puntúa a los proveedores de búsqueda según la tasa de fuentes primarias, la cobertura de conceptos financieros, la latencia y el costo.
+
+<div id="prerequisites">
+  ## Requisitos previos
+</div>
+
+* Python 3.10+
+* Una [API key de Perplexity](/es/docs/admin/api-key-management) (`PPLX_API_KEY`)
+* Una [API key de LangSmith](https://docs.smith.langchain.com/) para trazas y evaluación
+* (solo para la comparación de proveedores) API keys de [Parallel](https://platform.parallel.ai/) y [Exa](https://dashboard.exa.ai/)
+
+<div id="setup">
+  ## Configuración
+</div>
+
+```bash theme={null}
+pip install "langchain-perplexity>=1.4.0" langgraph langsmith
+```
+
+```bash theme={null}
+# ChatPerplexity lee PPLX_API_KEY.
+export PPLX_API_KEY="pplx-..."
+export LANGSMITH_API_KEY="ls__..."
+export LANGSMITH_TRACING="true"   # captura de extremo a extremo las llamadas a herramientas de cada nodo
+```
+
+<div id="build-the-agent">
+  ## Crear el agente
+</div>
+
+Todo el contenido de esta sección va en un solo archivo. Pega los bloques en orden en `memo.py` y tendrás el agente completo.
+
+<div id="graph-state">
+  ### Estado del grafo
+</div>
+
+Cada nodo de investigación lee `company` del estado compartido y escribe sus resultados en `research_output`; un reductor fusiona las escrituras paralelas.
+
+```python theme={null}
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Annotated, Any, TypedDict
+
+from langchain_core.messages import AIMessage
+from langchain_perplexity import ChatPerplexity
+from langgraph.graph import END, START, StateGraph
+
+
+def merge_research_output(left: dict[str, str], right: dict[str, str]) -> dict[str, str]:
+    """Each research node returns {"<section>": "..."}; merge into one dict."""
+    return {**(left or {}), **(right or {})}
+
+
+class MemoState(TypedDict):
+    company: str
+    research_output: Annotated[dict[str, str], merge_research_output]
+    memo: str
+```
+
+<div id="models-and-tools">
+  ### Modelos y herramientas
+</div>
+
+La Agent API expone directamente las herramientas integradas de Perplexity. El nodo de finanzas añade `finance_search`; los demás usan `web_search`. `max_steps` limita el bucle de búsqueda interno de cada nodo, es decir, el presupuesto de búsqueda por nodo.
+
+```python theme={null}
+SUBNODE_MODEL_NAME = "openai/gpt-5.5"
+SYNTHESIZER_MODEL_NAME = "openai/gpt-5.5"
+
+
+def _agent_model(model: str) -> ChatPerplexity:
+    """Build a ChatPerplexity client wired to the Responses API."""
+    # La Responses (Agent) API ignora parámetros de muestreo como temperature, por lo que lo omitimos.
+    return ChatPerplexity(model=model, use_responses_api=True)
+
+
+SUBNODE_MODEL = _agent_model(SUBNODE_MODEL_NAME)
+SYNTHESIZER_MODEL = _agent_model(SYNTHESIZER_MODEL_NAME)
+
+
+# Especificaciones de herramientas por nodo de investigación.
+TEAM_TOOLS = [{
+    "type": "web_search",
+    "filters": {"search_recency_filter": "year"},
+}]
+
+PRODUCT_TOOLS = [{"type": "web_search"}]
+
+MARKET_TOOLS = [{"type": "web_search"}]
+
+FINANCIALS_TOOLS = [{"type": "finance_search"}, {"type": "web_search"}]
+
+
+# El max_steps de cada nodo de investigación limita el bucle de búsqueda interno de la Perplexity Agent API.
+RESEARCH_MAX_STEPS = {
+    "team": 2, "financials": 5, "product": 2, "market": 2,
+}
+```
+
+<div id="research-prompts">
+  ### Prompts de investigación
+</div>
+
+Una única plantilla de prompt sirve para los cuatro nodos; las indicaciones de cada sección determinan qué debe buscar cada nodo y qué fuentes priorizar.
+
+```python theme={null}
+RESEARCH_PROMPT = """You are a VC analyst writing the {section} section of the research output for {company}.
+
+{guidance}
+
+Return a markdown section, then end the document with a "### Citations" header \
+followed by a markdown list of:
+
+  - <url> — one-sentence evidence quoted from the source
+
+Cite only URLs that came back from your tool calls; never fabricate URLs. \
+Keep the section focused — 250-400 words is appropriate for the body."""
+
+
+GUIDANCE = {
+    "team": (
+        "Search for the founders, CEO, and other named executives. Capture each "
+        "leader's prior roles and education. Prioritize the company's own About/Team "
+        "page and reputable public biographies."
+    ),
+    "financials": (
+        "If the company is public, use finance_search for revenue, margins, and analyst "
+        "estimates. If private, use web_search for funding rounds, valuation, and "
+        "disclosed revenue. Cross-check structured data against recent news."
+    ),
+    "product": (
+        "Describe the company's flagship product, recent launches, and technical "
+        "differentiators. Cite the company's own product or engineering pages where "
+        "possible, plus tech-press coverage for context."
+    ),
+    "market": (
+        "Map the competitive landscape, name direct competitors, and surface market "
+        "sizing. Your web_search is scoped to analyst and trade-press sources."
+    ),
+}
+```
+
+<div id="research-nodes">
+  ### Nodos de investigación
+</div>
+
+Los cuatro nodos comparten un mismo ejecutor: una única llamada a la Agent API con las herramientas y el presupuesto de búsqueda de ese nodo. La API ejecuta el bucle de búsqueda en el servidor, así que aquí no hace falta conectar herramientas del lado del cliente.
+
+```python theme={null}
+def _run_research(
+    state: MemoState,
+    *,
+    section: str,
+    tools: list[dict[str, Any]],
+    max_steps: int,
+) -> dict[str, dict[str, str]]:
+    """Run one research section with the given tools and return its output."""
+    msg: AIMessage = SUBNODE_MODEL.invoke(
+        [
+            {"role": "system", "content": RESEARCH_PROMPT.format(
+                section=section, company=state["company"], guidance=GUIDANCE[section],
+            )},
+            {"role": "user", "content": f"Research the {section} of {state['company']}."},
+        ],
+        tools=tools,
+        extra_body={"max_steps": max_steps},
+    )
+    return {"research_output": {section: msg.content}}
+
+
+def team_node(state):
+    """Research the founders and leadership team."""
+    return _run_research(state, section="team",
+        tools=TEAM_TOOLS, max_steps=RESEARCH_MAX_STEPS["team"])
+
+def financials_node(state):
+    """Research revenue, funding, and financial metrics."""
+    return _run_research(state, section="financials",
+        tools=FINANCIALS_TOOLS, max_steps=RESEARCH_MAX_STEPS["financials"])
+
+def product_node(state):
+    """Research the product, launches, and technical differentiators."""
+    return _run_research(state, section="product",
+        tools=PRODUCT_TOOLS, max_steps=RESEARCH_MAX_STEPS["product"])
+
+def market_node(state):
+    """Research the competitive landscape and market sizing."""
+    return _run_research(state, section="market",
+        tools=MARKET_TOOLS, max_steps=RESEARCH_MAX_STEPS["market"])
+```
+
+<div id="the-synthesizer">
+  ### El sintetizador
+</div>
+
+El sintetizador no tiene herramientas. Compone las siete secciones del memorando a partir de los resultados de investigación de los cuatro nodos, de modo que cada afirmación citada se sustenta en investigación que alguno de los nodos realizó realmente. Cada una de las secciones 1 a 6 termina con una lista `### Citations` que asocia cada URL de origen con la evidencia que respalda. La tesis es la única sección exclusivamente analítica y no lleva citas.
+
+```python theme={null}
+SYNTH_PROMPT = """You are a senior VC partner writing the final memo for {company}.
+
+You may only cite evidence that appears in the research outputs below. You have no \
+tools; do not browse or fabricate sources.
+
+Produce a markdown memo with these seven sections, in order:
+
+  1. Snapshot — what the company is, founded, valuation, positioning (3-4 sentences)
+  2. Team — founders, leadership, recent senior hires
+  3. Financials — revenue, growth, funding history, comparables
+  4. Product — what they sell, technology, distribution
+  5. Market — TAM, direct competitors, category dynamics
+  6. Risks — top 3-5 risks with brief reasoning
+  7. Thesis — 1-2 paragraphs of analysis, ending with a single line:
+     "Recommendation: <PASS | TRACK | ADVANCE | LEAD>"
+
+Each section's H2 heading must be exactly `## <N> · <Section Name>` \
+(e.g. `## 1 · Snapshot`), using a middle-dot separator — the evaluator depends \
+on this format.
+
+Each of sections 1-6 must end with a `### Citations` subsection listing the \
+<url> — <evidence> pairs drawn from the research outputs. Section 7 (Thesis) does \
+not need its own citations.
+
+If a research output lacks evidence for a section, write "Insufficient evidence in \
+research outputs." in that section's body instead of guessing."""
+
+
+def synthesizer_node(state: MemoState) -> dict[str, str]:
+    """Combine all research outputs into the final memo. No tools attached."""
+    research_output_block = "\n\n".join(
+        f"## Research output: {name}\n\n{body}"
+        for name, body in sorted(state["research_output"].items())
+    )
+    msg: AIMessage = SYNTHESIZER_MODEL.invoke([
+        {"role": "system", "content": SYNTH_PROMPT.format(company=state["company"])},
+        {"role": "user", "content": (
+            f"Company: {state['company']}\n"
+            f"As-of: {datetime.now(timezone.utc).isoformat(timespec='seconds')}\n\n"
+            f"Research outputs:\n\n{research_output_block}"
+        )},
+    ])
+    return {"memo": msg.content}
+```
+
+<div id="wiring-the-graph">
+  ### Conexión del grafo
+</div>
+
+Cuatro nodos de investigación se ramifican en paralelo desde `START` y convergen en el sintetizador. La conexión es breve:
+
+```python theme={null}
+def build_graph():
+    """Wire the four research nodes in parallel from START into the synthesizer, then END."""
+    g = StateGraph(MemoState)
+    g.add_node("team", team_node)
+    g.add_node("financials", financials_node)
+    g.add_node("product", product_node)
+    g.add_node("market", market_node)
+    g.add_node("synthesizer", synthesizer_node)
+
+    for section in ("team", "financials", "product", "market"):
+        g.add_edge(START, section)
+        g.add_edge(section, "synthesizer")
+
+    g.add_edge("synthesizer", END)
+    return g.compile()
+```
+
+<div id="running-it">
+  ### Ejecución
+</div>
+
+```python theme={null}
+import argparse
+import asyncio
+
+
+async def run_memo(company: str) -> str:
+    """Run the full memo agent for one company and return the final markdown memo."""
+    graph = build_graph()
+    final = await graph.ainvoke({"company": company, "research_output": {}, "memo": ""})
+    return final["memo"]
+
+
+def main() -> None:
+    """CLI entrypoint: parse `--company` and print the generated memo."""
+    parser = argparse.ArgumentParser(description="VC investment memo agent.")
+    parser.add_argument("--company", required=True)
+    args = parser.parse_args()
+    print(asyncio.run(run_memo(args.company)))
+
+
+if __name__ == "__main__":
+    main()
+```
+
+```bash theme={null}
+python memo.py --company "Anthropic"
+```
+
+Un memorando tarda unos noventa segundos y cuesta aproximadamente $0.40. Con `LANGSMITH_TRACING="true"`, la ejecución completa aparece en LangSmith junto con las llamadas a herramientas de cada nodo. Aquí tienes una [traza pública de una ejecución](https://smith.langchain.com/public/cd9926c8-edc1-4d52-9bfa-b9642ebd267f/r) para explorar.
+
+<img src="https://mintcdn.com/perplexity/X5JcIOX7i0z8S6ii/docs/cookbook/static/img/langchain-vc-memo-trace.png?fit=max&auto=format&n=X5JcIOX7i0z8S6ii&q=85&s=fde491b6a54994eff85e10272e32a436" alt="Una traza de LangSmith de la ejecución de un memorando: los cuatro nodos de investigación en paralelo alimentan al sintetizador y la salida del memorando muestra su sección de Citas con URL de fuentes primarias." />
+
+<div id="choosing-a-search-provider">
+  ## Elegir un proveedor de búsqueda
+</div>
+
+¿Qué proveedor de búsqueda debería respaldar al agente? `memo/profiles.py` ejecuta el mismo grafo con tres herramientas de búsqueda intercambiables del lado del cliente (`PerplexitySearchResults`, `ParallelSearchTool`, `ExaSearchResults`), y `memo/compare.py` las puntúa en LangSmith para aplicar las mismas métricas a todas.
+
+Dos evaluadores personalizados puntúan la calidad del memorando, además de la latencia y el coste que LangSmith mide de forma nativa:
+
+* `primary_source_rate`: tasa de fuentes primarias de las citas procedentes de fuentes primarias (páginas de relaciones con inversores, SEC, notas de prensa oficiales) y no de agregadores.
+* `financial_concept_coverage`: si la sección de finanzas cubre valoración, ingresos, financiación y métricas operativas.
+
+El marco de evaluación es un paquete pequeño y no un único archivo, por lo que reside en el [repositorio api-cookbook](https://github.com/ppl-ai/api-cookbook/tree/main/docs/articles/langchain-vc-memo-agent):
+
+```bash theme={null}
+git clone https://github.com/ppl-ai/api-cookbook.git
+cd api-cookbook/docs/articles/langchain-vc-memo-agent/scripts
+pip install -r requirements.txt
+python -m memo.compare
+```
+
+<div id="results">
+  ### Resultados
+</div>
+
+Evaluación realizada sobre diez empresas públicas y privadas con `openai/gpt-5.5`:
+
+<img src="https://mintcdn.com/perplexity/X5JcIOX7i0z8S6ii/docs/cookbook/static/img/langchain-vc-memo-comparison.png?fit=max&auto=format&n=X5JcIOX7i0z8S6ii&q=85&s=90501ceb255597e6f32938b56903d2f8" alt="Una comparación en LangSmith de los experimentos de Perplexity, Parallel y Exa según puntuaciones de evaluación, latencia y costo." />
+
+| Métrica                            | Perplexity | Parallel | Exa   |
+| ---------------------------------- | ---------- | -------- | ----- |
+| Tasa de fuentes primarias          | **1.00**   | 0.82     | 0.85  |
+| Cobertura de conceptos financieros | **0.70**   | 0.70     | 0.50  |
+| Latencia p50 (s/memorando)              | **91**     | 192      | 143   |
+| Costo (USD/memorando)                   | **$0.38**  | $0.60    | $0.67 |
+
+Perplexity obtuvo una tasa de fuentes primarias perfecta, los memorandos más rápidos, el menor costo por ejecución y empató en el primer lugar de cobertura de conceptos financieros en esta ejecución. Vuelve a evaluar los proveedores con tu propio conjunto de datos para ver cómo se comparan en tu caso de uso.
+
+<div id="directory-structure">
+  ## Estructura de directorios
+</div>
+
+Dentro de [`docs/articles/langchain-vc-memo-agent/`](https://github.com/ppl-ai/api-cookbook/tree/main/docs/articles/langchain-vc-memo-agent) en api-cookbook:
+
+```
+scripts/
+├── requirements.txt
+├── .env.example
+└── memo/
+    ├── graph.py          # estado tipado, nodos de investigación en paralelo, sintetizador sin herramientas, build_graph()
+    ├── main.py           # punto de entrada de la CLI (python -m memo --company "...")
+    ├── profiles.py       # los tres perfiles de proveedor intercambiables
+    ├── evaluators.py     # evaluadores de LangSmith
+    ├── eval_dataset.py   # empresas usadas como entradas de evaluación
+    └── compare.py        # ejecuta la comparación en LangSmith
+```
+
+<div id="links">
+  ## Enlaces
+</div>
+
+* [Herramientas de la Agent API de Perplexity](/es/docs/agent-api/tools)
+* [Finance Search](/es/docs/agent-api/tools/finance-search)
+* [Proveedor de Perplexity en LangChain](https://docs.langchain.com/oss/python/integrations/providers/perplexity)
+* [LangGraph](https://langchain-ai.github.io/langgraph/)
+* [Evaluación con LangSmith](https://docs.langchain.com/langsmith/evaluation)
+
+<div id="limitations">
+  ## Limitaciones
+</div>
+
+* **Ten claro dónde se queda corto.** El agente solo es tan bueno como las fuentes primarias que consigue encontrar: sólido con empresas bien documentadas, mucho menos fiable con startups privadas de escasa cobertura, sobre las que apenas se ha publicado nada.
+* **La plantilla de secciones es solo una convención.** Las siete secciones y la escala PASS / TRACK / ADVANCE / LEAD son el formato que elegimos nosotros; sustitúyelo por el que use tu equipo.

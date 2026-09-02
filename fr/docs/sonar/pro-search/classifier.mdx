@@ -1,0 +1,648 @@
+---
+title: "Classificateur Pro Search"
+description: "Optimisez les coûts et les performances grâce à la classification automatique des requêtes entre les modes Pro Search et Fast Search"
+---
+
+import SonarDeprecationNotice from "/snippets/fr/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Le Classificateur Pro Search est un système intelligent qui détermine automatiquement si une requête nécessite l&#39;utilisation avancée d&#39;outils en plusieurs étapes propre à Pro Search, ou si elle peut être traitée efficacement par la recherche standard Fast Search. Cette optimisation vous aide à concilier besoins de performance et maîtrise des coûts.
+
+<Info>
+  Plutôt que de choisir manuellement entre les types de recherche `"pro"` et `"fast"`, vous pouvez utiliser `"auto"` pour laisser le classificateur prendre la décision optimale pour chaque requête.
+</Info>
+
+<div id="how-it-works">
+  ## Fonctionnement
+</div>
+
+Lorsque vous définissez `search_type: "auto"`, le classificateur analyse votre requête selon plusieurs dimensions :
+
+<Steps>
+  <Step title="Analyse de la complexité de la requête">
+    Le classificateur évalue :
+
+    * Le nombre de sous-questions ou d&#39;aspects
+    * La nécessité d&#39;une analyse comparative
+    * Le besoin d&#39;un raisonnement en plusieurs étapes
+    * La complexité de la synthèse d&#39;informations requise
+
+    ```json theme={null}
+    {
+      "web_search_options": {
+        "search_type": "auto"  // Laisser le classificateur décider
+      }
+    }
+    ```
+  </Step>
+
+  <Step title="Décision de classification">
+    À partir de cette analyse, le classificateur oriente la requête vers :
+
+    * **Pro Search** pour les requêtes complexes et à facettes multiples nécessitant l&#39;utilisation d&#39;outils en plusieurs étapes
+    * **Fast Search** pour une simple récupération d&#39;informations
+
+    La décision est visible dans les métadonnées de la réponse.
+  </Step>
+
+  <Step title="Exécution">
+    Le mode de recherche sélectionné traite votre requête :
+
+    * **Pro Search** : utilise automatiquement les outils intégrés (web&#95;search, fetch&#95;url&#95;content)
+    * **Fast Search** : effectue une recherche et une synthèse optimisées en une seule passe
+
+    Vous recevez le même format de réponse de haute qualité, quel que soit le mode utilisé.
+  </Step>
+</Steps>
+
+<div id="classification-patterns">
+  ## Modèles de classification
+</div>
+
+<div id="queries-classified-as-pro-search">
+  ### Requêtes classées comme Pro Search
+</div>
+
+Les requêtes complexes qui bénéficient d&#39;une utilisation d&#39;outils en plusieurs étapes sont automatiquement routées vers Pro Search :
+
+<AccordionGroup>
+  <Accordion title="Questions à plusieurs volets">
+    **Exemple de requête :**
+    « Quelles sont les différences entre React, Vue et Angular en termes de performances, de courbe d&#39;apprentissage et d&#39;écosystème ? Lequel choisir pour une application d&#39;entreprise de grande envergure ? »
+
+    **Pourquoi Pro Search :**
+
+    * Nécessite des informations sur trois frameworks différents
+    * Exige une analyse comparative selon plusieurs dimensions
+    * Implique de recueillir des avis et des recommandations d&#39;experts
+    * Tire parti de la synthèse de sources variées
+
+    **Utilisation des outils :**
+
+    * Plusieurs recherches web pour chaque framework
+    * Récupération d&#39;URL pour les données de benchmark et la documentation officielle
+  </Accordion>
+
+  <Accordion title="Synthèse de recherche">
+    **Exemple de requête :**
+    « Résume les dernières recherches évaluées par des pairs sur l&#39;efficacité du jeûne intermittent pour la perte de poids et la santé métabolique. Indique les tailles d&#39;échantillon et les limites des études. »
+
+    **Pourquoi Pro Search :**
+
+    * Nécessite de trouver plusieurs articles de recherche
+    * Exige l&#39;accès au contenu intégral des articles, et non aux seuls résumés
+    * Implique l&#39;extraction de données précises (tailles d&#39;échantillon, limites)
+    * Requiert une synthèse portant sur plusieurs études
+
+    **Utilisation des outils :**
+
+    * Recherche web d&#39;articles récents évalués par des pairs
+    * `fetch_url_content` pour lire les articles dans leur intégralité
+    * Extraction et synthèse d&#39;informations
+  </Accordion>
+
+  <Accordion title="Analyse complexe urgente">
+    **Exemple de requête :**
+    « Analyse l&#39;impact sur les marchés boursiers de la plus récente décision de la Réserve fédérale sur les taux d&#39;intérêt, y compris les effets sur les différents secteurs et les prévisions des experts pour le trimestre à venir. »
+
+    **Pourquoi Pro Search :**
+
+    * Nécessite des informations très récentes
+    * Exige une vérification multi-sources
+    * Implique une analyse secteur par secteur
+    * Tire parti de la collecte d&#39;avis d&#39;experts
+
+    **Utilisation des outils :**
+
+    * Plusieurs recherches web ciblées
+    * Récupération d&#39;URL pour les rapports d&#39;analyse financière
+    * Synthèse d&#39;avis d&#39;experts variés
+  </Accordion>
+</AccordionGroup>
+
+<div id="queries-classified-as-fast-search">
+  ### Requêtes classées en Fast Search
+</div>
+
+Les requêtes simples qui ne nécessitent pas de raisonnement en plusieurs étapes sont traitées efficacement par Fast Search :
+
+<AccordionGroup>
+  <Accordion title="Questions factuelles simples">
+    **Exemple de requête :**
+    « Quelle est la capitale de la France ? »
+
+    **Pourquoi Fast Search :**
+
+    * Fait unique et bien établi
+    * Aucun calcul ni analyse nécessaire
+    * Information directement disponible dans les extraits de recherche
+
+    **Traitement :**
+
+    * Une seule recherche web
+    * Réponse directe issue des résultats de recherche
+    * Aucun raisonnement en plusieurs étapes requis
+  </Accordion>
+
+  <Accordion title="Recherche d'informations simple">
+    **Exemple de requête :**
+    « Quelles sont les principales caractéristiques de l&#39;iPhone 15 Pro ? »
+
+    **Pourquoi Fast Search :**
+
+    * Demande portant sur un seul produit
+    * Information disponible dans les descriptions produit
+    * Aucune analyse comparative requise
+    * Aucun calcul nécessaire
+
+    **Traitement :**
+
+    * Recherche des spécifications du produit
+    * Extraction et liste des caractéristiques
+    * Synthèse à partir des résultats de recherche
+  </Accordion>
+
+  <Accordion title="Requêtes monothématiques">
+    **Exemple de requête :**
+    « Explique ce qu&#39;est l&#39;apprentissage automatique. »
+
+    **Pourquoi Fast Search :**
+
+    * Définition d&#39;un seul concept
+    * Aucune analyse en plusieurs volets requise
+    * Information standard directement disponible
+
+    **Traitement :**
+
+    * Recherche d&#39;explications sur l&#39;apprentissage automatique
+    * Synthèse d&#39;une définition claire
+    * Apport de contexte issu de sources fiables
+  </Accordion>
+
+  <Accordion title="Demandes de définition élémentaires">
+    **Exemple de requête :**
+    « Que signifie API et à quoi cela sert-il ? »
+
+    **Pourquoi Fast Search :**
+
+    * Simple demande de définition
+    * Aucune analyse complexe nécessaire
+    * Information directement disponible
+
+    **Traitement :**
+
+    * Recherche rapide de la définition d&#39;API
+    * Explication de l&#39;acronyme et de son usage de base
+    * Réponse claire et concise
+  </Accordion>
+</AccordionGroup>
+
+<div id="cost-implications">
+  ## Implications tarifaires
+</div>
+
+Comprendre la différence de coût vous aide à optimiser votre utilisation de l&#39;API :
+
+<div>
+  <div>
+    <h4>Classé comme Pro Search</h4>
+
+    <ul>
+      <li>Questions complexes à plusieurs volets</li>
+      <li>Requêtes nécessitant un calcul ou une analyse</li>
+      <li>Recherche comparative entre plusieurs sources</li>
+      <li>Besoins d&#39;informations sensibles au facteur temps</li>
+    </ul>
+
+    <div>
+      <span>Facturé aux tarifs Pro Search</span>
+    </div>
+  </div>
+
+  <div>
+    <h4>Classé comme Fast Search</h4>
+
+    <ul>
+      <li>Questions factuelles simples</li>
+      <li>Recherche d&#39;informations directe</li>
+      <li>Requêtes portant sur un seul sujet</li>
+      <li>Demandes de définitions basiques</li>
+    </ul>
+
+    <div>
+      <span>Facturé aux tarifs standard de Sonar Pro</span>
+    </div>
+  </div>
+</div>
+
+<div id="pricing-comparison">
+  ### Comparaison des tarifs
+</div>
+
+**Tarifs Pro Search :**
+
+* Entrée : 3 $ par million de tokens
+* Sortie : 15 $ par million de tokens
+* Frais de requête : 14 $ à 22 $ pour 1 000 requêtes (selon la taille du contexte)
+
+**Tarifs Fast Search :**
+
+* Entrée : 3 $ par million de tokens
+* Sortie : 15 $ par million de tokens
+* Frais de requête : 6 $ à 14 $ pour 1 000 requêtes (selon la taille du contexte, identiques à ceux de Sonar Pro standard)
+
+<Tip>
+  Le classificateur automatique vous aide à réduire vos coûts en ne recourant à Pro Search que lorsque ses capacités avancées sont réellement nécessaires, tout en garantissant aux requêtes complexes une utilisation complète des outils en plusieurs étapes.
+</Tip>
+
+<div id="usage-examples">
+  ## Exemples d&#39;utilisation
+</div>
+
+<div id="using-automatic-classification">
+  ### Utilisation de la classification automatique
+</div>
+
+<CodeGroup>
+  ```python Python SDK theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+  # Laisser le classificateur décider
+  response = client.chat.completions.create(
+      model="sonar-pro",
+      messages=[
+          {
+              "role": "user",
+              "content": "Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data."
+          }
+      ],
+      stream=True,
+      web_search_options={
+          "search_type": "auto"  # Classification automatique
+      }
+  )
+
+  for chunk in response:
+      if chunk.choices[0].delta.content:
+          print(chunk.choices[0].delta.content, end="")
+  ```
+
+  ```typescript Typescript SDK theme={null}
+  import { Perplexity } from '@perplexity-ai/sdk';
+
+  const client = new Perplexity();
+
+  // Laisser le classificateur décider
+  const response = await client.chat.completions.create({
+    model: 'sonar-pro',
+    messages: [
+      {
+        role: 'user',
+        content: 'Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data.'
+      }
+    ],
+    stream: true,
+    web_search_options: {
+      search_type: 'auto'  // Classification automatique
+    }
+  });
+
+  for await (const chunk of response) {
+    if (chunk.choices[0]?.delta?.content) {
+      process.stdout.write(chunk.choices[0].delta.content);
+    }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/v1/sonar \
+    --header "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "model": "sonar-pro",
+      "messages": [
+        {
+          "role": "user",
+          "content": "Compare the energy efficiency (kWh/100mi and MPGe) of the Tesla Model 3, Chevrolet Bolt, and Nissan Leaf using EPA data."
+        }
+      ],
+      "stream": true,
+      "web_search_options": {
+        "search_type": "auto"
+      }
+    }' --no-buffer
+  ```
+</CodeGroup>
+
+<Accordion title="Réponse">
+  ```json theme={null}
+  {
+    "id": "cab71ad3-867d-4139-997e-c36ce805351b",
+    "results": [
+      {
+        "snippet": "The following table compares official EPA ratings for fuel economy (in miles per gallon gasoline equivalent, mpg-e or MPGe, for plug-in electric vehicles) for series production all-electric passenger vehicles rated by the EPA for model years 2015, 2016, 2017, and 2023 versus the model year\n2016 vehicles that were rated the most efficient by the EPA with plug-in hybrid drivetrains (Chevrolet Volt – second generation), gasoline-electric hybrid drivetrains (Toyota Prius Eco - fourth generation), and the average new vehicle for that model year, which has a fuel economy of 25 mpg~‑US~ (9.4 L/100 km; 30 mpg~‑imp~).\nEPA rating data are taken from manufacturer testing of their own vehicles using a series of tests specified by federal law.\n...\nReal-world EV efficiency can also be expressed in miles per kilowatt-hour (mi/kWh), which converts EPA MPGe values into direct electrical energy consumption, allowing cross-comparison between electric and gasoline vehicles.\n...\n|Vehicle|Model year|EPA rated fuel economy|EPA rated fuel economy|EPA rated fuel economy|Notes| | |\n...\n|Toyota Prius HEV|2023|57 mpg|57 mpg|56 mpg|(9)| | |\n|Hyundai Ioniq 6 Long Range RWD w/ 18-inch wheels|2023|140 mpg‑e 24.1 kWh/100 mi; 15.0 kWh/100 km|153 mpg‑e 22.0 kWh/100 mi; 13.7 kWh/100 km|127 mpg‑e 26.5 kWh/100 mi; 16.5 kWh/100 km|(1)| | |\n...\n|Tesla Model Y AWD|2023|123 mpg‑e 27.4 kWh/100 mi; 17.0 kWh/100 km|129 mpg‑e 26.1 kWh/100 mi; 16.2 kWh/100 km|116 mpg‑e 29.1 kWh/100 mi; 18.1 kWh/100 km|(1)| | |\n|Tesla Model 3 Standard Range|2020|141 mpg‑e 23.9 kWh/100 mi; 14.9 kWh/100 km|148 mpg‑e 22.8 kWh/100 mi; 14.2 kWh/100 km|132 mpg‑e 25.5 kWh/100 mi; 15.9 kWh/100 km|(1)| | |\n...\n|Tesla Model 3 Long Range AWD|2020|121 mpg‑e 27.9 kWh/100 mi; 17.3 kWh/100 km|124 mpg‑e 27.2 kWh/100 mi; 16.9 kWh/100 km|116 mpg‑e 29.1 kWh/100 mi; 18.1 kWh/100 km|(1)| | |\n|Chevrolet Bolt EV|2017|119 mpg‑e 28.3 kWh/100 mi; 17.6 kWh/100 km|121 mpg‑e 27.9 kWh/100 mi; 17.3 kWh/100 km|110 mpg‑e 30.6 kWh/100 mi; 19.0 kWh/100 km| | | |\n...\n|Nissan Leaf (24 kW-h)|2013/14/15/16|114 mpg‑e 29.6 kWh/100 mi; 18.4 kWh/100 km|126 mpg‑e 26.8 kWh/100 mi; 16.6 kWh/100 km|101 mpg‑e 33.4 kWh/100 mi; 20.7 kWh/100 km|(1) (6)| | |\n...\n|Nissan Leaf (30 kW-h)|2016|112 mpg‑e 30.1 kWh/100 mi; 18.7 kWh/100 km|124 mpg‑e 27.2 kWh/100 mi; 16.9 kWh/100 km|101 mpg‑e 33.4 kWh/100 mi; 20.7 kWh/100 km|(1)| | |",
+        "title": "Electric car EPA fuel economy - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Electric_car_EPA_fuel_economy",
+        "date": "2015-04-30",
+        "last_updated": "2026-05-05"
+      },
+      {
+        "snippet": "Instead of focusing on battery size or total range, we look at **energy consumption (kWh per 100 miles)** and **MPGe**, the EPA’s miles-per-gallon equivalent metric.\n...\n**Methodology**: Recurrent's Most Efficient EVs of 2026 were determined based on combined efficiency in kWh/100miles as reported to the EPA.\n...\n## 3.\nTesla Model 3\n**Efficiency:** 25 kWh/100 miles\n**MPGe:** 134.8\n**Body style:** Compact sedan\n...\n## 5.\nTesla Model Y\n**Efficiency:** 26 kWh/100 miles\n**MPGe:** 129.6\n**Body style:** Compact crossover SUV\n...\n## 6.\nNissan LEAF\n**Efficiency:** 28 kWh/100 miles\n**MPGe:** 120.4\n**Body style:** Compact crossover (redesigned)",
+        "title": "2026 Most Efficient EV by Size According to Testing - Recurrent",
+        "url": "https://www.recurrentauto.com/research/most-efficient-ev",
+        "date": "2026-03-02",
+        "last_updated": "2026-05-27"
+      },
+      {
+        "snippet": "|EPA MPG MPGe:Miles per Gallon Equivalent 1 gallon of gasoline=33.7 kWh About All-Electric Cars|Electricity Combined MPG:111 MPGe City MPG:123 Highway MPG:99 30 kWh/100 miles|",
+        "title": "Find and Compare Cars",
+        "url": "https://www.fueleconomy.gov/feg/noframes/48400.shtml",
+        "date": "2023-01-01",
+        "last_updated": "2024-10-03"
+      },
+      {
+        "snippet": "MPGe is a unit of measure used by the Environmental Protection Agency (EPA) to represent EV fuel economy in a common unit with gas-powered vehicles, where 33.7 kilowatt-hours of electricity are equal to the energy contained in one gallon of gasoline.\nAmong those 17 models, there were a total of 37 unique configurations that achieved 100 MPGe or higher.\nThe Tesla Model 3 in rear-wheel drive configuration achieved the highest rating for MY 2022 with 132 MPGe.\n||\n|--|\n|||\n|Tesla Model 3|132|\n|Lucid Air|131|\n|Tesla Model Y|129|\n|Chevrolet Bolt EV|120|\n|Hyundai Kona Electric|120|\n|Tesla Model S|120|\n|Kia EV6|117|\n|Chevrolet Bolt EUV|115|\n|Hyundai Ioniq 5|114|\n|Kia Niro Electric|112|\n|Nissan Leaf|111|\n|MINI Cooper SE|110|\n|BMW i4 Gran Coupe|109|\n|Polestar 2|107|\n|Volkswagen ID.4|107|\n|Ford Mustang Mach-E|103|\n|Tesla Model X|102|\n...\n**Source: **U.S. Department of Energy and U.S. Environmental Protection Agency’s Fuel Economy Website, Compare Electric Vehicles Side-by-Side.\nData accessed August 24, 2022.",
+        "title": "FOTW #1257, September 26, 2022: Seventeen EV Models Achieved ...",
+        "url": "https://www.energy.gov/eere/vehicles/articles/fotw-1257-september-26-2022-seventeen-ev-models-achieved-epa-combined-rating",
+        "date": "2022-09-26",
+        "last_updated": "2025-10-09"
+      },
+      {
+        "snippet": "Nevertheless, the efficiency and range varies a lot from EV to EV.\nTo help you choose which electric car is more suitable for you, I made the table below with EPA efficiency and range figures – for different driving scenarios (city, highway and mixed/combined).\nElectric car range and efficiency (EPA)\n|Electric car\n|City\nrange\n|Combined\nrange\n|Highway\nrange\n|City\nefficiency\n|Combined\nefficiency\n|Highway\nefficiency\n|2019 Tesla Model 3 Long Range (RWD)\n|340 miles\n547 km\n|325 miles\n523 km\n|307 miles\n494 km\n|24,8 kWh/100 miles\n15,4 kWh/100 km\n|25,9 kWh/100 miles\n16,1 kWh/100 km\n|27,4 kWh/100 miles\n17 kWh/100 km\n|2019 Tesla Model 3 Long Range (AWD)\n|320 miles\n515 km\n|310 miles\n499 km\n|297 miles\n478 km\n|28,1 kWh/100 miles\n17,5 kWh/100 km\n|29,1 kWh/100 miles\n18,1 kWh/100 km\n|30,1 kWh/100 miles\n18,7 kWh/100 km\n|2019 Tesla Model 3 Standard Range Plus\n|253 miles\n407 km\n|240 miles\n386 km\n|224 miles\n361 km\n|24,1 kWh/100 miles\n15 kWh/100 km\n|25,3 kWh/100 miles\n15,7 kWh/100 km\n|27,2 kWh/100 miles\n16,9 kWh/100 km\n|2019 Tesla Model S Long Range\n|382 miles\n614 km\n|370 miles\n595 km\n|356 miles\n573 km\n|29,3 kWh/100 miles\n18,2 kWh/100 km\n|30,4 kWh/100 miles\n18,9 kWh/100 km\n|31,5 kWh/100 miles\n19,6 kWh/100 km\n|2019 Tesla Model X Long Range\n...\n22,5 kWh/100 km\n...\n|2017-2019 Chevrolet Bolt EV\n|255 miles\n411 km\n|238 miles\n383 km\n|217 miles\n350 km\n|26,3 kWh/100 miles\n16,4 kWh/100 km\n|28,3 kWh/100 miles\n17,6 kWh/100 km\n|30,6 kWh/100 miles\n19 kWh/100 km\n|2020 Chevrolet Bolt EV\n|279 miles\n449 km\n|259 miles\n417 km\n|237 miles\n381 km\n|26,5 kWh/100 miles\n16,5 kWh/100 km\n|28,6 kWh/100 miles\n17,7 kWh/100 km\n|31,2 kWh/100 miles\n19,4 kWh/100 km",
+        "title": "Electric car range and efficiency (EPA) - 🔋PushEVs",
+        "url": "https://pushevs.com/electric-car-range-efficiency-epa/",
+        "date": null,
+        "last_updated": "2024-02-21"
+      },
+      {
+        "snippet": "An efficient EV is simply a car that uses fewer kilowatt-hours of electricity to go the same distance.\n...\n53–140 MPGe\nEPA spread\nModel‑year 2024 EVs range from about 53 to 140 miles‑per‑gallon‑equivalent, nearly a 3x difference in efficiency.\n1.5–4.2 mi/kWh\nEnergy use\nOn the same test cycle, some EVs travel less than 1.5 miles per kWh while the best creep above 4 miles per kWh.\n...\nMPGe, or **miles per gallon equivalent**, is the EPA’s attempt to put EVs in gas‑car language.\nOne “gallon” of gasoline is treated as 33.7 kWh of energy.\nIf an EV uses 25 kWh to travel 100 miles, the math works out to roughly 135 MPGe.\n...\nElectricity is billed in **kilowatt‑hours** (kWh).\nSo the most honest unit is simply: how many kWh do you burn to go 100 miles?\n- **kWh/100 mi**: lower is better (like L/100 km)\n- **mi/kWh**: higher is better (like MPG)\nExample: a car that uses 25 kWh/100 mi delivers 4.0 mi/kWh.\nAt $0.15/kWh, those 100 miles cost about $3.75.\n...\nTake the EPA’s kWh/100‑mile number, divide by 100, and multiply by your home rate.\n...\nThat’s why EPA ratings show 2024 EVs spanning roughly 53–140 MPGe while gasoline cars live between 9–57 MPG for the same model year.\n...\nRecent EPA data and independent testing put a handful of EVs at the sharp end of the efficiency spear, especially in sedan form.\n### Sample of highly efficient EVs on sale (2024–2025)\nRepresentative trims; always confirm the exact configuration’s window sticker, as wheels, motors, and options change the numbers.\n|Model & year|Type|Energy use (kWh/100 mi)*|Approx. mi/kWh|EPA combined MPGe*|Notable trait|\n|--|--|--|--|--|--|\n|Lucid Air Pure (2025 RWD)|Sedan|≈23–24|≈4.2–4.3|High 130s–140s|Luxury sedan that somehow drinks like a subcompact.|\n|Hyundai Ioniq 6 SE (2024–2025 RWD)|Sedan|≈24–25|≈4.0–4.2|Around 140|Super‑slippery aero and efficient 800‑V platform.|\n|Tesla Model 3 Long Range RWD (2025)|Sedan|≈25|≈4.0|Low‑to‑mid 130s|The efficiency benchmark among mass‑market sedans.|\n|Tesla Model Y Long Range RWD (2025)|SUV|≈27–28|≈3.6–3.7|Mid‑120s|Roomier crossover form factor, small aero penalty.|\n|Lexus RZ 300e (2024–2025)|SUV|≈27|≈3.7|Mid‑120s|Luxury compact SUV that surprised everyone with its frugality.|\n|Kia EV6 / Hyundai Kona Electric / Kia Niro EV (2024–2025 RWD)|Crossovers|≈28–29|≈3.4–3.6|High teens/low 120s|The efficient heartland of the EV market.|\n|GMC Hummer EV Pickup/SUV|Truck/SUV|≈70+|≈1.4–1.5|Under 50|Off‑the‑charts consumption; think of it as a rolling coal plant with a conscience.|\n...\n### Sedans & hatchbacks\n- **Typical energy use:** ~24–30 kWh/100 mi\n- **Examples:** Hyundai Ioniq 6, Tesla Model 3, Lucid Air, Chevy Bolt (used)\n...\n#### 1.\nStart with kWh/100 mi, not just range\nRange is a product of pack size; kWh/100 mi is the diet.\n...\n#### 2.\nNormalize for body style and mission\nCompare sedans to sedans, crossovers to crossovers, trucks to trucks.\n...\nWhen you compare electric cars, focus less on the billboard range number and more on **kWh per 100 miles, body style, and real battery health**.\n- Use kWh/100 miles (or mi/kWh) as your primary yardstick; MPGe is just the translation into gas‑car language.",
+        "title": "Electric Car Efficiency Comparison: 2025 Buyer's Guide - Recharged",
+        "url": "https://recharged.com/articles/electric-car-efficiency-comparison-guide",
+        "date": "2025-11-17",
+        "last_updated": "2026-05-26"
+      },
+      {
+        "snippet": "With an EPA-rated efficiency of 111 MPGe, it’s middle-of-the-road in efficiency, far below the Tesla but way above the 2021 Ford Mustang Mach-E GT’s 84 MPGe.\n...\nRecent figures from the U.S. Environmental Protection Agency (EPA) show that the 2021 Tesla Model 3 Standard Range Plus RWD stands at the top of the efficiency range, boasting a combined 142 MPGe—the electrical equivalent of a gallon of fuel.\n...\nEV testing and analysis firm Recurrent crunched the numbers on a set of 99 cars—half Tesla Model 3s and half Nissan Leafs—and their 500,000 data points of efficiency metrics were logged between November 2021 and March 2022.\nUsing an EPA figure-based mile per kWh (mi/kWh) measurement as opposed to MPGe, the Tesla range was calculated from 3.33 to 4.17 mi/kWh, and the Nissan Leaf was 2.94 to 3.45 mi/kWh.\nTherefore, even bargain standard Model 3s will achieve greater road efficiency than the best Leaf.\nHowever, the EPA ratings weren’t what was measured when real-world driving conditions were considered.\nOver the four-month timeframe, Recurrent revealed the median observed efficiency for each vehicle as the Tesla Model 3 having 3.39 mi/kWh and the Nissan Leaf having 3.71 mi/kWh.",
+        "title": "Is the Nissan Leaf More Efficient Than the Tesla Model 3? Here's What 1 Study Found",
+        "url": "https://www.motorbiscuit.com/nissan-leaf-more-efficient-tesla-model-3-what-study-found/",
+        "date": "2022-08-11",
+        "last_updated": "2025-06-25"
+      },
+      {
+        "snippet": "Compare USA EV efficiency by kWh/100 mi and MPGe, with EPA and charging metrics across all models and trims.\nUpdated monthly (2026).",
+        "title": "Most Efficient EVs in the USA (kWh/100 mi) - BEV Database",
+        "url": "https://bev-database.com/cars-list-usa/most-efficient-electric-cars",
+        "date": "2026-02-28",
+        "last_updated": "2026-02-28"
+      },
+      {
+        "snippet": ",\nModel Year 2022 EVs Achieving EPA Combined Rating of 100 MPGe or more,\nMake and Model,Highest MPGe For Base Model\nTesla Model 3,132\nLucid Air,131\nTesla Model Y,129\nChevrolet Bolt EV,120\nHyundai Kona Electric,120\nTesla Model S,120\nKia EV6,117\nChevrolet Bolt EUV,115\nHyundai Ioniq 5,114\nKia Niro Electric,112\nNissan Leaf,111\nMINI Cooper SE,110\nBMW i4 Gran Coupe,109\nPolestar 2,107\nVolkswagen ID.4,107\nFord Mustang Mach-E,103\nTesla Model X,102\n,\n...\nEVs include only all-electric vehicles.,\n...\nOnly the base model names are shown and only the highest MPGe values are shown for each model name.\nSome models listed have configurations that fall below 100 MPGe.,\n...\n,\n\"Source: U.S. Department of Energy and U.S. Environmental Protection Agency’s Fuel Economy Website, Compare Electric Vehicles Side-by-Side.\nData accessed August 24, 2022.\",\n,\n,\nhttps://www.fueleconomy.gov/feg/evSelect.jsp,",
+        "title": "FOTW_1257_web.xlsx",
+        "url": "https://www.energy.gov/sites/default/files/2022-09/FOTW_1257_web.xlsx",
+        "date": null,
+        "last_updated": "2025-03-28"
+      },
+      {
+        "snippet": ",\nModel Year 2022 EVs Achieving EPA Combined Rating of 100 MPGe or more,\nMake and Model,Highest MPGe For Base Model\nTesla Model 3,132\nLucid Air,131\nTesla Model Y,129\nChevrolet Bolt EV,120\nHyundai Kona Electric,120\nTesla Model S,120\nKia EV6,117\nChevrolet Bolt EUV,115\nHyundai Ioniq 5,114\nKia Niro Electric,112\nNissan Leaf,111\nMINI Cooper SE,110\nBMW i4 Gran Coupe,109\nPolestar 2,107\nVolkswagen ID.4,107\nFord Mustang Mach-E,103\nTesla Model X,102\n,\n...\nEVs include only all-electric vehicles.,\n...\nOnly the base model names are shown and only the highest MPGe values are shown for each model name.\nSome models listed have configurations that fall below 100 MPGe.,\n...\n,\n\"Source: U.S. Department of Energy and U.S. Environmental Protection Agency’s Fuel Economy Website, Compare Electric Vehicles Side-by-Side.\nData accessed August 24, 2022.\",\n,\n,\nhttps://www.fueleconomy.gov/feg/evSelect.jsp,",
+        "title": "[XLS] FOTW #1257 - Energy.gov",
+        "url": "https://www.energy.gov/documents/fotw1257webxlsx",
+        "date": null,
+        "last_updated": "2026-03-05"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<div id="manual-override">
+  ### forçage manuel
+</div>
+
+Vous pouvez toujours spécifier manuellement le type de recherche lorsque vous savez ce dont vous avez besoin :
+
+<Tabs>
+  <Tab title="Forcer Pro Search">
+    À utiliser lorsque vous savez qu&#39;une utilisation d&#39;outils en plusieurs étapes est nécessaire :
+
+    ```python theme={null}
+    response = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "Your complex query"}],
+        stream=True,
+        web_search_options={
+            "search_type": "pro"  # Forcer Pro Search
+        }
+    )
+    ```
+
+    **Cas d&#39;usage du mode Pro manuel :**
+
+    * Vous savez que la requête exige un raisonnement en plusieurs étapes
+    * La classification automatique a retenu Fast, mais vous avez besoin d&#39;une analyse plus poussée
+    * Requêtes critiques pour lesquelles vous voulez le maximum de capacité
+  </Tab>
+
+  <Tab title="Forcer Fast Search">
+    À utiliser lorsque vous souhaitez privilégier la vitesse et le coût :
+
+    ```python theme={null}
+    response = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "Your simple query"}],
+        stream=True,
+        web_search_options={
+            "search_type": "fast"  # Forcer Fast Search (ou omettre : fast est la valeur par défaut)
+        }
+    )
+    ```
+
+    **Cas d&#39;usage du mode Fast manuel :**
+
+    * Requêtes simples pour lesquelles Pro Search serait excessif
+    * Applications sensibles au coût
+    * Lorsque la rapidité de réponse est déterminante
+  </Tab>
+</Tabs>
+
+<div id="best-practices">
+  ## Bonnes pratiques
+</div>
+
+<Steps>
+  <Step title="Privilégier la classification automatique par défaut">
+    Pour la plupart des applications, utilisez `search_type: "auto"` et laissez le classificateur optimiser :
+
+    ```python theme={null}
+    web_search_options={"search_type": "auto"}
+    ```
+
+    Vous êtes ainsi assuré d&#39;utiliser le bon outil pour chaque requête tout en maîtrisant les coûts.
+  </Step>
+
+  <Step title="Surveiller les tendances de classification">
+    Suivez quelles requêtes sont classées en Pro plutôt qu&#39;en Fast afin de comprendre vos habitudes d&#39;utilisation :
+
+    * Examinez les requêtes qui font systématiquement appel à Pro Search
+    * Repérez les occasions de reformuler des requêtes pour Fast Search lorsque c&#39;est pertinent
+    * Identifiez les questions des utilisateurs qui exigent des capacités avancées
+
+    Cela vous aide à optimiser la conception des requêtes de votre application.
+  </Step>
+
+  <Step title="Utiliser le forçage manuel de façon stratégique">
+    Ne forcez la décision du classificateur que dans les cas suivants :
+
+    * Vous avez des exigences de performance spécifiques
+    * Vous testez et comparez les résultats Pro et Fast
+    * Vous développez des fonctionnalités dont le niveau de complexité est connu
+
+    **Exemple :**
+
+    ```python theme={null}
+    # Known complex analysis - force Pro
+    if query_requires_calculations(user_query):
+        search_type = "pro"
+    else:
+        search_type = "auto"
+    ```
+  </Step>
+
+  <Step title="Concevoir des requêtes efficaces">
+    Structurez vos requêtes pour aider le classificateur à prendre les meilleures décisions :
+
+    **Moins efficace :**
+    « Parle-moi des voitures électriques »
+
+    **Mieux :**
+    « Quelle est l&#39;autonomie moyenne des véhicules électriques ? » (Fast Search convient)
+
+    **Ou :**
+    « Compare le coût total de possession sur 5 ans de la Tesla Model 3, de la Chevrolet Bolt et de la Nissan Leaf, en incluant la dépréciation, les coûts d&#39;électricité et l&#39;entretien » (Pro Search convient)
+
+    Des requêtes claires et précises permettent une meilleure classification.
+  </Step>
+</Steps>
+
+<div id="classification-transparency">
+  ## Transparence de la classification
+</div>
+
+Vous pouvez vérifier la décision de classification dans les métadonnées de la réponse :
+
+```json theme={null}
+{
+  "id": "12345",
+  "model": "sonar-pro",
+  "search_metadata": {
+    "search_type_used": "pro",  // ou "fast"
+    "classification_reason": "Multi-part comparative analysis with calculations"
+  },
+  "usage": {
+    "prompt_tokens": 25,
+    "completion_tokens": 150,
+    "total_tokens": 175
+  }
+}
+```
+
+<Info>
+  Cette transparence vous permet de comprendre pourquoi les requêtes ont été classées de telle ou telle manière et d&#39;optimiser vos requêtes futures.
+</Info>
+
+<div id="when-to-use-each-mode">
+  ## Quand utiliser chaque mode
+</div>
+
+<CardGroup cols={3}>
+  <Card title="Auto (recommandé)" icon="wand">
+    **Idéal pour :** la plupart des applications
+
+    Laissez le classificateur optimiser à votre place. Il équilibre automatiquement coût et capacités en fonction de la complexité de la requête.
+  </Card>
+
+  <Card title="Pro manuel" icon="brain">
+    **Idéal pour :** les tâches complexes identifiées
+
+    À utiliser lorsque vous savez qu&#39;un recours aux outils en plusieurs étapes est nécessaire : calculs, synthèse de sources multiples, analyse approfondie.
+  </Card>
+
+  <Card title="Fast manuel" icon="bolt">
+    **Idéal pour :** la récupération d&#39;informations simples
+
+    À utiliser pour des faits simples, des définitions, ou pour privilégier la vitesse et le coût sur des requêtes simples.
+  </Card>
+</CardGroup>
+
+<div id="common-questions">
+  ## Questions fréquentes
+</div>
+
+<AccordionGroup>
+  <Accordion title="Quelle est la précision du classificateur ?">
+    Le classificateur est très précis : il a été entraîné sur des milliers de types de requêtes. En cas d&#39;ambiguïté, il privilégie Pro Search, ce qui vous garantit de ne perdre aucune capacité.
+
+    Toutefois, si vous constatez des erreurs de classification récurrentes :
+
+    * Reformulez vos requêtes de façon plus spécifique
+    * Utilisez le forçage manuel pour ces types de requêtes
+    * Tenez compte des besoins propres à votre cas d&#39;usage
+  </Accordion>
+
+  <Accordion title="Puis-je savoir quel mode a été utilisé ?">
+    Oui, la réponse contient des métadonnées indiquant :
+
+    * Le type de recherche utilisé
+    * Le motif de la classification (en mode auto)
+    * Le détail des coûts par type de recherche
+
+    Cela vous aide à comprendre et à optimiser vos usages.
+  </Accordion>
+
+  <Accordion title="La classification automatique ajoute-t-elle de la latence ?">
+    Non. La classification s&#39;effectue en quelques millisecondes, avant le début du traitement de la requête, et n&#39;a pas d&#39;incidence notable sur le temps de réponse. Le classificateur est optimisé pour la prise de décision en temps réel.
+  </Accordion>
+
+  <Accordion title="Que faire si je ne suis pas d'accord avec la classification ?">
+    Vous pouvez toujours recourir au forçage manuel :
+
+    ```python theme={null}
+    web_search_options={"search_type": "pro"}  # Imposez votre préférence
+    ```
+
+    Si vous êtes systématiquement en désaccord avec les classifications, envisagez de :
+
+    * Rendre vos requêtes plus spécifiques
+    * Utiliser le forçage manuel pour ces types de requêtes
+    * Déterminer si votre cas d&#39;usage exige systématiquement le mode Pro ou Fast
+  </Accordion>
+</AccordionGroup>
+
+<div id="related-resources">
+  ## Ressources associées
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Démarrage rapide" icon="rocket" href="/fr/docs/sonar/pro-search/quickstart">
+    Découvrez les bases de Pro Search
+  </Card>
+
+  <Card title="Fonctionnalités des outils intégrés" icon="tool" href="/fr/docs/sonar/pro-search/tools">
+    Découvrez les outils intégrés de Pro Search et leurs fonctionnalités
+  </Card>
+
+  <Card title="Guide tarifaire" icon="currency-dollar" href="/fr/docs/getting-started/pricing">
+    Comprendre la tarification de Pro Search et de Fast Search
+  </Card>
+
+  <Card title="Référence de l'API" icon="book" href="/fr/api-reference/sonar-post">
+    Documentation complète de l&#39;API
+  </Card>
+</CardGroup>

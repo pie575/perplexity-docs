@@ -1,0 +1,306 @@
+---
+title: "自定义函数"
+description: "定义自定义函数，在你的代码中执行模型请求的调用，并将每次调用的结果返回给 Agent API。"
+---
+
+自定义函数让智能体能够调用由你掌控的代码，例如数据库查询、内部 API 或业务逻辑。你在请求中描述该函数，但 Agent API 不会代你执行它，调用的执行和结果返回都由你的应用程序完成。
+
+<div id="run-a-complete-example">
+  ## 运行完整示例
+</div>
+
+本示例定义了一个订单状态查询函数，并完整走通整个工具调用循环。请将示例中的内存查找替换为你自己的数据库或 API 调用。
+
+<Steps>
+  <Step title="安装 SDK">
+    ```bash theme={null}
+    pip install perplexityai
+    ```
+  </Step>
+
+  <Step title="设置 API 密钥">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Step>
+
+  <Step title="保存并运行示例">
+    将其中一个示例保存为 `custom_function.py` 或 `custom-function.ts`，然后运行。
+
+    <CodeGroup>
+      ```python Python theme={null}
+      import json
+
+      from perplexity import Perplexity
+
+      MODEL = "openai/gpt-5.6-sol"
+      QUESTION = "What's the status of order ORD-10042?"
+
+      client = Perplexity()
+
+      tools = [
+          {
+              "type": "function",
+              "name": "get_order_status",
+              "description": "Look up the current status of an order by its order ID.",
+              "parameters": {
+                  "type": "object",
+                  "properties": {"order_id": {"type": "string"}},
+                  "required": ["order_id"],
+                  "additionalProperties": False,
+              },
+              "strict": True,
+          }
+      ]
+
+
+      def get_order_status(order_id: str) -> dict[str, str]:
+          """Replace this sample data with a database or API call."""
+          orders = {
+              "ORD-10042": {
+                  "status": "in_transit",
+                  "carrier": "DHL",
+                  "estimated_delivery": "2026-08-08",
+              }
+          }
+          return orders.get(order_id, {"error": "Order not found."})
+
+
+      # 1. 将问题和可用工具发送给 model。
+      response = client.responses.create(
+          model=MODEL,
+          input=QUESTION,
+          tools=tools,
+      )
+
+      # 2. 将 model 的输出项添加到对话中。
+      next_input = [
+          {"type": "message", "role": "user", "content": QUESTION},
+          *[item.model_dump(exclude_none=True) for item in response.output],
+      ]
+
+      # 3. 执行 model 请求的每个函数，并追加其结果。
+      for item in response.output:
+          if item.type != "function_call":
+              continue
+          if item.name != "get_order_status":
+              raise ValueError(f"Unknown function: {item.name}")
+
+          arguments = json.loads(item.arguments)
+          result = get_order_status(**arguments)
+          next_input.append(
+              {
+                  "type": "function_call_output",
+                  "call_id": item.call_id,
+                  "output": json.dumps(result),
+              }
+          )
+
+      # 4. 将更新后的对话发回，让 model 给出回答。
+      final_response = client.responses.create(
+          model=MODEL,
+          input=next_input,
+          tools=tools,
+      )
+
+      print(final_response.output_text)
+      ```
+
+      ```typescript Typescript theme={null}
+      import Perplexity from '@perplexity-ai/perplexity_ai';
+      import type { InputItem } from '@perplexity-ai/perplexity_ai/resources/responses/responses';
+
+      const MODEL = 'openai/gpt-5.6-sol';
+      const QUESTION = "What's the status of order ORD-10042?";
+
+      const client = new Perplexity();
+
+      const tools = [
+        {
+          type: 'function' as const,
+          name: 'get_order_status',
+          description: 'Look up the current status of an order by its order ID.',
+          parameters: {
+            type: 'object',
+            properties: { order_id: { type: 'string' } },
+            required: ['order_id'],
+            additionalProperties: false,
+          },
+          strict: true,
+        },
+      ];
+
+      function getOrderStatus(orderId: string): Record<string, string> {
+        // 请将这些示例数据替换为数据库查询或 API 调用。
+        const orders: Record<string, Record<string, string>> = {
+          'ORD-10042': {
+            status: 'in_transit',
+            carrier: 'DHL',
+            estimated_delivery: '2026-08-08',
+          },
+        };
+        return orders[orderId] ?? { error: 'Order not found.' };
+      }
+
+      // 1. 将问题和可用工具发送给 model。
+      const response = await client.responses.create({
+        model: MODEL,
+        input: QUESTION,
+        tools,
+      });
+
+      // 2. 以原始问题作为后续对话的开头。
+      const nextInput: InputItem[] = [
+        { type: 'message', role: 'user', content: QUESTION },
+      ];
+
+      // 3. 回放每次函数调用，在本地执行并追加执行结果。
+      for (const item of response.output) {
+        if (item.type !== 'function_call') continue;
+        nextInput.push({
+          type: 'function_call',
+          call_id: item.call_id,
+          name: item.name,
+          arguments: item.arguments,
+          ...(item.thought_signature
+            ? { thought_signature: item.thought_signature }
+            : {}),
+        });
+
+        if (item.name !== 'get_order_status') {
+          throw new Error(`Unknown function: ${item.name}`);
+        }
+        const args = JSON.parse(item.arguments) as { order_id: string };
+        const result = getOrderStatus(args.order_id);
+        nextInput.push({
+          type: 'function_call_output',
+          call_id: item.call_id,
+          output: JSON.stringify(result),
+        });
+      }
+
+      // 4. 将更新后的对话发送回去，让 model 给出回答。
+      const finalResponse = await client.responses.create({
+        model: MODEL,
+        input: nextInput,
+        tools,
+      });
+
+      console.log(finalResponse.output_text);
+      ```
+    </CodeGroup>
+
+    运行：
+
+    <CodeGroup>
+      ```bash Python theme={null}
+      python custom_function.py
+      ```
+
+      ```bash Typescript theme={null}
+      npm install @perplexity-ai/perplexity_ai tsx
+      npx tsx custom-function.ts
+      ```
+    </CodeGroup>
+
+    终端输出示例：
+
+    ```text theme={null}
+    订单 ORD-10042 正在由 DHL 运输途中。预计送达时间为 2026 年 8 月 8 日（星期六）。
+    ```
+  </Step>
+</Steps>
+
+<div id="how-the-loop-works">
+  ## 循环的工作原理
+</div>
+
+两次 Agent API 请求包裹一次本地函数执行：
+
+1. **声明并调用。** 第一次请求包含用户的问题，并在 `tools` 中提供函数的 schema。
+2. **读取 `function_call`。** 模型会在 `response.output` 中返回一个 `function_call` 项。其 `arguments` 字段是 JSON 字符串，需先解析再调用你的代码。
+3. **本地执行。** 由你的应用用这些参数调用 `get_order_status`。这段代码不会在 Agent API 中运行。
+4. **返回 `function_call_output`。** 将模型的输出项以及包含本地执行结果的 `function_call_output` 追加到消息中，然后再发起一次请求。请沿用原始的 `call_id`，以便模型将结果与对应的调用匹配起来。
+5. **读取回答。** 收到函数结果后，模型会返回一条普通的助手 `message`。如果它又请求调用另一个函数，则重复上述循环。
+
+<div id="inspect-the-response-arrays">
+  ## 检查响应数组
+</div>
+
+以下是第一个请求返回的完整 `output` 数组。`arguments` 为 JSON 编码后的字符串，且 ID 每次请求都不相同。
+
+```json theme={null}
+[
+  {
+    "id": "fc_a181bc3f-7a54-40b6-a85e-a50a0a6fac92",
+    "arguments": "{\"order_id\":\"ORD-10042\"}",
+    "call_id": "call_Ku9yfMSIZWrJBGm2wqCaFF0G",
+    "name": "get_order_status",
+    "status": "completed",
+    "type": "function_call"
+  }
+]
+```
+
+应用执行 `get_order_status`，并发送以下用于延续对话的 `input` 数组。其中 `function_call` 和 `function_call_output` 带有相同的 `call_id`：
+
+```json theme={null}
+[
+  {
+    "type": "message",
+    "role": "user",
+    "content": "What's the status of order ORD-10042?"
+  },
+  {
+    "id": "fc_a181bc3f-7a54-40b6-a85e-a50a0a6fac92",
+    "arguments": "{\"order_id\":\"ORD-10042\"}",
+    "call_id": "call_Ku9yfMSIZWrJBGm2wqCaFF0G",
+    "name": "get_order_status",
+    "status": "completed",
+    "type": "function_call"
+  },
+  {
+    "type": "function_call_output",
+    "call_id": "call_Ku9yfMSIZWrJBGm2wqCaFF0G",
+    "output": "{\"status\": \"in_transit\", \"carrier\": \"DHL\", \"estimated_delivery\": \"2026-08-08\"}"
+  }
+]
+```
+
+第二次请求随后返回以下完整的 `output` 数组：
+
+```json theme={null}
+[
+  {
+    "id": "msg_b95a5d0d-bb02-4f09-bde4-22a781265e61",
+    "content": [
+      {
+        "text": "Order **ORD-10042** is **in transit** with **DHL**. Estimated delivery is **Saturday, August 8, 2026**.",
+        "type": "output_text",
+        "annotations": []
+      }
+    ],
+    "role": "assistant",
+    "status": "completed",
+    "type": "message"
+  }
+]
+```
+
+<Note>
+  部分 model 会在 `function_call` 项中包含 `thought_signature`。回放该项时请保留该字段。Python 示例通过序列化完整的 SDK 对象来实现这一点；TypeScript 示例则会在该字段存在时将其复制过来。
+</Note>
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="函数调用实践手册" icon="book" href="/zh/docs/cookbook/articles/function-calling-e2e/README">
+    在生产环境工作流中处理多个函数、并行调用与失败情况。
+  </Card>
+
+  <Card title="工具概览" icon="list" href="/zh/docs/agent-api/tools/overview">
+    对比自定义函数、内置工具与 MCP 服务器。
+  </Card>
+</CardGroup>

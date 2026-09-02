@@ -1,0 +1,195 @@
+---
+title: "Mastra で Perplexity を使う"
+description: "Mastra のエージェントやツールで Perplexity の Agent API と Search API を活用します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[Mastra](https://mastra.ai) は、AI エージェントとワークフローを構築するためのオープンソースの TypeScript フレームワークです。Open Responses プロバイダー経由で Perplexity の [Agent API](/ja/docs/agent-api/quickstart) を Mastra の `Agent` に組み込んだり、Search API を Mastra 互換のツールとして公開したりできます。
+
+<Info>
+  **Mastra** は、LLM ワークフローをオーケストレーションするための統一された `Agent` インターフェース、モデルルーター、ツール/MCP システムを提供します。詳しくは [mastra.ai](https://mastra.ai) をご覧ください。
+</Info>
+
+Mastra エコシステムでは、2 つの Perplexity 連携が提供されています。
+
+* **Agent API** — Open Responses プロバイダー経由で、Mastra の `Agent` 内から [Agent API](/ja/docs/agent-api/quickstart) を実行します。
+* **Perplexity Search ツール** — ランク付けされたウェブ検索結果を取得するために、[Search API](/ja/docs/search/quickstart) を Mastra のツールとして公開します。
+
+<div id="api-key-setup">
+  ## API keyの設定
+</div>
+
+どちらの統合でも、Perplexity API keyは環境変数から読み取られます:
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+Search ツールは、フォールバックとして `PPLX_API_KEY` も受け付けます。
+
+<Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  Perplexity のダッシュボードから API キーを生成してください。
+</Card>
+
+<div id="agent-api">
+  ## Agent API
+</div>
+
+<Warning>
+  Mastra に組み込まれている `perplexity` および `perplexity-agent` のモデルルータープロバイダーは Sonar Chat Completions を対象としていますが、現在これは [Agent API](/ja/docs/agent-api/quickstart) に移行しており、より多くの model やツール、リサーチに裏付けられた preset を利用できます。以下に示すように [`@ai-sdk/open-responses`](https://ai-sdk.dev/providers/ai-sdk-providers/open-responses) 経由で利用するか、[移行ガイド](/ja/docs/agent-api/migrate-from-sonar/overview)を参照してください。
+</Warning>
+
+[Agent API](/ja/docs/agent-api/quickstart) は [Open Responses](https://www.openresponses.org/) 標準に準拠しているため、`@ai-sdk/open-responses` プロバイダーから直接接続できます。プロバイダーの接続先を Perplexity の `/v1/responses` エンドポイントに設定し、model の id を Mastra の `Agent` に渡します。
+
+```bash theme={null}
+npm install @mastra/core @ai-sdk/open-responses
+```
+
+```ts theme={null}
+import { Agent } from "@mastra/core/agent";
+import { createOpenResponses } from "@ai-sdk/open-responses";
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const agent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: "Answer questions clearly and concisely.",
+  // Agent API の任意の model を指定できます。例: openai/gpt-5.6-luna（高速）、openai/gpt-5.6-sol（高品質）。
+  model: perplexity("openai/gpt-5.6-luna"),
+});
+
+const result = await agent.generate("Explain what the Perplexity Agent API is in two sentences.");
+console.log(result.text);
+```
+
+エージェントは `agent.generate(...)` と `agent.stream(...)` の両方に対応しています。利用可能なモデルの一覧、組み込みツール、presetについては、[Agent API クイックスタート](/ja/docs/agent-api/quickstart)を参照してください。Web の情報に基づいた回答を得るには、`web_search` ツール (後述) を追加します。
+
+<div id="web-grounded-answers">
+  ## Web-Grounded Answers
+</div>
+
+[`web_search`](/ja/docs/agent-api/tools/web-search) ツールを追加すると、Perplexity のウェブ検索によるリアルタイムな結果に基づいてエージェントが回答するようになります。`@ai-sdk/open-responses` プロバイダーは固定のリクエストボディを送信し、Agent API の組み込みツールを第一級のオプションとしては公開していません。そのため、プロバイダーの `fetch` フック内でボディに `web_search` を追加して有効化します。こうすれば、エージェントがこのプロバイダー経由で行うすべての呼び出しがウェブ検索の結果に基づくものになります:
+
+```ts theme={null}
+import { Agent } from "@mastra/core/agent";
+import { createOpenResponses } from "@ai-sdk/open-responses";
+
+// このプロバイダーは結果に情報源を含めないため、フック内で取得しておく。
+let sources = [];
+
+const perplexity = createOpenResponses({
+  name: "perplexity",
+  url: "https://api.perplexity.ai/v1/responses",
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  fetch: async (url, options) => {
+    const body = JSON.parse(options.body as string);
+    // リクエストボディに追加して、組み込みの web_search ツールを有効化する。
+    body.tools = [{ type: "web_search" }];
+    const response = await fetch(url, { ...options, body: JSON.stringify(body) });
+
+    // 情報源はレスポンスの `output` 配列内に、独立した `search_results` 項目として返される。
+    // （ストリーミング時はボディが JSON ではなくイベントストリームになるためスキップする。）
+    if (!body.stream) {
+      const raw = await response.clone().json();
+      sources = raw.output
+        .filter((item) => item.type === "search_results")
+        .flatMap((item) => item.results); // 各要素: { title, url, snippet, date, ... }
+    }
+
+    return response;
+  },
+});
+
+const agent = new Agent({
+  id: "research-agent",
+  name: "Research Agent",
+  instructions: "Answer questions with up-to-date information from the web.",
+  model: perplexity("openai/gpt-5.6-luna"),
+});
+
+const result = await agent.generate("What are the latest breakthroughs in fusion energy this year?");
+console.log(result.text);
+
+for (const source of sources) {
+  console.log(source.title, source.url);
+}
+```
+
+回答はサーバー側でグラウンディングされますが、`@ai-sdk/open-responses` は結果にソースを公開しない (`result.sources` は空になります) ため、`fetch` フックで生の `search_results` の項目を直接読み取っています。レスポンスの完全な構造については [レスポンスからソースを読み取る](/ja/docs/agent-api/prompt-guide) を参照してください。
+
+<div id="perplexity-search-tool">
+  ## Perplexity 検索ツール
+</div>
+
+`@mastra/perplexity` パッケージは、[Search API](/ja/docs/search/quickstart) を Mastra 互換のツールとしてラップしたものです。エージェントに渡す、ランク付けされた生のウェブ検索結果が必要な場合に使用します。
+
+```bash theme={null}
+npm install @mastra/perplexity zod
+```
+
+```ts theme={null}
+import { createPerplexitySearchTool } from "@mastra/perplexity";
+
+const searchTool = createPerplexitySearchTool({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+});
+
+const results = await searchTool.execute({
+  context: {
+    query: "Latest advances in nuclear fusion",
+    maxResults: 5,
+    searchRecencyFilter: "month",
+  },
+});
+
+for (const result of results) {
+  console.log(result.title, result.url);
+}
+```
+
+ツールIDは `perplexity-search` で、入力パラメータとして `query`、`maxResults`、`searchDomainFilter`、`searchRecencyFilter`、`searchAfterDateFilter`、`searchBeforeDateFilter` をサポートしています。各結果には `title`、`url`、`snippet`、およびオプションの `date` が含まれます。
+
+複数の Perplexity ツールをまとめて登録するには、`createPerplexityTools(config?)` を使用します。スキーマの全体像については [Mastra Perplexity ツールリファレンス](https://mastra.ai/reference/tools/perplexity) を参照してください。
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API クイックスタート" icon="bolt" href="/ja/docs/agent-api/quickstart">
+    Agent API のモデル、ツール、preset を活用して構築します。
+  </Card>
+
+  <Card title="Perplexity SDK" icon="code" href="/ja/docs/sdk/overview">
+    公式の Perplexity SDK をインストールして設定します。
+  </Card>
+
+  <Card title="Perplexity 検索ツール" icon="search" href="https://mastra.ai/reference/tools/perplexity">
+    Perplexity Search API を Mastra のツールとしてラップします。
+  </Card>
+
+  <Card title="Mastra ドキュメント" icon="book" href="https://mastra.ai/docs">
+    Mastra のエージェント、ツール、ワークフローについて詳しく学べます。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+統合でお困りですか？
+
+* [Mastra ドキュメント](https://mastra.ai/docs)を参照する
+* [FAQ](/ja/docs/resources/faq)を確認する

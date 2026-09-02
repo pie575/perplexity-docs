@@ -1,0 +1,328 @@
+---
+title: "Cursor で Perplexity を使う"
+description: "Cursor 内で Perplexity を活用する方法 — 公式 TypeScript SDK を使ってプロジェクトのコードから API を呼び出す、OpenAI 互換のベース URL を利用する、またはホスト型の Perplexity Docs MCP を接続してエディター内でドキュメントを検索する。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+[Cursor](https://cursor.com) はAIファーストのコードエディタで、プロジェクトコードから任意のHTTP APIを呼び出せるほか、エディタ内ツール向けにModel Context Protocol (MCP) をサポートしています。このガイドでは、Perplexityを統合する3つの方法を紹介します。
+
+<CardGroup cols={3}>
+  <Card title="公式TypeScript SDK" icon="code">
+    Cursorで開発しながら、プロジェクトコードから直接 Perplexity API を呼び出します。**推奨。**
+  </Card>
+
+  <Card title="OpenAI互換SDK" icon="plug">
+    既存のOpenAIクライアントの `baseURL` を `https://api.perplexity.ai/v1` に向けるだけで再利用できます。
+  </Card>
+
+  <Card title="Cursor MCP" icon="book">
+    `.cursor/mcp.json` にホスト型のPerplexity Docs MCPを設定し、コーディング中にCursorがPerplexityのドキュメントを参照できるようにします。
+  </Card>
+</CardGroup>
+
+<Info>
+  **推奨される方法:** アプリケーションコードからは公式SDK (またはOpenAI互換SDK) を使用し、エディタ内でドキュメント検索できるようPerplexity Docs MCPをCursorに追加してください。CursorでPerplexityを指定する「カスタムOpenAI互換モデル」の上書き設定は**実験的**な機能で、コードレベルの統合やMCPに比べて信頼性が低い傾向があります — [カスタムモデルの上書き (実験的) ](#custom-model-override-experimental)を参照してください。
+</Info>
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+* Cursor がインストール済みであること ([cursor.com/download](https://cursor.com/download))
+* TypeScript のサンプルを実行する場合は Node.js 18 以上
+* Perplexity API key
+
+<Card title="API keyを取得" icon="key" arrow="True" horizontal="True" iconType="solid" cta="キーを取得" href="https://console.perplexity.ai/project/keys">
+  Perplexity API ポータルでキーを生成します。
+</Card>
+
+<div id="api-key-handling">
+  ## API key の取り扱い
+</div>
+
+API key をソースファイルにハードコードしたり、リポジトリにコミットしたりしないでください。環境変数に保存し、実行時に読み込みます。
+
+<Tabs>
+  <Tab title="macOS/Linux">
+    ```bash theme={null}
+    export PERPLEXITY_API_KEY="your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title="Windows">
+    ```powershell theme={null}
+    setx PERPLEXITY_API_KEY "your_api_key_here"
+    ```
+  </Tab>
+
+  <Tab title=".env（プロジェクトローカル）">
+    プロジェクトのルートに `.env` ファイルを作成し、`.gitignore` に追加します。
+
+    ```bash theme={null}
+    # .env
+    PERPLEXITY_API_KEY=your_api_key_here
+    ```
+
+    起動時に読み込みます (例: [`dotenv`](https://www.npmjs.com/package/dotenv) を使用) 。
+
+    ```typescript theme={null}
+    import "dotenv/config";
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  `PERPLEXITY_API_KEY` はパスワードと同じように扱ってください。チャットやプロンプト、共有ファイルに貼り付けてはいけません。キーが漏洩した場合は、直ちに[ローテーション](https://console.perplexity.ai/project/keys)してください。
+</Warning>
+
+***
+
+<div id="path-1-official-typescript-sdk-recommended">
+  ## パス1: 公式TypeScript SDK (推奨)
+</div>
+
+Cursorでアプリケーションを構築し、公式SDKを使ってコードからPerplexity APIを呼び出します。これは最も信頼性の高い方法で、完全な型安全性、presetのサポート、すべてのAPI機能へのアクセスが得られます。
+
+<div id="install">
+  ### インストール
+</div>
+
+```bash theme={null}
+npm install @perplexity-ai/perplexity_ai
+```
+
+<Tip>
+  `pnpm` や `yarn` でも同様に使用できます: `pnpm add @perplexity-ai/perplexity_ai` / `yarn add @perplexity-ai/perplexity_ai`
+</Tip>
+
+<div id="agent-api-with-low">
+  ### `low` を使った Agent API
+</div>
+
+Agent API は、ほとんどのアプリケーションで推奨されるインターフェースです。適切なデフォルト設定でウェブに基づいた応答を得るには、`low` presetを使用します。
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity(); // 環境変数 PERPLEXITY_API_KEY を読み込みます
+
+const response = await client.responses.create({
+  preset: "low",
+  input: "Summarize the latest changes to the Perplexity Agent API.",
+});
+
+console.log(`Model used: ${response.model}`);
+console.log(response.output_text);
+```
+
+<Accordion title="Python での同等のコード">
+  ```python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()  # 環境変数から PERPLEXITY_API_KEY を読み取ります
+
+  response = client.responses.create(
+      preset="low",
+      input="Summarize the latest changes to the Perplexity Agent API.",
+  )
+
+  print(f"Model used: {response.model}")
+  print(response.output_text)
+  ```
+</Accordion>
+
+<div id="add-web-search">
+  ### ウェブ検索の追加
+</div>
+
+`web_search` ツールを有効にすると、検索を使用するタイミングを明示的に制御できます。
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+
+const client = new Perplexity();
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "What are the latest developments in AI inference hardware?",
+  tools: [{ type: "web_search" }],
+  instructions:
+    "You have access to a web_search tool. Use it for questions about current events, news, or recent developments.",
+});
+
+if (response.status === "completed") {
+  console.log(response.output_text);
+}
+```
+
+<Tip>
+  Cursor の AI チャットなら、これらのスニペットの雛形作成や編集を任せられます。`Cmd+L` / `Ctrl+L` でチャットを開き、実現したい内容を貼り付けたうえで、&quot;use `@perplexity-ai/perplexity_ai` with the `low` preset.&quot; と指示してください。
+</Tip>
+
+その他の preset、ツール、設定オプションについては、[Agent API クイックスタート](/ja/docs/agent-api/quickstart) と [SDK 概要](/ja/docs/sdk/overview) を参照してください。
+
+***
+
+<div id="path-2-openai-compatible-sdk">
+  ## パス 2: OpenAI 互換 SDK
+</div>
+
+すでにプロジェクトで OpenAI クライアントを利用している場合は、`baseURL` を `https://api.perplexity.ai/v1` に変更するだけでそのまま再利用できます。Perplexity は `POST /v1/responses` を Agent API のエイリアスとして受け付けます。
+
+<div id="install-2">
+  ### インストール
+</div>
+
+```bash theme={null}
+npm install openai
+```
+
+<div id="use-it">
+  ### 使ってみる
+</div>
+
+```typescript theme={null}
+import OpenAI from "openai";
+
+const client = new OpenAI({
+  apiKey: process.env.PERPLEXITY_API_KEY,
+  baseURL: "https://api.perplexity.ai/v1",
+});
+
+const response = await client.responses.create({
+  model: "openai/gpt-5.4",
+  input: "Explain the key differences between REST and GraphQL APIs.",
+});
+
+console.log(response.output_text);
+```
+
+<Accordion title="Python での記述例">
+  ```python theme={null}
+  import os
+  from openai import OpenAI
+
+  client = OpenAI(
+      api_key=os.environ.get("PERPLEXITY_API_KEY"),
+      base_url="https://api.perplexity.ai/v1",
+  )
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Explain the key differences between REST and GraphQL APIs.",
+  )
+
+  print(response.output_text)
+  ```
+</Accordion>
+
+<Info>
+  `baseURL` (TypeScript) または `base_url` (Python) を使用します。どちらの場合も末尾に `/v1` を付ける必要があります。サポートされているパラメータの一覧と、この経路で利用できる Perplexity の機能については、[OpenAI 互換性ガイド](/ja/docs/agent-api/openai-compatibility)を参照してください。
+</Info>
+
+***
+
+<div id="path-3-cursor-mcp-for-docs-lookup">
+  ## パス3: ドキュメント参照のためのCursor MCP
+</div>
+
+CursorはModel Context Protocol (MCP) に対応しています。`https://docs.perplexity.ai/mcp` でホストされている **Perplexity Docs MCP** を使うと、CursorのチャットからPerplexityのドキュメントを直接検索・閲覧できます。ブラウザに切り替えることなく、公式ドキュメントに基づいたコード提案を得られるので便利です。
+
+<div id="project-scoped-configuration">
+  ### プロジェクト単位の設定
+</div>
+
+プロジェクトのルートに `.cursor/mcp.json` ファイルを追加します。これにより、サーバーはそのプロジェクト内でのみ利用できるようになります。
+
+```json theme={null}
+{
+  "mcpServers": {
+    "perplexity-docs": {
+      "url": "https://docs.perplexity.ai/mcp"
+    }
+  }
+}
+```
+
+<div id="global-configuration">
+  ### グローバル設定
+</div>
+
+すべてのプロジェクトでサーバーを利用できるようにするには、`~/.cursor/mcp.json` に同じエントリを追加します。
+
+```json theme={null}
+{
+  "mcpServers": {
+    "perplexity-docs": {
+      "url": "https://docs.perplexity.ai/mcp"
+    }
+  }
+}
+```
+
+<Steps>
+  <Step title="設定を追加する">
+    上記の JSON を `.cursor/mcp.json` (プロジェクト単位) または `~/.cursor/mcp.json` (グローバル) に保存します。
+  </Step>
+
+  <Step title="Cursor を再読み込みする">
+    **Cursor → Settings → MCP** を開き、`perplexity-docs` が緑色の準備完了ステータスで表示されていることを確認します。必要に応じて Cursor を再起動してください。
+  </Step>
+
+  <Step title="チャットから使用する">
+    Cursor のチャットで、*「Perplexity docs MCP を使って、Agent API で `low` を有効にする方法を教えて。」* のように質問してみてください。Cursor が MCP サーバーを呼び出し、最新のドキュメントに基づいて回答します。
+  </Step>
+</Steps>
+
+<Tip>
+  Docs MCP は読み取り専用で、API key は不要です — 提供するのは Perplexity のドキュメントのみです。ドキュメント参照だけでなく、Perplexity の**検索・推論**ツールも Cursor から利用できるようにするには、[Perplexity MCP Server](/ja/docs/getting-started/integrations/mcp-server) をインストールしてください。こちらは `@perplexity-ai/mcp-server` を使用し、`PERPLEXITY_API_KEY` が必要です。
+</Tip>
+
+***
+
+<div id="custom-model-override-experimental">
+  ## カスタムモデルの上書き (実験的機能)
+</div>
+
+Cursor では、組み込みのモデルピッカーの参照先を OpenAI 互換のベース URL に変更できます。これを `https://api.perplexity.ai/v1` に設定して Perplexity のモデル名を指定することも可能ですが、この方法には次のような制約があります。
+
+* Agent API の機能 (preset、構造化されたツール呼び出し、finance/people search) は、Cursor 内部のプロンプト処理では十分に活用されません。
+* Cursor のオートコンプリートや編集機能は特定のモデルの挙動に合わせて調整されているため、別のモデルに差し替えるとうまく動作しないことがあります。
+* ストリーミング、ツール利用、エラー処理の挙動が、コードレベルでの統合とは異なる場合があります。
+
+こうした理由から、**プロジェクトのコードから Perplexity を呼び出す方法** (パス 1 またはパス 2) を推奨します。エディタ内でのドキュメント参照には **Perplexity Docs MCP** (パス 3) をご利用ください。カスタムモデルの上書きは、Cursor のチャット UI から Perplexity のモデルと対話させたいという明確な目的があり、上記のトレードオフを許容できる場合にのみ選択してください。
+
+***
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API クイックスタート" icon="rocket" href="/ja/docs/agent-api/quickstart">
+    上記の例で使用している preset やツールをはじめ、Agent API の全機能を解説します。
+  </Card>
+
+  <Card title="Perplexity SDK の概要" icon="code-circle" href="/ja/docs/sdk/overview">
+    公式の Python および TypeScript SDK のインストール、設定、使用方法。
+  </Card>
+
+  <Card title="OpenAI 互換性" icon="plug" href="/ja/docs/agent-api/openai-compatibility">
+    そのまま置き換えて使える互換性の詳細、対応パラメータ、移行のヒント。
+  </Card>
+
+  <Card title="Perplexity MCP サーバー" icon="server" href="/ja/docs/getting-started/integrations/mcp-server">
+    Cursor などの MCP クライアントに Perplexity の search、ask、research、reason ツールを追加します。
+  </Card>
+</CardGroup>
+
+<Info>
+  お困りの際は、[Perplexity 開発者コミュニティ](https://community.perplexity.ai) にご参加ください。サポートや情報交換の場としてご活用いただけます。
+</Info>

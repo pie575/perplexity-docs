@@ -1,0 +1,358 @@
+---
+title: "Embeddings contextualizados"
+description: "Genera embeddings conscientes del documento para fragmentos que comparten contexto y mejora la calidad de la recuperación en aplicaciones basadas en documentos."
+---
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+Los embeddings contextualizados generan embeddings de fragmentos de un documento que comparten el conocimiento del contexto. A diferencia de los embeddings estándar, en los que cada texto se procesa de forma independiente, los embeddings contextualizados reconocen que los fragmentos pertenecen al mismo documento e incorporan esa relación.
+
+<Info>
+  Usa embeddings contextualizados cuando generes embeddings de fragmentos de un mismo documento (por ejemplo, párrafos o secciones). Usa [embeddings estándar](/es/docs/embeddings/quickstart) para textos independientes, como consultas de búsqueda u oraciones aisladas.
+</Info>
+
+<div id="models">
+  ## Modelos
+</div>
+
+|            Modelo            | Dimensiones | Contexto | MRL | Cuantización | Precio ($/1M tokens) |
+| :--------------------------: | :---------: | :------: | :-: | :----------: | :------------------: |
+| `pplx-embed-context-v1-0.6b` |     1024    |    32K   |  Sí |  INT8/BINARY |        $0.008        |
+|  `pplx-embed-context-v1-4b`  |     2560    |    32K   |  Sí |  INT8/BINARY |         $0.05        |
+
+Todos los modelos usan mean pooling y no requieren ningún prefijo de instrucción.
+
+<div id="basic-usage">
+  ## Uso básico
+</div>
+
+Pasa los documentos como arreglos anidados, donde cada arreglo interno representa los fragmentos de un único documento:
+
+<Warning>
+  **Orden de los fragmentos:** Los fragmentos de cada documento deben enviarse en el orden en que aparecen en el documento de origen. El modelo utiliza el contexto secuencial para generar embeddings conscientes del documento, por lo que mantener el orden original es esencial para obtener resultados óptimos.
+</Warning>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.contextualized_embeddings.create(
+      input=[
+          # Documento 1: tres fragmentos
+          [
+              "Curiosity begins in childhood with endless questions about the world.",
+              "As we grow, curiosity drives us to explore new ideas and challenge assumptions.",
+              "Scientific breakthroughs often start with a simple curious question."
+          ],
+          # Documento 2: dos fragmentos
+          [
+              "The Curiosity rover explores Mars, searching for signs of ancient life.",
+              "Each discovery on Mars sparks new questions about our place in the universe."
+          ]
+      ],
+      model="pplx-embed-context-v1-4b"
+  )
+
+  for doc in response.data:
+      for chunk in doc.data:
+          print(f"Doc {doc.index}, Chunk {chunk.index}: {chunk.embedding}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.contextualizedEmbeddings.create({
+      input: [
+          // Documento 1: tres fragmentos
+          [
+              "Curiosity begins in childhood with endless questions about the world.",
+              "As we grow, curiosity drives us to explore new ideas and challenge assumptions.",
+              "Scientific breakthroughs often start with a simple curious question."
+          ],
+          // Documento 2: dos fragmentos
+          [
+              "The Curiosity rover explores Mars, searching for signs of ancient life.",
+              "Each discovery on Mars sparks new questions about our place in the universe."
+          ]
+      ],
+      model: "pplx-embed-context-v1-4b"
+  });
+
+  for (const doc of response.data!) {
+      for (const chunk of doc.data!) {
+          console.log(`Doc ${doc.index}, Chunk ${chunk.index}: ${chunk.embedding!}`);
+      }
+  }
+  ```
+
+  ```bash cURL theme={null}
+  curl -X POST 'https://api.perplexity.ai/v1/contextualizedembeddings' \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H 'Content-Type: application/json' \
+    -d '{
+      "input": [
+        [
+          "Curiosity begins in childhood with endless questions about the world.",
+          "As we grow, curiosity drives us to explore new ideas and challenge assumptions.",
+          "Scientific breakthroughs often start with a simple curious question."
+        ],
+        [
+          "The Curiosity rover explores Mars, searching for signs of ancient life.",
+          "Each discovery on Mars sparks new questions about our place in the universe."
+        ]
+      ],
+      "model": "pplx-embed-context-v1-4b"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Respuesta">
+  ```json theme={null}
+  {
+    "object": "list",
+    "data": [
+      {
+        "object": "list",
+        "index": 0,
+        "data": [
+          { "object": "embedding", "index": 0, "embedding": "/* base64-encoded signed int8 values */" },
+          { "object": "embedding", "index": 1, "embedding": "/* base64-encoded signed int8 values */" },
+          { "object": "embedding", "index": 2, "embedding": "/* base64-encoded signed int8 values */" }
+        ]
+      },
+      {
+        "object": "list",
+        "index": 1,
+        "data": [
+          { "object": "embedding", "index": 0, "embedding": "/* base64-encoded signed int8 values */" },
+          { "object": "embedding", "index": 1, "embedding": "/* base64-encoded signed int8 values */" }
+        ]
+      }
+    ],
+    "model": "pplx-embed-context-v1-4b",
+    "usage": {
+      "prompt_tokens": 72,
+      "total_tokens": 72
+    }
+  }
+  ```
+</Accordion>
+
+<div id="parameters">
+  ## Parámetros
+</div>
+
+| Parámetro         | Tipo                 | Obligatorio | Predeterminado | Descripción                                                                                                                   |
+| ----------------- | -------------------- | :---------: | :------------: | ----------------------------------------------------------------------------------------------------------------------------- |
+| `input`           | array[array[string]] |      Sí     |        -       | Arreglo anidado: cada arreglo interno contiene fragmentos de un documento. Máximo 512 documentos, 16.000 fragmentos en total. |
+| `model`           | string               |      Sí     |        -       | Identificador del modelo: `pplx-embed-context-v1-0.6b` o `pplx-embed-context-v1-4b`                                            |
+| `dimensions`      | integer              |      No     |    Completa    | Dimensión Matryoshka (128-1024 para 0.6b, 128-2560 para 4b)                                                                   |
+| `encoding_format` | string               |      No     |  `base64_int8` | Codificación de salida: `base64_int8` (int8 con signo) o `base64_binary` (bits empaquetados)                                  |
+
+<Warning>
+  **Límites de entrada:** el total de tokens por documento no debe superar los 32K. El total de fragmentos de todos los documentos no debe superar los 16.000. En conjunto, los fragmentos de una misma solicitud no deben superar los 120.000 tokens. No se permiten cadenas vacías.
+</Warning>
+
+<div id="golden-chunk-retrieval-example">
+  ## Ejemplo de recuperación de fragmentos dorados
+</div>
+
+Crea un sistema de recuperación de fragmentos en el que los fragmentos de un mismo documento compartan contexto:
+
+<CodeGroup>
+  ```python Python theme={null}
+  import base64
+  import numpy as np
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  def decode_embedding(b64_string):
+      """Decode a base64-encoded int8 embedding."""
+      return np.frombuffer(base64.b64decode(b64_string), dtype=np.int8).astype(np.float32)
+
+  def cosine_similarity(a, b):
+      return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+
+  # Tus documentos, cada uno dividido en fragmentos
+  documents = [
+      {
+          "title": "Machine Learning Guide",
+          "chunks": [
+              "Machine learning is a subset of AI that enables systems to learn.",
+              "Supervised learning uses labeled data for training models.",
+              "Unsupervised learning finds patterns in unlabeled data."
+          ]
+      },
+      {
+          "title": "Deep Learning Fundamentals",
+          "chunks": [
+              "Deep learning uses neural networks with multiple layers.",
+              "Convolutional networks excel at image processing tasks.",
+              "Transformers revolutionized natural language processing."
+          ]
+      }
+  ]
+
+  # 1. Genera los embeddings de todos los fragmentos teniendo en cuenta el contexto
+  doc_chunks = [doc["chunks"] for doc in documents]
+  doc_response = client.contextualized_embeddings.create(
+      input=doc_chunks,
+      model="pplx-embed-context-v1-4b"
+  )
+
+  # Construye el índice
+  chunk_index = []
+  for doc_obj in doc_response.data:
+      for chunk_obj in doc_obj.data:
+          chunk_index.append({
+              "doc_idx": doc_obj.index,
+              "chunk_idx": chunk_obj.index,
+              "embedding": decode_embedding(chunk_obj.embedding),
+              "text": documents[doc_obj.index]["chunks"][chunk_obj.index],
+              "doc_title": documents[doc_obj.index]["title"]
+          })
+
+  # 2. Genera el embedding de la consulta con el mismo model contextualizado
+  # Envuelve cada consulta en una lista interna de un solo elemento: [[query1], [query2]]
+  query = "How do neural networks process images?"
+  query_response = client.contextualized_embeddings.create(
+      input=[[query]],
+      model="pplx-embed-context-v1-4b"
+  )
+  query_embedding = decode_embedding(query_response.data[0].data[0].embedding)
+
+  # 3. Encuentra los fragmentos más relevantes
+  results = []
+  for item in chunk_index:
+      score = cosine_similarity(query_embedding, item["embedding"])
+      results.append({**item, "score": score})
+
+  results = sorted(results, key=lambda x: x["score"], reverse=True)
+
+  print(f"Query: {query}\n")
+  print("Top results:")
+  for r in results[:3]:
+      print(f"  [{r['doc_title']}] {r['score']:.4f}: {r['text'][:60]}...")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  function decodeEmbedding(b64String: string): Int8Array {
+      const buffer = Buffer.from(b64String, 'base64');
+      return new Int8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength);
+  }
+
+  function cosineSimilarity(a: Int8Array, b: Int8Array): number {
+      let dotProduct = 0, normA = 0, normB = 0;
+      for (let i = 0; i < a.length; i++) {
+          dotProduct += a[i] * b[i];
+          normA += a[i] * a[i];
+          normB += b[i] * b[i];
+      }
+      return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+  }
+
+  // Tus documentos, cada uno dividido en fragmentos
+  const documents = [
+      {
+          title: "Machine Learning Guide",
+          chunks: [
+              "Machine learning is a subset of AI that enables systems to learn.",
+              "Supervised learning uses labeled data for training models.",
+              "Unsupervised learning finds patterns in unlabeled data."
+          ]
+      },
+      {
+          title: "Deep Learning Fundamentals",
+          chunks: [
+              "Deep learning uses neural networks with multiple layers.",
+              "Convolutional networks excel at image processing tasks.",
+              "Transformers revolutionized natural language processing."
+          ]
+      }
+  ];
+
+  // 1. Genera los embeddings de todos los fragmentos de los documentos teniendo en cuenta el contexto
+  const docChunks = documents.map(doc => doc.chunks);
+  const docResponse = await client.contextualizedEmbeddings.create({
+      input: docChunks,
+      model: "pplx-embed-context-v1-4b"
+  });
+
+  // Construye el índice
+  const chunkIndex = docResponse.data!.flatMap(docObj =>
+      docObj.data!.map(chunkObj => ({
+          docIdx: docObj.index,
+          chunkIdx: chunkObj.index,
+          embedding: decodeEmbedding(chunkObj.embedding!),
+          text: documents[docObj.index as number].chunks[chunkObj.index as number],
+          docTitle: documents[docObj.index as number].title
+      }))
+  );
+
+  // 2. Genera el embedding de la consulta con el mismo model contextualizado
+  // Envuelve cada consulta en una lista interna de un solo elemento: [[query1], [query2]]
+  const query = "How do neural networks process images?";
+  const queryResponse = await client.contextualizedEmbeddings.create({
+      input: [[query]],
+      model: "pplx-embed-context-v1-4b"
+  });
+  const queryEmbedding = decodeEmbedding(queryResponse.data![0].data![0].embedding!);
+
+  // 3. Encuentra los fragmentos más relevantes
+  const results = chunkIndex
+      .map(item => ({
+          ...item,
+          score: cosineSimilarity(queryEmbedding, item.embedding)
+      }))
+      .sort((a, b) => b.score - a.score);
+
+  console.log(`Query: ${query}\n`);
+  console.log("Top results:");
+  for (const r of results.slice(0, 3)) {
+      console.log(`  [${r.docTitle}] ${r.score.toFixed(4)}: ${r.text.slice(0, 60)}...`);
+  }
+  ```
+</CodeGroup>
+
+<div id="when-to-use-contextualized-vs-standard">
+  ## Cuándo usar embeddings contextualizados frente a estándar
+</div>
+
+| Caso de uso                       | Recomendación               |
+| --------------------------------- | --------------------------- |
+| Oraciones independientes          | Embeddings estándar         |
+| Entradas de preguntas frecuentes  | Embeddings estándar         |
+| Recuperación de propósito general | Embeddings estándar         |
+| Párrafos de documentos            | Embeddings contextualizados |
+| Secciones de PDF                  | Embeddings contextualizados |
+| Fragmentos de artículos           | Embeddings contextualizados |
+| Segmentos de archivos de código   | Embeddings contextualizados |
+
+<Tip>
+  **Regla general:** si los fragmentos provienen del mismo documento de origen y su significado depende del contexto que los rodea, usa embeddings contextualizados. Si cada texto se sostiene por sí solo, usa embeddings estándar. Al usar embeddings contextualizados, genera los embeddings de las consultas con el mismo modelo contextualizado, envolviendo cada consulta en una lista interna de un solo elemento (por ejemplo, `[[query]]`).
+</Tip>
+
+<div id="related-resources">
+  ## Recursos relacionados
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Inicio rápido" icon="rocket" href="/es/docs/embeddings/quickstart">
+    Empieza a usar los embeddings estándar.
+  </Card>
+
+  <Card title="Buenas prácticas" icon="star" href="/es/docs/embeddings/best-practices">
+    Procesamiento por lotes, almacenamiento en caché y patrones de RAG.
+  </Card>
+</CardGroup>

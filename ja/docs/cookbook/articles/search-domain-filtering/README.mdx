@@ -1,0 +1,617 @@
+---
+title: "検索ドメインフィルタリングのパターン"
+description: "search_domain_filter で検索対象を絞り込む — 信頼できるソースに限定する許可リスト、不要なドメインを除外する拒否リスト、ニュース・政府機関・競合調査における実践的なパターン"
+---
+
+このガイドでは、Agent API における検索ドメインフィルタリングについて説明します。信頼できるドメインに検索を限定する許可リスト、不要なソースを除外する拒否リスト、さらにニュースのみの検索、政府機関データ、競合の除外といった代表的なユースケース向けの実践的なパターンを紹介します。
+
+<Info>
+  ドメインフィルタリングは、`tools` 配列内のツールごとに `tools[].filters.search_domain_filter` で設定します。詳細なリファレンスは [Agent API のフィルター](/ja/docs/agent-api/tools/web-search#filters)を参照してください。
+</Info>
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+Perplexity SDK をインストールします。
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+まだ API key をお持ちでない場合:
+
+<Card title="Perplexity API Key を取得する" icon="key" arrow="True" horizontal="True" iconType="solid" cta="こちらをクリック" href="https://perplexity.ai/account/api">
+  API ポータルの **API Keys** タブを開き、新しいキーを生成してください。
+</Card>
+
+次に、API key を環境変数として設定します。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="how-domain-filtering-works">
+  ## ドメインフィルタリングの仕組み
+</div>
+
+`search_domain_filter` パラメータは、ドメイン文字列のリストを受け取ります。
+
+* **許可リスト** (プレフィックスなし) : 指定したドメインからの結果のみを含めます。`["reuters.com", "apnews.com"]` とすると、Reuters と AP News のみを検索します。
+* **拒否リスト** (`-` プレフィックス) : 指定したドメインからの結果を除外します。`["-reddit.com", "-twitter.com"]` とすると、Reddit と Twitter を除外します。
+
+*ドメインにパスを追加して、サイト内の特定のセクションに結果を絞り込むこともできます。`["nature.com/articles"]` はそのセクションのみを検索し、`["-reddit.com/r/all"]` はそのセクションのみを除外して、サイトの他の部分は引き続き検索します。*
+
+<Warning>
+  **同一リクエスト内で許可リストと拒否リストのエントリを混在させないでください。** API は、同じ配列内で `"reuters.com"` と `"-reddit.com"` を組み合わせることをサポートしていません。すべて許可リスト、またはすべて拒否リストのいずれかで指定してください。
+</Warning>
+
+<div id="basic-domain-filtering">
+  ## 基本的なドメインフィルタリング
+</div>
+
+ドメインフィルターは、`tools` 配列内でツールごとに設定します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 許可リスト: 指定したドメインのみを検索する
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the latest developments in AI regulation?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ["reuters.com", "apnews.com", "bbc.com"],
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the latest developments in AI regulation?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ["reuters.com", "apnews.com", "bbc.com"],
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="pattern-denylist-filtering">
+  ## パターン: 拒否リストによるフィルタリング
+</div>
+
+`-` プレフィックスを付けると、特定のドメインを検索結果から除外できます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 拒否リスト: ソーシャルメディアとユーザー生成コンテンツを除外
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the latest developments in AI regulation?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ["-reddit.com", "-twitter.com", "-quora.com", "-medium.com"],
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the latest developments in AI regulation?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ["-reddit.com", "-twitter.com", "-quora.com", "-medium.com"],
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="pattern-path-filtering">
+  ## パターン: パスフィルタリング
+</div>
+
+ドメインの後ろにパスを付けると、ドキュメント、サブレディット、ブログ、ニュースの特定カテゴリなど、サイト内の特定のセクションだけに結果を絞り込めます。これは許可リストモードと拒否リストモードのどちらでも利用できます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # サイトの特定セクションを許可リストに追加し、別サイトのセクションを除外する
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="Summarize recent peer-reviewed CRISPR results",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ["nature.com/articles", "science.org"],
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "Summarize recent peer-reviewed CRISPR results",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ["nature.com/articles", "science.org"],
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<Note>
+  パスはセグメント境界で照合されるため、`"example.com/docs"` は `/docs` や `/docs/intro` に一致しますが、`/documentation` には一致しません。サブドメインも対象に含まれます (`blog.example.com/docs` は一致します) 。境界より後ろのクエリ文字列は許可されます (`/docs?x=1`) 。
+</Note>
+
+<div id="pattern-news-only-search">
+  ## パターン: ニュース限定検索
+</div>
+
+時事ニュースや速報を扱う場合は、検索結果を主要な報道機関に限定します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  NEWS_DOMAINS = [
+      "reuters.com",
+      "apnews.com",
+      "bbc.com",
+      "nytimes.com",
+      "washingtonpost.com",
+      "theguardian.com",
+      "bloomberg.com",
+      "ft.com",
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What happened in global markets today?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": NEWS_DOMAINS,
+              "search_recency_filter": "day",
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const NEWS_DOMAINS = [
+      "reuters.com",
+      "apnews.com",
+      "bbc.com",
+      "nytimes.com",
+      "washingtonpost.com",
+      "theguardian.com",
+      "bloomberg.com",
+      "ft.com",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What happened in global markets today?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: NEWS_DOMAINS,
+              search_recency_filter: "day",
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<Tip>
+  情報の鮮度が求められるクエリでは、`search_domain_filter` と `search_recency_filter` を組み合わせてください。指定できる値は `day`、`week`、`month`、`year` です。
+</Tip>
+
+<div id="pattern-government-and-official-sources">
+  ## パターン: 政府・公式ソース
+</div>
+
+政策、規制、公式統計を扱う場合は、政府ドメインに限定します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  GOV_DOMAINS = [
+      ".gov",          # 米国連邦および州
+      ".gov.uk",       # 英国政府
+      ".europa.eu",    # EU機関
+      "who.int",       # 世界保健機関
+      "worldbank.org", # 世界銀行
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the current US federal guidelines on AI usage in healthcare?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": GOV_DOMAINS,
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const GOV_DOMAINS = [
+      ".gov",
+      ".gov.uk",
+      ".europa.eu",
+      "who.int",
+      "worldbank.org",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the current US federal guidelines on AI usage in healthcare?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: GOV_DOMAINS,
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="pattern-academic-and-research-filtering">
+  ## パターン: 学術・研究向けフィルタリング
+</div>
+
+教育機関や研究機関に絞り込みます。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  ACADEMIC_DOMAINS = [
+      ".edu",
+      "arxiv.org",
+      "scholar.google.com",
+      "pubmed.ncbi.nlm.nih.gov",
+      "nature.com",
+      "science.org",
+      "ieee.org",
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are recent advances in protein structure prediction?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": ACADEMIC_DOMAINS,
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const ACADEMIC_DOMAINS = [
+      ".edu",
+      "arxiv.org",
+      "scholar.google.com",
+      "pubmed.ncbi.nlm.nih.gov",
+      "nature.com",
+      "science.org",
+      "ieee.org",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are recent advances in protein structure prediction?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: ACADEMIC_DOMAINS,
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="pattern-competitor-exclusion">
+  ## パターン: 競合の除外
+</div>
+
+顧客向けコンテンツを構築する際は、拒否リスト (denylist) を使って競合サイトを検索結果から除外します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 製品リサーチから競合ドメインを除外する
+  EXCLUDED_DOMAINS = [
+      "-competitor-a.com",
+      "-competitor-b.io",
+      "-competitor-c.ai",
+  ]
+
+  response = client.responses.create(
+      model="openai/gpt-5.4",
+      input="What are the best practices for building real-time data pipelines?",
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": EXCLUDED_DOMAINS,
+          },
+      }],
+  )
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const EXCLUDED_DOMAINS = [
+      "-competitor-a.com",
+      "-competitor-b.io",
+      "-competitor-c.ai",
+  ];
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: "What are the best practices for building real-time data pipelines?",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: EXCLUDED_DOMAINS,
+          },
+      }],
+  });
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="configurable-filter-builder">
+  ## 設定可能なフィルタービルダー
+</div>
+
+名前付きの preset からドメインフィルター設定を生成する、再利用可能なヘルパーです。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 名前付きフィルターの preset
+  FILTER_PRESETS = {
+      "news": ["reuters.com", "apnews.com", "bbc.com", "bloomberg.com", "ft.com"],
+      "academic": [".edu", "arxiv.org", "nature.com", "science.org", "pubmed.ncbi.nlm.nih.gov"],
+      "government": [".gov", ".gov.uk", ".europa.eu", "who.int"],
+      "tech": ["techcrunch.com", "arstechnica.com", "theverge.com", "wired.com"],
+      "no_social": ["-reddit.com", "-twitter.com", "-facebook.com", "-tiktok.com", "-quora.com"],
+      "no_seo_spam": ["-pinterest.com", "-medium.com", "-hubspot.com"],
+  }
+
+
+  def search_with_preset(query: str, preset: str, recency: str = None) -> str:
+      """名前付きのドメインフィルター preset を使って検索を実行する。"""
+      if preset not in FILTER_PRESETS:
+          raise ValueError(f"Unknown preset: {preset}. Options: {list(FILTER_PRESETS.keys())}")
+
+      filters = {"search_domain_filter": FILTER_PRESETS[preset]}
+      if recency:
+          filters["search_recency_filter"] = recency
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=query,
+          tools=[{"type": "web_search", "filters": filters}],
+      )
+      return response.output_text
+
+
+  # 使用例
+  print("--- News Search ---")
+  print(search_with_preset("Latest AI regulation news", "news", recency="week"))
+
+  print("\n--- Academic Search ---")
+  print(search_with_preset("CRISPR gene editing recent papers", "academic"))
+
+  print("\n--- Clean Search (no social media) ---")
+  print(search_with_preset("Best Python testing frameworks", "no_social"))
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const FILTER_PRESETS: Record<string, string[]> = {
+      news: ["reuters.com", "apnews.com", "bbc.com", "bloomberg.com", "ft.com"],
+      academic: [".edu", "arxiv.org", "nature.com", "science.org", "pubmed.ncbi.nlm.nih.gov"],
+      government: [".gov", ".gov.uk", ".europa.eu", "who.int"],
+      tech: ["techcrunch.com", "arstechnica.com", "theverge.com", "wired.com"],
+      no_social: ["-reddit.com", "-twitter.com", "-facebook.com", "-tiktok.com", "-quora.com"],
+      no_seo_spam: ["-pinterest.com", "-medium.com", "-hubspot.com"],
+  };
+
+  async function searchWithPreset(query: string, preset: string, recency?: string): Promise<string> {
+      if (!(preset in FILTER_PRESETS)) {
+          throw new Error(`Unknown preset: ${preset}. Options: ${Object.keys(FILTER_PRESETS).join(", ")}`);
+      }
+
+      const filters: Record<string, any> = { search_domain_filter: FILTER_PRESETS[preset] };
+      if (recency) filters.search_recency_filter = recency;
+
+      const response = await client.responses.create({
+          model: "openai/gpt-5.4",
+          input: query,
+          tools: [{ type: "web_search" as const, filters }],
+      });
+      return response.output_text;
+  }
+
+  console.log("--- News Search ---");
+  console.log(await searchWithPreset("Latest AI regulation news", "news", "week"));
+
+  console.log("\n--- Academic Search ---");
+  console.log(await searchWithPreset("CRISPR gene editing recent papers", "academic"));
+
+  console.log("\n--- Clean Search (no social media) ---");
+  console.log(await searchWithPreset("Best Python testing frameworks", "no_social"));
+  ```
+</CodeGroup>
+
+<div id="common-pitfalls">
+  ## よくある落とし穴
+</div>
+
+<div id="mixing-allowlist-and-denylist">
+  ### 許可リストと拒否リストの併用
+</div>
+
+```python theme={null}
+# ❌ 誤り: 許可リストと拒否リストを混在させる
+search_domain_filter=["reuters.com", "-reddit.com"]
+
+# ✅ 正しい: 許可リストのみを使用する
+search_domain_filter=["reuters.com", "apnews.com", "bbc.com"]
+
+# ✅ 正しい: 拒否リストのみを使用する
+search_domain_filter=["-reddit.com", "-twitter.com"]
+```
+
+<div id="using-wildcards-incorrectly">
+  ### ワイルドカードの誤った使い方
+</div>
+
+```python theme={null}
+# ❌ 誤り: ワイルドカードは未サポート
+search_domain_filter=["*.gov"]
+
+# ✅ 正解: TLD をそのまま指定する
+search_domain_filter=[".gov"]
+
+# ✅ 正解: パスのプレフィックスで特定のセクションに絞り込む（ワイルドカードは不可）
+search_domain_filter=["example.com/blog"]
+```
+
+<div id="empty-filter-arrays">
+  ### 空のフィルター配列
+</div>
+
+```python theme={null}
+# ❌ 誤り: 空の配列は動作が未定義です
+search_domain_filter=[]
+
+# ✅ 正しい: すべてのドメインを検索する場合はパラメータを省略します
+#（search_domain_filter を指定しないだけでOK）
+```
+
+<div id="tips-and-best-practices">
+  ## ヒントとベストプラクティス
+</div>
+
+1. **許可リストは絞り込む。** 通常は5〜10ドメインで十分です。ドメインが多すぎると、フィルターの効果が薄れてしまいます。
+
+2. **広く除外したい場合は拒否リストを使う。** ノイズの多い一部のソースだけを除外し、それ以外はウェブ全体を検索したい場合は、残りすべてを許可リストに列挙するより拒否リストのほうが実用的です。
+
+3. **鮮度フィルターと組み合わせる。** 時間的な鮮度が重要なクエリでは、ドメインフィルターとあわせて `search_recency_filter` を指定します。
+
+4. **フィルターをテストする。** 同じクエリをフィルターあり・なしで実行し、結果が期待どおりに変化することを確認します。
+
+5. **TLDフィルターは広い範囲に一致する。** `.gov` を指定すると、`whitehouse.gov` や `irs.gov`、さらに `ca.gov` のような州のドメインも含め、`.gov` で終わるすべてのドメインに一致します。
+
+6. **presetは設定ファイルで管理する。** フィルターのpresetは、リクエストごとにハードコードせず、アプリケーションの設定として定義しましょう。
+
+<div id="next-steps">
+  ## 次のステップ
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API のフィルター" icon="filter" href="/ja/docs/agent-api/tools/web-search#filters">
+    Agent API のドメイン・日付範囲・地域フィルターの完全なリファレンス。
+  </Card>
+
+  <Card title="Search API のフィルター" icon="filter" href="/ja/docs/search/filters/domain-filter">
+    結果単位で制御するための、Search API 単体でのドメインフィルタリング。
+  </Card>
+
+  <Card title="学術検索" icon="graduation-cap" href="/ja/docs/cookbook/articles/academic-search/README">
+    ドメインフィルタリングを活用した学術分野特化の検索。
+  </Card>
+</CardGroup>

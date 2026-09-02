@@ -1,0 +1,268 @@
+---
+title: "提示词指南"
+description: "Sonar 专属的提示词编写指南，及其与 Agent API 的差异。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+通用的提示最佳实践详见 [Agent API 提示指南](/zh/docs/agent-api/prompt-guide)，无需任何改动即可适用于 Sonar——提示要具体、限制结果数量、不要在正文中索取 URL、避免少样本内容，以及过滤条件优先通过参数指定，而非写在正文里。
+
+本页介绍唯一一处会改变 Sonar 提示方式的结构性差异：系统提示词不会影响搜索。
+
+<div id="shape-search-through-the-user-message">
+  ## 通过用户消息来塑造搜索
+</div>
+
+Sonar 会在生成答案前先执行一次网络搜索，而驱动这次搜索的只有用户消息。系统提示词对搜索是不可见的，它只在生成答案时才会传给 model，此时搜索结果已经拿到手了。系统提示词适合用来设定语气、风格和事实依据规则，而用户消息则要同时当作提给 model 的问题和搜索的种子。
+
+由此带来的实际影响是：用户消息的措辞会直接决定检索到哪些来源。具体、描述清晰的问题效果远好于含糊的提问，而再精心打磨的系统提示词也救不回一句含糊的用户消息。如果检索质量很关键，请优先在这里投入精力。
+
+**好的示例**：&quot;What guidance has the FDA issued on AI in medical devices in the past year, and which device categories does it cover?&quot;
+
+**不佳的示例**：&quot;Tell me about FDA AI rules.&quot;
+
+<Warning>
+  不要把搜索指令写进系统提示词。诸如&quot;只在 Wikipedia 上搜索&quot;或&quot;查找最新结果&quot;这类说法不会有任何效果。对于域名、时效性或地区这类硬性约束，请在请求体中使用专门的[搜索筛选参数](/zh/docs/sonar/filters)，而不要试图用自然语言把约束描述出来。
+</Warning>
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  completion = client.chat.completions.create(
+      model="sonar",
+      messages=[
+          {"role": "user", "content": "Summarize the FDA's regulatory framework for Software as a Medical Device (SaMD), including the Pre-Cert program."}
+      ],
+      search_domain_filter=["fda.gov"],
+      search_recency_filter="month"
+  )
+
+  print(completion.choices[0].message.content)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const completion = await client.chat.completions.create({
+    model: "sonar",
+    messages: [
+      { role: "user", content: "Summarize the FDA's regulatory framework for Software as a Medical Device (SaMD), including the Pre-Cert program." }
+    ],
+    search_domain_filter: ["fda.gov"],
+    search_recency_filter: "month"
+  });
+
+  console.log(completion.choices[0].message.content);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/sonar \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "sonar",
+      "messages": [
+        {"role": "user", "content": "Summarize the FDA\u0027s regulatory framework for Software as a Medical Device (SaMD), including the Pre-Cert program."}
+      ],
+      "search_domain_filter": ["fda.gov"],
+      "search_recency_filter": "month"
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="响应">
+  ```json theme={null}
+  {
+    "id": "da79e65e-93df-4ef4-8a0c-78027f264bd3",
+    "choices": [
+      {
+        "delta": {
+          "content": "",
+          "role": "assistant",
+          "reasoning_steps": null,
+          "tool_call_id": null,
+          "tool_calls": null
+        },
+        "index": 0,
+        "message": {
+          "content": "The FDA regulates **Software as a Medical Device (SaMD)** under the existing medical device statutory framework (FD&C Act), using risk‑based classification and traditional premarket pathways (510(k), De Novo, PMA), guided by IMDRF SaMD principles; the **Digital Health Center of Excellence** coordinates SaMD policy.[1][3][4] The **Software Precertification (Pre‑Cert) Pilot Program** was an experimental, time‑limited initiative to explore an organization‑based, streamlined approach for digital health software, but it has not been adopted as a standing alternative pathway and is no longer accepting participants.[7]  \n\nBelow is a concise, framework‑oriented summary.\n\n---\n\n### 1. Definition and scope of SaMD\n\n- FDA adopts the IMDRF definition of **SaMD** as: **software intended for one or more medical purposes that performs those purposes without being part of a hardware medical device**.[1][2]  \n- Key clarifications:[2]  \n  - Runs on **general‑purpose platforms** (PC, smartphone, cloud).[2]  \n  - Not SaMD if the software is necessary to **drive or control a hardware medical device** (that is treated as “software in a medical device,” SiMD).[2]  \n  - Mobile apps meeting this definition are regulated as SaMD.[1][2]  \n\nSaMD is therefore regulated as a **medical device “device software function”**; FDA provides examples of regulated device software functions, especially mobile apps that diagnose, treat, or transform a mobile platform into a medical device.[5]\n\n---\n\n### 2. Risk classification and basic regulatory posture\n\n- SaMD is classified into **Class I, II, or III** under the same risk‑based device classification system applied to other medical devices.[2]  \n- IMDRF also provides a **SaMD risk categorization framework (I–IV)** based on:  \n  - **State of the healthcare condition** (e.g., critical, serious, non‑serious) and  \n  - The **significance of the information** the SaMD provides (treat/diagnose, drive clinical management, inform clinical management).[3]  \n- FDA, which chaired the IMDRF SaMD work, references these IMDRF categories to inform its own risk thinking, although IMDRF documents themselves are not binding U.S. regulations.[1][3]  \n\nRegulatory requirements (e.g., premarket submission type, clinical evidence depth, controls) increase with device class and risk category.[2][3][4]\n\n---\n\n### 3. Core regulatory requirements for SaMD\n\nAlthough the specifics depend on device class and intended use, SaMD manufacturers generally must:\n\n**a. Meet device‑level and software‑specific regulations**\n\n- Comply with **21 CFR Part 820** (Quality System Regulation) and related quality system expectations.[2][3]  \n- For electronic records/signatures, comply with **21 CFR Part 11** where applicable.[2]  \n- Implement a software lifecycle consistent with **IEC 62304**; FDA and IMDRF recognize this as a key standard for medical device software.[2][3]  \n\n**b. Use risk‑based software documentation (“level of concern”)**\n\nFDA software guidance uses three **levels of concern** based on potential harm if the software fails:[2]  \n\n- **Minor** – unlikely to cause injury.  \n- **Moderate** – could lead to minor injury, including via incorrect/delayed information or provider actions.[2]  \n- **Major** – could directly result in serious injury or death, including via incorrect/delayed information.[2]  \n\nThe required **software documentation** in a submission scales with this level of concern.[2]\n\n**c. Conduct clinical evaluation**\n\n- FDA participates in IMDRF and has issued **“Software as a Medical Device: Clinical Evaluation”** guidance, describing how regulators evaluate **safety, effectiveness, and performance** of SaMD.[3]  \n- This guidance is currently positioned as a **harmonized framework** and does **not change existing submission requirements**, but informs how clinical evidence should be generated and justified for SaMD.[3]  \n\n**d. Premarket review pathways**\n\nSaMD that meets the device definition and is not exempt will go through an appropriate pathway:[4]  \n\n- **510(k) premarket notification** – for most moderate‑risk SaMD with a predicate device.  \n- **De Novo classification** – for novel, low‑ to moderate‑risk SaMD without a predicate.  \n- **Premarket approval (PMA)** – for high‑risk Class III SaMD.  \n\nFDA may also require review of **significant software modifications** (e.g., new indications, major algorithm changes), including for AI/ML SaMD.[4]\n\n**e. Post‑market surveillance and change control**\n\n- Manufacturers must monitor and act on: customer feedback, complaints, vigilance events, trend reports, clinical data, and usage/usability data.[2]  \n- For SaMD, post‑market oversight is complemented by software‑specific monitoring:  \n  - Field and internal **software issues**,  \n  - **SOUP** (Software of Unknown Provenance) issues (new versions, obsolescence),  \n  - **Cybersecurity** vulnerabilities.[2]  \n- Change control processes and validation of **updates and upgrades** are critical because SaMD is frequently updated.[2][4][7]  \n\n---\n\n### 4. IMDRF‑aligned SaMD framework elements\n\nFDA’s SaMD thinking is anchored in IMDRF documents, which are **nonbinding but influential**.[1][3] Key elements include:\n\n- **Risk categorization (I–IV)** based on clinical context and use of the information.[3]  \n- A SaMD‑specific **Quality Management System (QMS)** concept that interprets generic device QMS requirements for software (e.g., configuration management, problem resolution, verification/validation).[3]  \n- The **clinical evaluation framework** for SaMD, covering valid clinical association, analytical validation, and clinical validation.[3]  \n\nFDA uses these to shape expectations and guidance but still applies **U.S. device law and regulation** as the legal basis.[3]\n\n---\n\n### 5. AI/ML‑enabled SaMD\n\nAI/ML‑based SaMD is subject to the same overarching framework, with additional guidance:\n\n- FDA acknowledges that traditional, “locked” software assumptions do not fully fit **adaptive AI/ML SaMD**, where models may evolve post‑market.[4][7]  \n- Key FDA actions and documents for AI/ML device software functions include:[4]  \n  - 2019 **AI/ML SaMD Discussion Paper** on a proposed regulatory framework for AI/ML SaMD modifications.[4][7]  \n  - 2021 **AI/ML SaMD Action Plan**.[4][7]  \n  - Guidance and principles on **Good Machine Learning Practice**, **Predetermined Change Control Plans (PCCPs)**, and **transparency** for ML‑enabled devices.[4]  \n  - Draft guidance (2025) on **AI‑enabled device software functions: lifecycle management and marketing submission recommendations**, intended to be used in addition to existing device guidances.[4]  \n\nFor AI/ML SaMD, FDA emphasizes:\n\n- Clearly defined **intended use and algorithm behavior**,  \n- Robust **training and test data** practices,  \n- Use of **PCCPs** to pre‑specify allowable algorithm changes and verification/validation methods,  \n- Ongoing **post‑market performance monitoring**.[4][7][8]  \n\n---\n\n### 6. Software Pre‑Certification (Pre‑Cert) Program\n\n**Purpose and concept**\n\n- The **Digital Health Software Precertification (Pre‑Cert) Pilot Program** was launched to explore a **more agile, organization‑based approach** to software oversight.[7]  \n- Conceptually, it aimed to evaluate:[7]  \n  - The **developer’s organization** (culture of quality and organizational excellence),  \n  - Combine this with **streamlined premarket review** and **robust real‑world performance monitoring**,  \n  - Potentially enable lower‑burden review for firms that demonstrated strong processes and track record.  \n\n**Key features (pilot concept)**[7][8]:\n\n- **Excellence appraisal** of the company (rather than just the product).  \n- A **streamlined review** for certain SaMD products from “pre‑certified” organizations.  \n- **Real‑world performance analytics** to continuously assure safety and effectiveness.  \n\n**Status and outcome**\n\n- The Pre‑Cert program was explicitly a **pilot**, implemented under existing statutory authorities and limited in scope.[7]  \n- FDA has since indicated that insights from the pilot will inform future digital health policies and potential legislative needs, but the **program itself is not a standing, general‑use regulatory pathway**, and enrollment of new participants has ended.[7]  \n- For now, SaMD developers must rely on **existing device pathways** (510(k), De Novo, PMA) and guidances, not on Pre‑Cert, for actual market access.[4][7]  \n\n---\n\n### 7. Practical takeaway for SaMD developers\n\nIn practice, to bring SaMD to the U.S. market, a manufacturer should:\n\n- Determine whether the software is **SaMD vs. SiMD vs. non‑device** using FDA and IMDRF definitions and examples.[1][2][5][6]  \n- Identify the device’s **intended use**, risk, and likely **Class I/II/III** classification.[2][3]  \n- Set up a **QMS compliant with 21 CFR 820**, aligned with **IEC 62304** and IMDRF SaMD QMS principles.[2][3]  \n- Develop a **clinical evaluation plan** consistent with the SaMD Clinical Evaluation guidance and risk level.[3]  \n- Choose the appropriate **premarket pathway** (exemption, 510(k), De Novo, PMA) and prepare software documentation appropriate to the **level of concern**.[2][4]  \n- Implement robust **post‑market surveillance, cybersecurity, and change control**, especially for frequently updated or AI/ML‑enabled SaMD.[2][4][7]  \n\nIf you want, I can next map this framework to a concrete example (e.g., a diagnostic imaging SaMD or a patient‑facing dosing calculator) and outline what its submission package and evidence would typically look like.",
+          "role": "assistant",
+          "reasoning_steps": null,
+          "tool_call_id": null,
+          "tool_calls": null
+        },
+        "finish_reason": "stop"
+      }
+    ],
+    "created": 1779896066,
+    "model": "sonar-pro",
+    "citations": [
+      "https://www.fda.gov/medical-devices/digital-health-center-excellence/software-medical-device-samd",
+      "https://www.cognidox.com/blog/how-is-software-as-a-medical-device-regulated-by-fda",
+      "https://www.fda.gov/medical-devices/software-medical-device-samd/global-approach-software-medical-device",
+      "https://www.fda.gov/medical-devices/software-medical-device-samd/artificial-intelligence-software-medical-device",
+      "https://www.fda.gov/medical-devices/device-software-functions-including-mobile-medical-applications/examples-device-software-functions-fda-regulates",
+      "https://pmc.ncbi.nlm.nih.gov/articles/PMC12264609/",
+      "https://www.greenlight.guru/blog/samd-software-as-a-medical-device",
+      "https://namsa.com/resources/blog/fdas-regulation-of-ai-ml-samd/",
+      "https://www.rimsys.io/blogs/software-as-a-medical-device-samd"
+    ],
+    "object": "chat.completion",
+    "search_results": [
+      {
+        "title": "Software as a Medical Device (SaMD) - FDA",
+        "url": "https://www.fda.gov/medical-devices/digital-health-center-excellence/software-medical-device-samd",
+        "date": "2018-12-04",
+        "last_updated": "2026-05-16",
+        "snippet": "SaMD is defined as \"software intended to be used for one or more medical purposes that perform these purposes without being part of a ...",
+        "source": "web"
+      },
+      {
+        "title": "How is SaMD regulated by the FDA? - Cognidox",
+        "url": "https://www.cognidox.com/blog/how-is-software-as-a-medical-device-regulated-by-fda",
+        "date": "2023-01-27",
+        "last_updated": "2026-05-13",
+        "snippet": "The FDA classifies SaMD using the same risk classes they use for medical devices: Class I, Class II, and Class III.",
+        "source": "web"
+      },
+      {
+        "title": "Global Approach to Software as a Medical Device - FDA",
+        "url": "https://www.fda.gov/medical-devices/software-medical-device-samd/global-approach-software-medical-device",
+        "date": "2022-09-27",
+        "last_updated": "2026-05-05",
+        "snippet": "The IMDRF Software as a Medical Device framework provides harmonized quality management principles for the FDA, along with other regulators, to ...",
+        "source": "web"
+      },
+      {
+        "title": "Artificial Intelligence in Software as a Medical Device - FDA",
+        "url": "https://www.fda.gov/medical-devices/software-medical-device-samd/artificial-intelligence-software-medical-device",
+        "date": "2025-03-25",
+        "last_updated": "2026-05-23",
+        "snippet": "The FDA reviews medical devices through an appropriate premarket pathway, such as premarket clearance (510(k)), De Novo classification, or ...",
+        "source": "web"
+      },
+      {
+        "title": "Examples of Device Software Functions the FDA Regulates",
+        "url": "https://www.fda.gov/medical-devices/device-software-functions-including-mobile-medical-applications/examples-device-software-functions-fda-regulates",
+        "date": "2026-05-20",
+        "last_updated": "2026-05-22",
+        "snippet": "This list provides examples of software functions that are considered medical devices and on which the FDA will focus its regulatory oversight.",
+        "source": "web"
+      },
+      {
+        "title": "United States Food and Drug Administration Regulation of Clinical ...",
+        "url": "https://pmc.ncbi.nlm.nih.gov/articles/PMC12264609/",
+        "date": "2025-05-27",
+        "last_updated": "2026-03-31",
+        "snippet": "The FDA has published guidelines to help manufacturers determine if their software technology is a medical device that requires SaMD classification and FDA ...",
+        "source": "web"
+      },
+      {
+        "title": "Software as a Medical Device (SaMD): The Ultimate Guide to ...",
+        "url": "https://www.greenlight.guru/blog/samd-software-as-a-medical-device",
+        "date": "2025-05-05",
+        "last_updated": "2026-05-26",
+        "snippet": "In 2019, FDA released a Proposed Regulatory Framework for Modifications to Artificial Intelligence/Machine Learning (AI/ML)-Based Software ...",
+        "source": "web"
+      },
+      {
+        "title": "FDA's Regulation of AI/ML SaMD - NAMSA",
+        "url": "https://namsa.com/resources/blog/fdas-regulation-of-ai-ml-samd/",
+        "date": "2024-09-25",
+        "last_updated": "2026-02-14",
+        "snippet": "Of course, any software that meets the Act's definition of a medical device will indeed come under FDA's purview. But there are specific ...",
+        "source": "web"
+      },
+      {
+        "title": "Software as a medical device (SAMD) - classification overview",
+        "url": "https://www.rimsys.io/blogs/software-as-a-medical-device-samd",
+        "date": "2026-04-03",
+        "last_updated": "2026-05-27",
+        "snippet": "Software as a Medical Device (SaMD) has emerged as a separate medical device category that is regulated in the U.S., the European Union, other countries.",
+        "source": "web"
+      }
+    ],
+    "status": null,
+    "type": null,
+    "usage": {
+      "completion_tokens": 2176,
+      "cost": {
+        "input_tokens_cost": 8e-05,
+        "output_tokens_cost": 0.03264,
+        "total_cost": 0.03872,
+        "citation_tokens_cost": null,
+        "reasoning_tokens_cost": null,
+        "request_cost": 0.006,
+        "search_queries_cost": null
+      },
+      "prompt_tokens": 26,
+      "total_tokens": 2202,
+      "citation_tokens": null,
+      "num_search_queries": null,
+      "reasoning_tokens": null,
+      "search_context_size": "low"
+    }
+  }
+  ```
+</Accordion>
+
+这与 Agent API 形成对比：在 Agent API 中，`instructions` 会在智能体循环的每一轮被重新读取，既影响工具调用，也影响最终答案。而在 Sonar 中，没有与 `instructions` 对应的机制——系统消息只影响生成，永远不会影响检索。
+
+<div id="reduce-hallucinations">
+  ## 减少幻觉
+</div>
+
+大语言模型经过调优后总是倾向于“帮上忙”，因此当搜索结果稀少或不相关时，它们有时会硬给出一个答案，而不是指出信息缺口。系统提示词本身并不会影响搜索环节，但它决定了模型在撰写最终回复时如何使用搜索结果，因此这里正是设定事实依据规则的合适位置。只需补充两句简短的说明，就能覆盖大多数此类边缘情况。
+
+**允许模型直接说自己没找到相关信息。** 在系统提示词中明确给出这样的“退路”后，模型就更有可能承认结果不足，而不是靠训练数据来填补缺口。
+
+```text System Prompt theme={null}
+仅使用所提供的搜索结果作答。如果搜索结果中没有答案，请明确说明，不要猜测。
+```
+
+**要求披露&quot;近似匹配&quot;结果。** 搜索有时会返回相关但并不匹配的结果 (年份不同、返回母公司而非子公司、产品相似但不是同一个) 。让 model 主动说明这类不匹配之处，可以避免它们被当作直接答案呈现。
+
+```text System Prompt theme={null}
+如果搜索结果与问题相关但并不匹配（例如年份不同、是母公司而非该公司、或是类似产品），请在作答前明确指出这一不匹配之处。
+```
+
+<div id="what-carries-over-from-the-agent-api-guide">
+  ## 哪些内容沿用自 Agent API 指南
+</div>
+
+以下核心提示词规则完全适用，无需改动：
+
+* **在用户消息中写得具体、描述清晰。** 含糊的查询只会得到零散的结果。
+* **限定结果数量。** 如果需要列表，请说明列表长度。
+* **不要用少样本示例提供内容。** 粘贴一段写好的示例答案，可能导致搜索环节紧盯示例中的主题。用少样本示例来约束*结构*没有问题；若需要保证输出形态，请使用 `response_format`。
+* **不要在响应正文中索要 URL。** Sonar 始终会在顶层的 `citations` 和 `search_results` 字段中返回来源，请从这些字段读取。
+* **筛选要用参数，而不是文字描述。** 搜索后端读取的是参数，而不是系统提示词。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API 提示词指南" icon="book" href="/zh/docs/agent-api/prompt-guide">
+    完整的提示编写指南，其中大部分规则同样适用于 Sonar。
+  </Card>
+
+  <Card title="搜索过滤器" icon="magnifying-glass" href="/zh/docs/sonar/filters">
+    用于缩小 Sonar 搜索结果范围的域名、时效性和日期过滤器。
+  </Card>
+
+  <Card title="Pro Search" icon="layer-group" href="/zh/docs/sonar/pro-search/quickstart">
+    单次搜索不够用时，可采用多步搜索与推理。
+  </Card>
+
+  <Card title="Agent API 快速上手" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    推荐用于新应用，支持多轮循环与自定义工具。
+  </Card>
+</CardGroup>

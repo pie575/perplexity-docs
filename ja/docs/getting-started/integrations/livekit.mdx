@@ -1,0 +1,130 @@
+---
+title: "Perplexity と LiveKit Agents"
+description: "Perplexity の Agent API を LiveKit 音声エージェントの LLM ブレインとして利用します。"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+Perplexity の [Agent API](/ja/docs/agent-api/quickstart) は OpenAI Responses API と互換性があるため、Perplexity のベース URL を指定した `livekit-plugins-openai` の `openai.responses.LLM` クラス経由で、[LiveKit Agents](https://docs.livekit.io/agents/) のドロップイン LLM としてそのまま利用できます。
+
+<Info>
+  **LiveKit Agents** は、リアルタイムの音声・マルチモーダル AI エージェントを構築するためのオープンソースフレームワークです。新規に統合する場合は、`livekit-plugins-perplexity` プラグインや `openai.LLM.with_perplexity()` ではなく、`openai.responses.LLM` を介して Perplexity の **Agent API** を使用してください。前者の 2 つはいずれも従来の Sonar Chat Completions エンドポイントを呼び出します。詳細は [livekit.io](https://livekit.io) をご覧ください。
+</Info>
+
+<div id="installation">
+  ## インストール
+</div>
+
+```bash theme={null}
+pip install "livekit-agents" "livekit-plugins-openai"
+```
+
+<div id="api-key-setup">
+  ## API キーの設定
+</div>
+
+Perplexity API キーを環境変数に設定し、コンストラクターに渡します。
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="API キーを取得" icon="key" href="https://console.perplexity.ai/project/keys">
+  Perplexity のダッシュボードで API キーを生成します。
+</Card>
+
+<div id="quick-start">
+  ## クイックスタート
+</div>
+
+LiveKit の `AgentSession` が LLM を要求する箇所では、どこでも `openai.responses.LLM` を使用できます。
+
+```python theme={null}
+import os
+
+from livekit.agents import Agent, AgentSession
+from livekit.plugins import openai, silero
+
+session = AgentSession(
+    llm=openai.responses.LLM(
+        model="openai/gpt-5.6-sol",
+        base_url="https://api.perplexity.ai/v1",   # SDK が /responses を付加 -> POST /v1/responses
+        api_key=os.environ["PERPLEXITY_API_KEY"],  # 必須: コンストラクタは PERPLEXITY_API_KEY を読み取りません
+    ),
+    stt=openai.STT(),
+    tts=openai.TTS(),
+    vad=silero.VAD.load(),
+)
+
+agent = Agent(
+    instructions="You are a helpful voice assistant. Use web search to answer with up-to-date information.",
+    tools=[openai.tools.WebSearch()],  # Perplexity の組み込み web_search ツール
+)
+
+# LiveKit のルームエントリポイント内でセッションを実行します
+```
+
+Agent API は OpenAI Responses 互換であるため、OpenAI プラグインは他に変更を加えることなく `https://api.perplexity.ai/v1` と通信できます。
+
+<div id="configuration">
+  ## 設定
+</div>
+
+`openai.responses.LLM` を Perplexity に向けるには、`base_url` と明示的な `api_key` の2つの設定が必要です (コンストラクタは `PERPLEXITY_API_KEY` を自動的に読み取りません) :
+
+```python theme={null}
+import os
+
+from livekit.plugins import openai
+
+llm = openai.responses.LLM(
+    model="openai/gpt-5.6-sol",
+    base_url="https://api.perplexity.ai/v1",
+    api_key=os.environ["PERPLEXITY_API_KEY"],
+)
+```
+
+Perplexity の組み込みツール (クイックスタートで紹介した `web_search` など) は、LLM ではなく `Agent` にアタッチされます。
+
+<div id="available-models">
+  ## 利用可能なモデル
+</div>
+
+この統合は、Perplexity Agent API 経由で公開されているすべてのモデルに対応しており、`provider/model` 形式 (例: `openai/gpt-5.6-sol`) で指定します。全一覧は[モデルページ](/ja/docs/agent-api/models)を参照してください。
+
+<div id="links-resources">
+  ## リンクとリソース
+</div>
+
+<CardGroup cols={2}>
+  <Card title="LiveKit Agents ドキュメント" icon="book" href="https://docs.livekit.io/agents/">
+    LiveKit でリアルタイムの音声エージェントやマルチモーダルエージェントを構築します。
+  </Card>
+
+  <Card title="OpenAI プラグインのソース" icon="brand-github" href="https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-openai">
+    Responses の `LLM` を含む `livekit-plugins-openai` のソースコード。
+  </Card>
+
+  <Card title="Agent API クイックスタート" icon="bolt" href="/ja/docs/agent-api/quickstart">
+    上記で使用したリクエスト、レスポンス、ツールのインターフェース仕様。
+  </Card>
+
+  <Card title="Agent API のモデル" icon="sparkles" href="/ja/docs/agent-api/models">
+    利用可能なモデルと料金。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## サポート
+</div>
+
+統合でお困りですか?
+
+* [LiveKit Agents のドキュメント](https://docs.livekit.io/agents/)を参照する
+* [FAQ](/ja/docs/resources/faq) を確認する

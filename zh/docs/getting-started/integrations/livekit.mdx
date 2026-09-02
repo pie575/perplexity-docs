@@ -1,0 +1,130 @@
+---
+title: "Perplexity 与 LiveKit Agents"
+description: "将 Perplexity 的 Agent API 用作 LiveKit 语音智能体的 LLM 核心。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+Perplexity 的 [Agent API](/zh/docs/agent-api/quickstart) 兼容 OpenAI Responses API，因此只需将 `livekit-plugins-openai` 的 `openai.responses.LLM` 类指向 Perplexity 的基础 URL，即可作为 [LiveKit Agents](https://docs.livekit.io/agents/) 的即插即用 LLM 使用。
+
+<Info>
+  **LiveKit Agents** 是一个用于构建实时语音和多模态 AI 智能体的开源框架。新建集成时，请通过 `openai.responses.LLM` 使用 Perplexity **Agent API**，不要使用 `livekit-plugins-perplexity` 插件或 `openai.LLM.with_perplexity()`，这两者调用的都是旧版 Sonar Chat Completions 端点。详见 [livekit.io](https://livekit.io)。
+</Info>
+
+<div id="installation">
+  ## 安装
+</div>
+
+```bash theme={null}
+pip install "livekit-agents" "livekit-plugins-openai"
+```
+
+<div id="api-key-setup">
+  ## API key 设置
+</div>
+
+将你的 Perplexity API key 设置为环境变量，并将其传入构造函数：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<Card title="获取 API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 Perplexity 控制台生成你的 API key。
+</Card>
+
+<div id="quick-start">
+  ## 快速开始
+</div>
+
+凡是 LiveKit `AgentSession` 需要 LLM 的地方，都可以使用 `openai.responses.LLM`：
+
+```python theme={null}
+import os
+
+from livekit.agents import Agent, AgentSession
+from livekit.plugins import openai, silero
+
+session = AgentSession(
+    llm=openai.responses.LLM(
+        model="openai/gpt-5.6-sol",
+        base_url="https://api.perplexity.ai/v1",   # SDK 会追加 /responses -> POST /v1/responses
+        api_key=os.environ["PERPLEXITY_API_KEY"],  # 必填：构造函数不会读取 PERPLEXITY_API_KEY
+    ),
+    stt=openai.STT(),
+    tts=openai.TTS(),
+    vad=silero.VAD.load(),
+)
+
+agent = Agent(
+    instructions="You are a helpful voice assistant. Use web search to answer with up-to-date information.",
+    tools=[openai.tools.WebSearch()],  # Perplexity 内置的 web_search 工具
+)
+
+# 在 LiveKit room 入口函数中运行此会话
+```
+
+由于 Agent API 兼容 OpenAI Responses,OpenAI 插件只需指向 `https://api.perplexity.ai/v1` 即可,无需其他改动。
+
+<div id="configuration">
+  ## 配置
+</div>
+
+要让 `openai.responses.LLM` 指向 Perplexity，需要两项设置：`base_url` 和显式指定的 `api_key` (构造函数不会自动读取 `PERPLEXITY_API_KEY`) ：
+
+```python theme={null}
+import os
+
+from livekit.plugins import openai
+
+llm = openai.responses.LLM(
+    model="openai/gpt-5.6-sol",
+    base_url="https://api.perplexity.ai/v1",
+    api_key=os.environ["PERPLEXITY_API_KEY"],
+)
+```
+
+Perplexity 的内置工具 (例如快速开始中展示的 `web_search`) 绑定在 `Agent` 上，而不是绑定在 LLM 上。
+
+<div id="available-models">
+  ## 可用模型
+</div>
+
+该集成支持通过 Perplexity Agent API 提供的任意模型，使用 `provider/model` 格式指定 (例如 `openai/gpt-5.6-sol`) 。完整列表请参见[模型页面](/zh/docs/agent-api/models)。
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="LiveKit Agents 文档" icon="book" href="https://docs.livekit.io/agents/">
+    使用 LiveKit 构建实时语音与多模态智能体。
+  </Card>
+
+  <Card title="OpenAI 插件源码" icon="brand-github" href="https://github.com/livekit/agents/tree/main/livekit-plugins/livekit-plugins-openai">
+    `livekit-plugins-openai` 源码，其中包含 Responses `LLM`。
+  </Card>
+
+  <Card title="Agent API 快速开始" icon="bolt" href="/zh/docs/agent-api/quickstart">
+    上文所用的请求、响应与工具约定。
+  </Card>
+
+  <Card title="Agent API 模型" icon="sparkles" href="/zh/docs/agent-api/models">
+    可用模型与定价。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中需要帮助？
+
+* 查阅 [LiveKit Agents 文档](https://docs.livekit.io/agents/)
+* 查看我们的[常见问题](/zh/docs/resources/faq)

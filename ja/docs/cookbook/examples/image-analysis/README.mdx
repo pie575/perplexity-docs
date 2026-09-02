@@ -1,0 +1,270 @@
+---
+title: "画像分析"
+description: "Perplexity Agent API のビジョン機能による画像分析とウェブ検索を組み合わせ、文脈を踏まえた結果を得る"
+---
+
+<div id="image-analysis">
+  # 画像分析
+</div>
+
+Perplexity Agent API のビジョン model を使って画像を分析し、さらに ウェブ検索で分析結果を補強して実世界の文脈を付与します。この例では、画像理解とリアルタイムな情報取得を 2 段階のパイプラインとして組み合わせます。まず画像に何が写っているかを特定し、次に特定した対象について調査します。
+
+<div id="features">
+  ## 機能
+</div>
+
+* base64エンコードまたは公開HTTPS URLによる画像のアップロード
+* Agent API経由で`openai/gpt-5.4`などのビジョン対応モデルによる画像分析
+* 画像分析とウェブ検索を組み合わせたコンテキストの拡充
+* 2段階のパイプライン：識別してから調査
+* PNG、JPEG、WEBP、GIF形式に対応
+
+<div id="installation">
+  ## インストール
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## 使い方
+</div>
+
+<CodeGroup>
+  ```bash Python theme={null}
+  python image_analysis.py path/to/photo.jpg
+  python image_analysis.py https://example.com/photo.jpg
+  ```
+
+  ```bash TypeScript theme={null}
+  npx tsx image_analysis.ts path/to/photo.jpg
+  npx tsx image_analysis.ts https://example.com/photo.jpg
+  ```
+</CodeGroup>
+
+<div id="full-code">
+  ## コード全文
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import sys
+  import base64
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def encode_image(image_path):
+      """Read a local image and return a base64 data URI."""
+      with open(image_path, "rb") as f:
+          encoded = base64.b64encode(f.read()).decode("utf-8")
+      ext = image_path.rsplit(".", 1)[-1].lower()
+      mime = {"png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg",
+              "webp": "image/webp", "gif": "image/gif"}.get(ext, "image/png")
+      return f"data:{mime};base64,{encoded}"
+
+
+  def identify_image(image_source):
+      """Step 1: Identify objects and subjects in an image."""
+      image_url = image_source if image_source.startswith("http") else encode_image(image_source)
+
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=[{
+              "role": "user",
+              "content": [
+                  {
+                      "type": "input_text",
+                      "text": (
+                          "Analyze this image in detail. Identify all notable objects, "
+                          "people, landmarks, species, or text. For each, provide a "
+                          "concise label and brief description. Format as a numbered list."
+                      ),
+                  },
+                  {"type": "input_image", "image_url": image_url},
+              ],
+          }],
+          max_output_tokens=1024,
+      )
+      return response.output_text
+
+
+  def research_subjects(identification_text):
+      """Step 2: Research identified subjects with web search."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=(
+              f"The following subjects were identified in an image:\n\n"
+              f"{identification_text}\n\n"
+              f"Research each subject. For each, provide:\n"
+              f"- What it is and why it is notable\n"
+              f"- Key facts or recent news\n"
+              f"- Historical or cultural significance if applicable\n\n"
+              f"Combine the analysis into a comprehensive report."
+          ),
+          tools=[{"type": "web_search"}],
+          instructions="You are an image research assistant. Provide accurate, up-to-date information. Synthesize image observations with research.",
+      )
+      return response.output_text
+
+
+  def analyze(image_source):
+      """Full pipeline: identify then research."""
+      print(f"Analyzing: {image_source}\n")
+      print("Step 1: Identifying subjects...")
+      identification = identify_image(image_source)
+      print(f"\n{identification}\n")
+      print("Step 2: Researching subjects...")
+      report = research_subjects(identification)
+      print(f"\n{report}")
+
+
+  if __name__ == "__main__":
+      if len(sys.argv) < 2:
+          print("Usage: python image_analysis.py <image_path_or_url>")
+          sys.exit(1)
+      analyze(sys.argv[1])
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from "@perplexity-ai/perplexity_ai";
+  import * as fs from "fs";
+  import * as path from "path";
+
+  const client = new Perplexity();
+
+  function encodeImage(imagePath: string): string {
+    const encoded = fs.readFileSync(imagePath).toString("base64");
+    const ext = path.extname(imagePath).slice(1).toLowerCase();
+    const mime: Record<string, string> = {
+      png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg",
+      webp: "image/webp", gif: "image/gif",
+    };
+    return `data:${mime[ext] || "image/png"};base64,${encoded}`;
+  }
+
+  async function identifyImage(imageSource: string): Promise<string> {
+    const imageUrl = imageSource.startsWith("http")
+      ? imageSource
+      : encodeImage(imageSource);
+
+    const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "Analyze this image in detail. Identify all notable objects, "
+              + "people, landmarks, species, or text. For each, provide a "
+              + "concise label and brief description. Format as a numbered list.",
+          },
+          { type: "input_image", image_url: imageUrl },
+        ],
+      }],
+      max_output_tokens: 1024,
+    });
+    return response.output_text;
+  }
+
+  async function researchSubjects(identificationText: string): Promise<string> {
+    const response = await client.responses.create({
+      model: "openai/gpt-5.4",
+      input:
+        `The following subjects were identified in an image:\n\n`
+        + `${identificationText}\n\n`
+        + `Research each subject. For each, provide:\n`
+        + `- What it is and why it is notable\n`
+        + `- Key facts or recent news\n`
+        + `- Historical or cultural significance if applicable\n\n`
+        + `Combine the analysis into a comprehensive report.`,
+      tools: [{ type: "web_search" }],
+      instructions: "You are an image research assistant. Provide accurate, up-to-date information. Synthesize image observations with research.",
+    });
+    return response.output_text;
+  }
+
+  async function analyze(imageSource: string): Promise<void> {
+    console.log(`Analyzing: ${imageSource}\n`);
+    console.log("Step 1: Identifying subjects...");
+    const identification = await identifyImage(imageSource);
+    console.log(`\n${identification}\n`);
+    console.log("Step 2: Researching subjects...");
+    const report = await researchSubjects(identification);
+    console.log(`\n${report}`);
+  }
+
+  const arg = process.argv[2];
+  if (!arg) { console.log("Usage: npx tsx image_analysis.ts <image_path_or_url>"); process.exit(1); }
+  analyze(arg);
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## 出力例
+</div>
+
+```
+解析中: golden_gate.jpg
+
+ステップ1: 被写体を特定中...
+
+1. Golden Gate Bridge - カリフォルニア州サンフランシスコのゴールデン
+   ゲート海峡に架かる、象徴的な赤橙色の吊り橋。
+2. San Francisco Bay - 橋の下に広がる水域で、太平洋につながっている。
+3. Marin Headlands - 対岸の丘陵地帯で、ゴールデンゲート国立レクリエー
+   ションエリアの一部。
+4. 霧の帯 - 太平洋から流れ込む、低く垂れ込めた雲。
+
+ステップ2: 被写体を調査中...
+
+## Golden Gate Bridge - 総合分析
+
+### 橋について
+Golden Gate Bridgeは、サンフランシスコ湾と太平洋をつなぐ幅約1マイルの
+海峡に架かる吊り橋である。1937年に完成し、4,200フィートという吊り橋
+最長スパンの記録を1964年まで保持していた。「インターナショナル
+オレンジ」という色は、霧の中での視認性と景観との調和を考慮して選ばれた。
+
+### San Francisco Bay
+San Francisco Bayは、約1,600平方マイルの流域を抱える浅い河口域であり、
+太平洋沿岸で最大級の天然港のひとつである。
+
+### Marin Headlands
+ゴールデンゲート国立レクリエーションエリアの一部で、橋と街のスカイ
+ラインを一望できるハイキングコースがある。
+
+### 霧のパターン
+ゴールデンゲートを抜ける夏の霧はサンフランシスコの微気候を象徴する
+現象で、内陸の暖かい空気が太平洋の冷たい空気を海峡越しに引き込む
+ことで発生する。
+```
+
+<Warning>
+  Base64エンコードされた画像は入力tokenの使用量に加算されます。1024x768の画像で約1,048 tokenを消費します。base64画像の最大ファイルサイズは50 MBです。
+</Warning>
+
+<Info>
+  Agent APIでは、`input_image` コンテンツタイプによるビジョン入力に対応しています。`openai/gpt-5.4` などのビジョン対応modelを使用してください。対応形式とサイズ制限については、[Agent API 画像添付のドキュメント](/ja/docs/agent-api/image-attachments)を参照してください。
+</Info>
+
+<div id="limitations">
+  ## 制限事項
+</div>
+
+* 画像分析にはビジョン対応のmodel (例: `openai/gpt-5.4`) が必要です。すべてのmodelが `input_image` に対応しているわけではありません。
+* ステップ2のウェブ検索の品質は、ステップ1の識別精度に left依存します。
+* URLベースの入力では、一般公開されているHTTPS URLのみ利用できます。プライベートなURLは失敗します。
+* アニメーションGIFにも対応していますが、解析されるのは最初のフレームのみです。

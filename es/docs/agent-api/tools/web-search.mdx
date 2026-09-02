@@ -1,0 +1,731 @@
+---
+title: "Búsqueda web"
+description: "Busca en la web desde la Agent API con filtros, configuraciones de búsqueda, precios, parámetros y campos de respuesta."
+---
+
+<div id="overview">
+  ## Descripción general
+</div>
+
+La herramienta `web_search` permite al modelo buscar en la web durante una solicitud a la Agent API. Úsala para obtener información actualizada, noticias recientes, investigación respaldada por fuentes y responder preguntas que requieren información más allá de los datos de entrenamiento del modelo.
+
+Habilita la herramienta agregándola al arreglo `tools`. El modelo decide cuándo invocarla en función de tu prompt y de las instrucciones.
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Explain the architecture of NVIDIA's CUDA programming model: threads, blocks, grids, warps, and memory hierarchy, and how they enable GPU parallelism.",
+      tools=[
+          {
+              "type": "web_search",
+              "search_context_size": "medium"
+          }
+      ],
+      instructions="Search for current, source-grounded information before answering.",
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Explain the architecture of NVIDIA\'s CUDA programming model: threads, blocks, grids, warps, and memory hierarchy, and how they enable GPU parallelism.',
+    tools: [
+      {
+        type: 'web_search' as const,
+        search_context_size: 'medium',
+      },
+    ],
+    instructions: 'Search for current, source-grounded information before answering.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Explain the architecture of NVIDIA\u0027s CUDA programming model: threads, blocks, grids, warps, and memory hierarchy, and how they enable GPU parallelism.",
+      "tools": [
+        {
+          "type": "web_search",
+          "search_context_size": "medium"
+        }
+      ],
+      "instructions": "Search for current, source-grounded information before answering."
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Respuesta">
+  ```json theme={null}
+  {
+    "id": "c6e956f3-0667-40d1-9f47-ab3f5afa9bf7",
+    "results": [
+      {
+        "snippet": "",
+        "title": "CUDA C++ Programming Guide - NVIDIA Documentation Hub",
+        "url": "https://docs.nvidia.com/cuda/cuda-c-programming-guide/",
+        "date": "2026-04-02",
+        "last_updated": "2026-05-21"
+      },
+      {
+        "snippet": "",
+        "title": "CUDA Live: Your Parallel Programming Guide - YouTube",
+        "url": "https://www.youtube.com/watch?v=ftI48A8K5Vg",
+        "date": "2026-02-19",
+        "last_updated": "2026-05-20"
+      },
+      {
+        "snippet": "CUDA\nCUDA, which stands for Compute Unified Device Architecture, is a parallel computing platform and application programming interface (API) model created by NVIDIA.\nIt allows software developers and software engineers to use a CUDA-enabled graphics processing unit (GPU) for general-purpose processing purposes - an approach known as GPGPU (General-Purpose computing on Graphics Processing Units).\nCUDA gives programmers access to the virtual instruction set and memory of the parallel computational elements in CUDA-enabled GPUs.\nUsing CUDA, developers can significantly speed up compute-intensive applications by harnessing the power of GPUs for non-graphical computing.\n...\nToday, CUDA is typically harnessed by enabling a CPU to offload complex computational tasks to a GPU.\nThis can often result in a drastic increase in computing efficiency because GPUs are exceptionally efficient at handling multiple operations simultaneously due to their parallel processing capabilities.\n...\nOne of the key strengths of CUDA is its ability to make parallel computing more accessible and efficient.\nBy leveraging the massive parallel processing power of NVIDIA GPUs, CUDA enables dramatic increases in computing performance.\n...\n1. Parallel Processing Capabilities: CUDA enables hundreds or even thousands of computing cores on a GPU to perform simultaneous calculations, vastly outperforming CPUs on tasks that can be parallelized.\n...\n3. Advanced Memory Management: CUDA provides efficient and fine-grained control over memory usage on GPUs, allowing for optimized performance.\n...\nYes, CUDA is a proprietary computing platform developed by NVIDIA for their GPUs only.\nIt is specifically designed to work with NVIDIA graphics cards and, therefore, is not compatible with GPUs from other manufacturers.\n...\n4. How does CUDA differ from traditional CPU processing?\nCUDA allows for parallel processing, harnessing the power of GPU cores, which can handle thousands of threads simultaneously, offering a significant speed advantage over traditional CPU processing for certain tasks.\n...\nTo enable CUDA on a compatible NVIDIA GPU, you need to install the NVIDIA CUDA Toolkit and the appropriate GPU drivers from NVIDIA's website.\nThe toolkit includes libraries, debugging and optimization tools, a runtime library, and a C compiler.",
+        "title": "What Is CUDA? - Supermicro",
+        "url": "https://www.supermicro.com/en/glossary/cuda",
+        "date": null,
+        "last_updated": "2026-05-16"
+      },
+      {
+        "snippet": "",
+        "title": "1.2. Programming Model — CUDA Programming Guide",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/01-introduction/programming-model.html",
+        "date": "2026-03-04",
+        "last_updated": "2026-05-04"
+      },
+      {
+        "snippet": "GPU (Graphics Processing Unit) architecture is the foundation of modern computing, designed to handle complex parallel processing tasks with incredible efficiency.\nUnlike traditional CPUs, which excel at sequential operations, GPUs are optimized for massive parallelism, making them indispensable for high-performance computing, artificial intelligence (AI) workloads, and virtualization.\n...\nGPUs excel in executing thousands of parallel operations, making them superior to CPUs for tasks such as deep learning and real-time analytics.\nThis advantage is key for industries requiring high-speed data processing.\nIn AI training, GPUs break complex computations into smaller tasks that run simultaneously across thousands of cores, dramatically accelerating model development.\nIn fields such as medical imaging and logistics optimization, parallel processing enables near-instantaneous analysis of vast data sets, leading to faster insights and decision-making.\n...\nGPU architecture refers to the design and structure of a graphics processing unit, optimized for parallel computing.\nIt is crucial for high-performance computing, AI, and graphics-intensive applications.\n...\nThe main layers include the hardware layer (physical components), firmware and driver layer (optimization and compatibility), and software and API layer (programming interfaces for application development).\n...\nGPUs outperform CPUs in AI and machine learning due to their ability to handle thousands of parallel computations simultaneously, significantly speeding up training and inference processes.",
+        "title": "GPU Architecture Explained: Structure, Layers & Performance",
+        "url": "https://www.scalecomputing.com/resources/understanding-gpu-architecture",
+        "date": "2025-04-16",
+        "last_updated": "2026-05-14"
+      },
+      {
+        "snippet": "CUDA is a parallel computing platform and programming model developed by NVIDIA that enables dramatic increases in computing performance by harnessing the power of the GPU.\nIt allows developers to accelerate compute-intensive applications and is widely used in fields such as deep learning, scientific computing, and high-performance computing (HPC).",
+        "title": "CUDA Programming Guide",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/index.html",
+        "date": "2026-03-04",
+        "last_updated": "2026-05-02"
+      },
+      {
+        "snippet": "6\nClosely Coupled CPU-GPU\nOperation 1\nOperation 2\nOperation 3\nInit\nAlloc\nFunction\nLib\nLib\nFunction\nFunction\nCPU\nGPU\nIntegrated programming model\nHigh speed data transfer – up to 3.2 GB/s\nAsynchronous operation\nLarge GPU memory systems\n© NVIDIA Corporation 2006-2008\n...\n17\nGPU Computing\nGPU is a massively parallel processor\nNVIDIA G80: 128 processors\nSupport thousands of active threads (12,288 on G80)\nGPU Computing requires a programming model that \ncan efficiently express that kind of parallelism\nMost importantly, data parallelism\nCUDA implements such a programming model\n© NVIDIA Corporation 2006-2008\n18\nCUDA Kernels and Threads\nParallel portions of an application are executed on \nthe device as kernels\nOne kernel is executed at a time\nMany threads execute each kernel\nDifferences between CUDA and CPU threads \nCUDA threads are extremely lightweight\nVery little creation overhead\nInstant switching\nCUDA uses 1000s of threads to achieve efficiency\nMulti-core CPUs can use only a few\nDefinitions: \nDevice = GPU; Host = CPU\nKernel = function that runs on the device\n© NVIDIA Corporation 2006-2008\n19\nArrays of Parallel Threads\nA CUDA kernel is executed by an array of threads\nAll threads run the same code\nEach thread has an ID that it uses to compute memory \naddresses and make control decisions\n7\n6\n...\nThe Missing Piece: threads may need to cooperate\nThread cooperation is valuable\nShare results to save computation\nSynchronization\nShare memory accesses\nDrastic bandwidth reduction\nThread cooperation is a powerful feature of CUDA\n...\nThread Blocks: Scalable Cooperation\nDivide monolithic thread array into multiple blocks\nThreads within a block cooperate via shared memory\nThreads in different blocks cannot cooperate\nEnables programs to transparently scale to any \nnumber of processors!\n...\nHardware is free to schedule thread blocks \n...\nA kernel scales across any number of parallel \nmultiprocessors\n...\n23\nCUDA Programming Model\nA kernel is executed by a \ngrid of thread blocks\nA thread block is a batch \nof threads that can \ncooperate with each \nother by:\nSharing data through \nshared memory\nSynchronizing their \nexecution\nThreads from different\nblocks cannot cooperate\nHost\nKernel \n...\n24\nProcessors     execute computing threads\nThread Execution Manager issues threads\n128 Thread Processors grouped into 16 Multiprocessors (SMs)\nParallel Data Cache (Shared Memory) enables thread \ncooperation\n...\nThread and Block IDs\nThreads and blocks have IDs\nEach thread can decide what \ndata to work on\nBlock ID: 1D or 2D\nThread ID: 1D, 2D, or 3D \nSimplifies memory\naddressing when processing\nmulti-dimensional data\nImage processing\nSolving PDEs on volumes\n...\nKernel Memory Access\nRegisters\nGlobal Memory (external DRAM)\nKernel input and output data reside here\nOff-chip, large\nUncached\nShared Memory (Parallel Data Cache)\nShared among threads in a single block\nOn-chip, small\nAs fast as registers\nGrid\n...\nThe host can read & write global memory but not shared memory\n...\n27\nExecution Model\nKernels are launched in grids\nOne kernel executes at a time\nA block executes on one Streaming Multiprocessor \n(SM)\nDoes not migrate\nSeveral blocks can reside concurrently on one SM\nControl limitations (of G8X/G9X GPUs):\nAt most 8 concurrent blocks per SM\nAt most 768 concurrent threads per SM\nNumber is further limited by SM resources\nRegister file is partitioned among all resident threads\nShared memory is partitioned among all resident thread blocks\n...\nCUDA Advantages over Legacy GPGPU\n(Legacy GPGPU is programming GPU through graphics APIs)\nRandom access byte-addressable memory\nThread can access any memory location\nUnlimited access to memory\nThread can read/write as many locations as needed\nShared memory (per block) and thread \nsynchronization\nThreads can cooperatively load data into shared memory\nAny thread can then access any shared memory location\nLow learning curve\nJust a few extensions to C\nNo knowledge of graphics is required\nNo graphics API overhead\n...\n29\nCUDA Model Summary\nThousands of lightweight concurrent threads\nNo switching overhead\nHide instruction and memory latency\nShared memory\nUser-managed L1 cache\nThread communication / cooperation within blocks\nRandom access to global memory\nAny thread can read/write any location(s)\nCurrent generation hardware:\nUp to 128 streaming processors\nMemory\nLocation\nCached\nAccess\nScope (“Who?”)\nShared\nOn-chip\nN/A\nRead/write\nAll threads in a block\nGlobal\nOff-chip\nNo\nRead/write\nAll threads + host\n© NVIDIA Corporation 2006-2008",
+        "title": "[PDF] NVIDIA CUDA Software and GPU Parallel Computing Architecture",
+        "url": "https://www.isfpga.org/past/fpga2008/fpga2008%20workshop%20-%2006%20NVIDIA%20-%20Kirk.pdf",
+        "date": null,
+        "last_updated": "2026-03-10"
+      },
+      {
+        "snippet": "Parallel Computing on a GPU\nNVIDIA GPU Computing Architecture\nis a scalable parallel computing platform\nIn laptops, desktops, workstations, servers\n8-series GPUs deliver 50 to 200 GFLOPS\non compiled parallel C applications\nGPU parallel performance pulled by the\ninsatiable demands of PC game market\nGPU parallelism is doubling every year\nProgramming model scales transparently\nProgrammable in C with CUDA tools\nMultithreaded SPMD model uses application\ndata parallelism and thread parallelism\nGeForce 8800\n...\nNVIDIA 8-Series GPU Computing\nMassively multithreaded parallel computing platform\n12,288 concurrent threads, hardware managed\n128     Thread Processor cores at 1.35 GHz  == 518 GFLOPS peak\nGPU Computing features enable C on Graphics Processing Unit\nSP\n© NVIDIA Corporation 2007\n...\nProgrammer Partitions Problem\nwith Data-Parallel Decomposition\nCUDA Programmer partitions\nproblem into Grids, one Grid\nper sequential problem step\nProgrammer partitions Grid\ninto result Blocks computed\nindependently in parallel\nGPU thread array computes\nresult Block\nProgrammer partitions Block\ninto elements computed\ncooperatively in parallel\nGPU thread computes result\nelement\nGPU\nGrid 1\nBlock\n(0, 0)\n...\nCooperative Thread Array\nCTA Implements CUDA Thread Block\nA CTA is an array of concurrent threads\nthat cooperate to compute a result\nA CUDA thread block is a CTA\nProgrammer declares CTA:\nCTA size 1 to 512 concurrent threads\nCTA shape 1D, 2D, or 3D\nCTA dimensions in threads\nCTA threads execute thread program\nCTA threads have thread id numbers\nCTA threads share data and synchronize\nThread program uses thread id to select\nwork and address shared data\nCTA\nCUDA Thread Block\nThread Id #:\n0 1 2 3 …          m\nThread program\n...\nSM Multiprocessor Executes CTAs\nCTA threads run concurrently\nSM assigns thread id #s\nSM manages thread execution\nCTA threads share data & results\nIn Memory and Shared Memory\nSynchronize at barrier instruction\nPer-CTA Shared Memory\nKeeps data close to processor\nMinimize trips to global Memory\nCTA threads access global Memory\n...\nData Parallel Levels\n...\nCTA – Cooperative Thread Array\n...\n1 to 512 threads per CTA\nCTA (Block) id number\n...\nComputes many result Blocks\n...\nParallel Memory Sharing\nLocal Memory:   per-thread\nPrivate per thread\nAuto variables, register spill\nShared Memory:   per-CTA\nShared by threads of CTA\nInter-thread communication\nGlobal Memory:   per-application\nShared by all threads\nInter-Grid communication\nThread\nLocal Memory\n...\nGPU parallelism varies widely\nRanges from 8 cores to many 100s of cores\nRanges from 100 to many 1000s of threads\nGPU parallelism doubles yearly\nGraphics performance scales with GPU parallelism\nData parallel mapping of pixels to threads\nUnlimited demand for parallel pixel shader threads and cores\nChallenge:\nScale Computing performance with GPU parallelism\nProgram must be insensitive to the number of cores\nWrite one program for any number of SM cores\nProgram runs on any size GPU without recompiling\n...\n13\nTransparent Scalability\nProgrammer uses multi-level data parallel decomposition\nDecomposes problem into sequential steps (Grids)\nDecomposes Grid into computing parallel Blocks (CTAs)\nDecomposes Block into computing parallel elements (threads)\nGPU hardware distributes CTA work to available SM cores\nGPU balances CTA work load across any number of SM cores\nSM core executes CTA program that computes Block\nCTA program computes a Block independently of others\nEnables parallel computing of Blocks of a Grid\nNo communication among Blocks of same Grid\nScales one program across any number of parallel SM cores\nProgrammer writes one program for all GPU sizes\nProgram does not know how many cores it uses\nProgram executes on GPU with any number of cores\n© NVIDIA Corporation 2007\n...\n14\nCUDA Programming Model:\nParallel Multithreaded Kernels\nExecute data-parallel portions of application on\nGPU as kernels which run in parallel on many\ncooperative threads\nIntegrated CPU + GPU application C program\nPartition problem into a sequence of kernels\nKernel C code executes on GPU\nSerial C code executes on CPU\nKernels execute as blocks of parallel threads\nView GPU as a computing device that:\nActs as a coprocessor to the CPU host\nHas its own memory\nRuns many lightweight threads in parallel\n© NVIDIA Corporation 2007\n...\nCUDA integrated CPU + GPU application C program\nSerial C code executes on CPU\nParallel Kernel C code executes on GPU thread blocks\n...\n16\nCUDA Programming Model:\nGrids, Blocks, and Threads\nExecute a sequence of kernels\non GPU computing device\nA kernel executes as a Grid of\nthread blocks\nA thread block is an array of\nthreads that can cooperate\nThreads within the same block\nsynchronize and share data in\nShared Memory\nExecute thread blocks as CTAs\non multithreaded\nmultiprocessor SM cores\nCPU\nKernel 1\nKernel 2\nGPU device\n...\n17\nCUDA Programming Model:\nThread Memory Spaces\nEach kernel thread can read:\nThread Id \nper thread\nBlock Id \nper block\nConstants\nper grid\nTexture    \nper grid\nEach thread can read and write:\nRegisters\nper thread\nLocal memory\nper thread\nShared memory per block\nGlobal memory per grid\nHost CPU can read and write:\nConstants\nper grid\nTexture    \nper grid\nGlobal memory per grid\nThread Id,  Block Id\nRegisters\nConstants\nTexture\nGlobal Memory\nShared\nMemory\nKernel\nThread\nProgram\nWritten in C\nLocal Memory\n...\n18\nCUDA: C on the GPU\nSingle-Program Multiple-Data (SPMD) programming model\nC program for a thread of a thread block in a grid\nExtend C only where necessary\nSimple, explicit language mapping to parallel threads\nDeclare C kernel functions and variables on GPU:\n__global__ void KernelFunc(...);\n__device__ int  GlobalVar;\n__shared__ int  SharedVar;\nCall kernel function as Grid of 500 blocks of 128 threads:\nKernelFunc<<< 500, 128 >>>(args ...);\nExplicit GPU memory allocation, CPU-GPU memory transfers\ncudaMalloc( ), cudaFree( )\ncudaMemcpy( ), cudaMemcpy2D( ), …\n...\nNVIDIA GPU Computing Architecture\nComputing mode enables parallel C on GPUs\nMassively multithreaded – 1000s of threads\nExecutes parallel threads and thread arrays\nThreads cooperate via Shared and Global memory\nScales to any number of parallel processor cores\nNow on: Tesla C870, D870, S870, GeForce 8800/8600/8500,\nand Quadro FX 5600/4600\nCUDA Programming model\nC program for GPU threads\nScales transparently to GPU parallelism\nCompiler, tools, libraries, and driver for GPU Computing\nSupports Linux and Windows",
+        "title": "[PDF] GPU Parallel Computing Architecture and CUDA Programming Model",
+        "url": "https://old.hotchips.org/wp-content/uploads/hc_archives/hc19/2_Mon/HC19.02/HC19.02.02.pdf",
+        "date": null,
+        "last_updated": "2025-11-04"
+      },
+      {
+        "snippet": "",
+        "title": "4.18. CUDA Dynamic Parallelism — CUDA Programming Guide",
+        "url": "https://docs.nvidia.com/cuda/cuda-programming-guide/04-special-topics/dynamic-parallelism.html",
+        "date": "2026-03-04",
+        "last_updated": "2026-05-03"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<div id="configuring-search">
+  ## Configurar la búsqueda
+</div>
+
+<div id="using-recommended-token-budgets">
+  ### Uso de los presupuestos de tokens recomendados
+</div>
+
+Empieza con `low`, `medium` o `high` para dimensionar el contexto de búsqueda mediante `search_context_size`. Cada tamaño con nombre se asigna a un par recomendado de presupuestos `max_tokens` y `max_tokens_per_page`, y es la opción predeterminada recomendada para la mayoría de las aplicaciones.
+
+| `search_context_size` | `max_tokens` | `max_tokens_per_page` | Ideal para                                             |
+| --------------------- | ------------ | --------------------- | ------------------------------------------------------ |
+| `low`                 | 300          | 300                   | Datos sencillos y consultas ligeras                    |
+| `medium`              | 1000         | 1000                  | Investigación general y comparación de productos       |
+| `high`                | 4000         | 4000                  | Respuestas con muchas fuentes e investigación compleja |
+
+<Note>
+  Estas correspondencias de presupuestos de tokens reflejan los valores predeterminados que Perplexity recomienda actualmente y pueden cambiar a medida que publiquemos configuraciones actualizadas según los resultados de evaluación más recientes. Al invocar un tamaño con nombre, siempre se aplica el presupuesto recomendado vigente.
+</Note>
+
+<CodeGroup>
+  ```python Python theme={null}
+  tools = [
+      {
+          "type": "web_search",
+          "search_context_size": "high"
+      }
+  ]
+  ```
+
+  ```typescript Typescript theme={null}
+  const tools = [
+    {
+      type: 'web_search' as const,
+      search_context_size: 'high',
+    },
+  ];
+  ```
+
+  ```bash cURL theme={null}
+  "tools": [
+    {
+      "type": "web_search",
+      "search_context_size": "high"
+    }
+  ]
+  ```
+</CodeGroup>
+
+<div id="advanced-token-budget-configuration">
+  ### Configuración avanzada del presupuesto de tokens
+</div>
+
+Usa el presupuesto explícito de tokens cuando necesites fijar presupuestos exactos para controlar costes, controlar la latencia o realizar evaluaciones. Establece `max_tokens` para limitar el contexto de búsqueda total de todos los resultados y `max_tokens_per_page` para limitar el contenido extraído de cada página de resultados. Los presupuestos explícitos prevalecen sobre cualquier valor de `search_context_size` enviado en la misma solicitud, y se te cobra por el número exacto de tokens de contexto de búsqueda consumidos, no por el presupuesto solicitado.
+
+<CodeGroup>
+  ```python Python theme={null}
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Summarize the US OMB M-24-10 memorandum on AI procurement: scope, key requirements for federal agencies, and the rights-impacting AI categories.",
+      tools=[
+          {
+              "type": "web_search",
+              "max_tokens": 6000,
+              "max_tokens_per_page": 1200,
+              "filters": {
+                  "search_domain_filter": [".gov"],
+                  "search_recency_filter": "month"
+              }
+          }
+      ],
+  )
+  ```
+
+  ```typescript Typescript theme={null}
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Summarize the US OMB M-24-10 memorandum on AI procurement: scope, key requirements for federal agencies, and the rights-impacting AI categories.',
+    tools: [
+      {
+        type: 'web_search' as const,
+        max_tokens: 6000,
+        max_tokens_per_page: 1200,
+        filters: {
+          search_domain_filter: ['.gov'],
+          search_recency_filter: 'month',
+        },
+      },
+    ],
+  });
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Summarize the US OMB M-24-10 memorandum on AI procurement: scope, key requirements for federal agencies, and the rights-impacting AI categories.",
+      "tools": [
+        {
+          "type": "web_search",
+          "max_tokens": 6000,
+          "max_tokens_per_page": 1200,
+          "filters": {
+            "search_domain_filter": [".gov"],
+            "search_recency_filter": "month"
+          }
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Respuesta">
+  ```json theme={null}
+  {
+    "id": "75a4ee6f-ac57-4ed1-ad17-ad2d54f70428",
+    "results": [
+      {
+        "snippet": "",
+        "title": "[PDF] M-24-10 MEMORANDUM FOR THE HEADS OF EXECUTIVE ...",
+        "url": "https://www.whitehouse.gov/wp-content/uploads/2024/03/M-24-10-Advancing-Governance-Innovation-and-Risk-Management-for-Agency-Use-of-Artificial-Intelligence.pdf",
+        "date": null,
+        "last_updated": "2026-03-30"
+      },
+      {
+        "snippet": "",
+        "title": "[PDF] M-24-18 MEMORANDUM FOR THE HEADS OF EXECUTIVE ...",
+        "url": "https://www.whitehouse.gov/wp-content/uploads/2024/10/M-24-18-AI-Acquisition-Memorandum.pdf",
+        "date": null,
+        "last_updated": "2026-03-21"
+      },
+      {
+        "snippet": "",
+        "title": "OMB Releases Requirements for Responsible AI Procurement by ...",
+        "url": "https://www.cov.com/en/news-and-insights/insights/2024/10/omb-releases-requirements-for-responsible-ai-procurement-by-federal-agencies",
+        "date": "2023-04-18",
+        "last_updated": "2026-03-25"
+      },
+      {
+        "snippet": "El 24 de septiembre de 2024, la Oficina de Administración y Presupuesto (OMB) publicó el **Memorando M-24-18**, *Impulsar la Adquisición Responsable de Inteligencia Artificial en el Gobierno *(Memorando).\nEl Memorando, de 36 páginas, se basa en la guía de marzo de 2024 de la OMB que rige el uso de la IA por parte de las agencias federales, el Memorando M-24-10, sobre el que informamos aquí.\nEl Memorando aborda los requisitos y la orientación para las agencias que adquieren sistemas y servicios de IA, centrándose en tres objetivos estratégicos: (i) garantizar la colaboración en todo el gobierno federal; (ii) gestionar los riesgos y el rendimiento de la IA; y (iii) promover un mercado de IA competitivo.\n### Alcance y aplicabilidad\nLos requisitos del Memorando se aplicarán a los contratos adjudicados en virtud de licitaciones emitidas a partir del 23 de marzo de 2025, así como a cualquier opción de renovación o prórroga ejercida después del 23 de marzo de 2025.\nEl Memorando aborda consideraciones de alcance gubernamental asociadas con la contratación por parte de las agencias de un sistema o servicio de IA.\nA tal efecto, el Memorando define «Sistema de IA» de modo que incluye las aplicaciones de IA y la IA integrada en otros sistemas o procesos de negocio de las agencias, pero no incluye los «productos comerciales comunes» con funcionalidad de IA integrada (por ejemplo, aplicaciones comerciales comunes de navegación por mapas o programas de procesamiento de texto que tienen finalidades o funcionalidades sustanciales ajenas a la IA, pero en los que la IA está integrada para funciones como sugerir texto o corregir la ortografía y la gramática).\nEl Memorando tampoco se aplica a la IA adquirida por elementos de la Comunidad de Inteligencia o adquirida para su uso como componente de un «Sistema de Seguridad Nacional», según se define en el título 44 del U.S.C.\n§ 3552(b)(6), y no se aplica a:\n- el uso incidental de IA por parte de los contratistas durante la ejecución del contrato (por ejemplo, IA utilizada a opción de un contratista cuando no se ordena ni se exige para cumplir los requisitos);\n- la IA adquirida para llevar a cabo investigación básica, aplicada o experimental (salvo cuando la finalidad de dicha investigación sea desarrollar aplicaciones de IA específicas dentro de la agencia);\n- las actuaciones regulatorias destinadas a prescribir con carácter general la legislación o la política sobre IA; o\n- las evaluaciones de aplicaciones de IA concretas porque el proveedor de IA sea objeto o posible objeto de una acción de aplicación regulatoria, policial o de seguridad nacional.\n...\nEl Memorando ordena a las agencias formalizar políticas, procedimientos y prácticas internas de adquisición que reflejen los requisitos de adquisición de IA y exige que las agencias presenten a la OMB, antes de marzo de 2025, pruebas del avance en la implementación y de la coordinación en toda la agencia.\nEl Memorando ordena además a las agencias trabajar conjuntamente a través de consejos interinstitucionales y otras iniciativas para colaborar y compartir información sobre la adquisición de IA entre agencias «para fortalecer el mercado con el tiempo, aumentando la previsibilidad y estandarizando las expectativas para los proveedores».\nSegún el Memorando, la información recopilada por las agencias sobre la adquisición de IA debería compartirse públicamente cuando sea posible, a fin de dar claridad a los contratistas, incluidos los nuevos participantes.\n...\nLa mayor parte del Memorando se dedica a las mejores prácticas y a requisitos específicos para gestionar el riesgo y el rendimiento de la IA, e indica a las agencias que prioricen la privacidad, la seguridad, la propiedad de los datos y la interoperabilidad al planificar una adquisición de IA.\n...\nPara determinar si se está adquiriendo IA cubierta por el Memorando M-24-18, el Memorando ordena a los funcionarios de la agencia responsables de la planificación de adquisiciones, la elaboración de requisitos y la evaluación de propuestas que:\n1. Comuniquen a los contratistas, en la mayor medida posible, si el sistema o servicio de IA adquirido está destinado a utilizarse de una manera que pueda afectar a los derechos o a la seguridad y activar requisitos adicionales de gestión de riesgos.\n2. En los casos en que la licitación de una agencia no solicite explícitamente un sistema de IA, consideren incluir en los requisitos un texto que pida a los contratistas informar de cualquier uso propuesto de IA como parte de la presentación de sus propuestas.\n3. Exijan a los contratistas que notifiquen y obtengan la aceptación de las partes interesadas pertinentes de la agencia antes de integrar nuevas funciones o componentes de IA en los sistemas y servicios que se entreguen conforme al contrato.\n4. Se comuniquen con los contratistas para determinar cuándo la IA es una característica o componente principal de un sistema o servicio adquirido, incluidas preguntas al contratista para comprender si se está utilizando IA en la evaluación o ejecución de un contrato que no implica explícitamente IA.\n...\nEl Memorando incluye diversas recomendaciones y requisitos que podrían crear obligaciones afirmativas para los contratistas, entre ellas que:\n- Las agencias deberían considerar incluir como parte de sus criterios de evaluación la forma en que los proveedores de IA demuestran que protegen la información de identificación personal y mitigan los riesgos para la privacidad, incluso mediante tecnologías de mejora de la privacidad.\n- Las agencias deberían asegurarse de que los términos contractuales aborden los requisitos para que los proveedores presenten los sistemas que utilizan reconocimiento facial a evaluación por el NIST como parte de la Face Recognition Technology Evaluation y la Facial Analytics Technical Evaluation, cuando sea factible.\n- Las agencias deberían exigir a los proveedores que identifiquen posibles sesgos de la IA y estrategias de mitigación para abordarlos.\n...\nEl Memorando sugiere que las agencias deberían aprovechar enfoques y técnicas de contratación basadas en el desempeño, para reforzar su capacidad de planificar, identificar y gestionar eficazmente el riesgo a lo largo del ciclo de vida del contrato.\n...\nEl Memorando exige a las agencias examinar detenidamente las condiciones del servicio y los términos de licencia, incluidos los que especifican qué información, modelos y datos transformados de la agencia deben entregarse como productos para evitar la dependencia del proveedor, y realizar una diligencia debida cuidadosa sobre la cadena de suministro de los datos de un proveedor.\nLas mejores prácticas descritas en el Memorando incluyen restricciones contractuales sobre el uso de información de la agencia para entrenar sistemas de IA.\n...\nEl Memorando exige que los términos contractuales aborden explícitamente cómo un proveedor garantizará el cumplimiento de las directivas y políticas pertinentes de gestión de datos (por ejemplo, mediante un sistema de gestión de la calidad), en particular respecto de (i) los datos generados antes, durante o después de la entrega de la IA; (ii) los niveles escalonados de acceso y las responsabilidades exigibles en el manejo de datos; y (iii) las divulgaciones cuando se utilicen materiales protegidos por derechos de autor en los datos de entrenamiento.\n...\nSegún el Memorando, las agencias deberían incluir requisitos contractuales que faciliten la posibilidad de obtener toda la documentación y el acceso necesarios para comprender cómo se entrenó un modelo.\nPor ejemplo, las agencias pueden solicitar registros de entrenamiento a un contratista, incluidas pruebas de cualquier obtención y depuración de datos, entradas, parámetros o hiperparámetros utilizados durante las sesiones de entrenamiento de los modelos entregados al gobierno.\nTambién se puede pedir a los contratistas que proporcionen documentación detallada del procedimiento de entrenamiento utilizado para el modelo a fin de demostrar su autenticidad, procedencia y seguridad, y que pongan los artefactos del modelo entrenado a disposición de la agencia para su evaluación y revisión.\n#### IA que afecta a los derechos e IA que afecta a la seguridad\nCuando sea factible, las agencias deben revelar en las licitaciones si el uso previsto afecta a los derechos o a la seguridad.\nLas agencias deben considerar si el proveedor debe facilitar diversas categorías de información para satisfacer los requisitos del Memorando M-24-10 de la OMB o para cumplir los objetivos de la agencia, incluidos, por ejemplo, métricas de rendimiento e información sobre la fuente de los datos, su procedencia, selección, calidad, idoneidad y adecuación al propósito.\nLos contratos deberían delimitar las responsabilidades de pruebas y supervisión continuas, establecer criterios para la mitigación de riesgos y priorizar la mejora del rendimiento.\nTambién podría exigirse a los contratistas que dispongan de un proceso para identificar y divulgar incidentes graves de IA y fallos de un sistema o servicio de IA adquirido en un plazo de 72 horas, o de manera oportuna en función de la gravedad del incidente.\nEn el caso de contratos nuevos o existentes que impliquen el uso por la agencia de sistemas o servicios de IA que afecten a los derechos, las agencias deben comunicar a los contratistas los requisitos de notificación y apelación del Memorando M-24-10 de la OMB y exigir su cooperación con dichos requisitos.\n...\nEl Memorando incluye mejores prácticas para las agencias que adquieren IA generativa de uso general a escala institucional, incluidos requisitos contractuales para que los proveedores ofrezcan transparencia sobre el contenido generado, protejan frente a usos inapropiados, impidan resultados dañinos e ilegales, faciliten documentación de evaluación y pruebas, y mitiguen los impactos ambientales.\n...\nEl Memorando insta a las agencias a fomentar un mercado de IA competitivo, entre otras cosas estableciendo requisitos contractuales diseñados para minimizar la dependencia del proveedor; priorizando la interoperabilidad y la transparencia; y aprovechando prácticas de adquisición innovadoras para lograr mejores resultados contractuales.\nEl Apéndice I del Memorando describe las medidas que las agencias deberían adoptar para promover dichas prácticas innovadoras.\n...\nEl Memorando M-24-18 señala además un movimiento del gobierno desde el debate de principios generales sobre la IA hacia la creación de normas en torno a la contratación y el uso de la IA por parte del gobierno en los contratos.\nLos contratistas deberían esperar que continúe el avance hacia la regulación y deberían prestar mucha atención a las licitaciones que puedan exigir requisitos de información sobre, por ejemplo: (a) el uso propuesto de un sistema de IA; (b) el uso de nuevas funciones de IA; (c) la protección de la información de identificación personal (PII); (d) los datos utilizados para entrenar modelos de IA; (e) la rendición de cuentas sobre los datos; (f) cómo se prueba y valida el sistema de IA; y (g) cómo se mitigará el sesgo.",
+        "title": "La OMB publica orientaciones para impulsar la adquisición federal de IA",
+        "url": "https://www.crowell.com/en/insights/client-alerts/omb-releases-guidance-to-advance-federal-ai-acquisition",
+        "date": "2024-10-29",
+        "last_updated": "2026-05-22"
+      },
+      {
+        "snippet": "",
+        "title": "[PDF] Compliance Plan for OMB Memorandum M-24-10 ... - Federal Reserve",
+        "url": "https://www.federalreserve.gov/publications/files/compliance-plan-for-omb-memorandum-m-24-10-202409.pdf",
+        "date": null,
+        "last_updated": "2026-03-28"
+      },
+      {
+        "snippet": "",
+        "title": "[PDF] M-24-18 Advancing the Responsible Acquisition of Artificial ...",
+        "url": "https://static.carahsoft.com/concrete/files/7817/2986/8466/Guidance_M-24-18_Advancing_the_Responsible_Acquisition_of_Artificial_Intelligence_in_Government.pdf",
+        "date": null,
+        "last_updated": "2025-10-27"
+      },
+      {
+        "snippet": "",
+        "title": "EXECUTIVE OFFICE OF THE PRESIDENT",
+        "url": "https://whitehouse.gov/wp-content/uploads/2024/10/M-24-18-AI-Acquisition-Memorandum.pdf",
+        "date": null,
+        "last_updated": "2025-09-14"
+      },
+      {
+        "snippet": "",
+        "title": "OFFICE OF MANAGEMENT AND BUDGET - The White House",
+        "url": "https://www.whitehouse.gov/wp-content/uploads/2024/10/M-24-18-AI-Acquisition-Memorandum.pdf?trk=public_post_comment-text",
+        "date": null,
+        "last_updated": "2025-10-24"
+      },
+      {
+        "snippet": "",
+        "title": "March 28, 2024 M-24-10 MEMORANDUM FOR THE ...",
+        "url": "https://bidenwhitehouse.archives.gov/wp-content/uploads/2024/03/M-24-10-Advancing-Governance-Innovation-and-Risk-Management-for-Agency-Use-of-Artificial-Intelligence.pdf",
+        "date": null,
+        "last_updated": "2025-10-18"
+      },
+      {
+        "snippet": "*New guidance helps agencies harness the power of AI through their acquisitions process to promote innovation and competition while managing risks*\nToday, the Office of Management and Budget (OMB) released the\n*Advancing the Responsible Acquisition of Artificial Intelligence in Government *memorandum (M-24-18).\nSuccessful use of commercially-provided AI requires responsible procurement of AI.\nThis new memo ensures that when Federal agencies acquire AI, they appropriately manage risks and performance; promote a competitive marketplace; and implement structures to govern and manage their business processes related to acquiring AI.\n...\nThe EO directed sweeping action to strengthen AI safety and security, protect Americans’ privacy, advance equity and civil rights, stand up for consumers and workers, promote innovation and competition, and advance American leadership around the world.\n...\nOMB M-24-10, issued in March 2024, made history by introducing the first government-wide binding requirements for agencies to strengthen governance, innovation, and risk management for use of AI.\nM-24-18 builds on this guidance to help agencies buy AI responsibly.\nAgency acquisition of AI is similar in many respects to the purchase of other types of information technology, but it also presents novel challenges.\nM-24-18 helps agencies anticipate and address these challenges by issuing requirements and providing recommendations around three strategic goals.\n**Managing AI Risks and Performance**\nThe complex nature of how AI systems are built, trained, and deployed creates certain considerations and challenges for agency acquisition of AI.\nFor this reason, M-24-18 includes best practices and specific requirements for managing AI risk and performance, with additional requirements for acquiring AI use cases associated with rights-impacting and safety-impacting AI.\nThe memorandum:\n- Requires that agency privacy officials and programs have early, ongoing involvement in AI acquisition processes so that they are able to identify and manage privacy risks and ensure compliance with law and policy;\n- Calls for agencies to work with vendors to understand when AI is being acquired and when such acquisition triggers additional risk management requirements for rights-impacting and safety-impacting AI;\n- Promotes the use of innovative outcomes-based acquisition techniques that strengthen agencies’ ability to effectively plan for, manage, and continuously mitigate risk as well as drive performance;\n- Instructs agencies to negotiate appropriate contractual requirements and evaluation processes to ensure vendors provide sufficient information for agencies to evaluate vendor claims, identify and manage risk, conduct impact assessments, and fulfill requirements to notify impacted individuals and implement appeals; and\n- Directs contractual terms to be negotiated in a way that protects government data and intellectual property, and be defined in a manner that ensures safe use when AI is involved in decision-making that impacts members of the public.\n**Promoting a Competitive AI Market with Innovative Acquisition**\nAs AI evolves, agencies must have access to the best available solutions from a diverse and evolving market of suppliers.\nM-24-18 calls on agencies to ensure robust competition – both to increase value for the Federal government, and reduce risks to rights and safety, including by:\n- Proactively incorporating acquisition principles designed to minimize vendor lock-in when establishing contractual requirements;\n- Explicitly considering interoperability and transparency during market research, requirements development, and vendor evaluation processes; and\n- Leveraging innovative acquisitions practices to secure good contractor performance and mission outcomes.\n**Ensuring Collaboration Across the Federal Government**\nManaging novel risks and the rapidly evolving AI technology landscape requires agencies to establish cross-functional teams that include officials with AI expertise and personnel from other relevant fields—including acquisition, cybersecurity, privacy, and civil liberties—to inform strategic planning and acquisition of AI.\nThrough interagency councils and other efforts, agencies will work together to share lessons learned to inform future policy and procedural efforts to support effective and responsible acquisition of AI.\nThese collaborations should include considerations for:\n- Identifying and prioritizing AI investments that best serve an agency’s mission;\n- Developing the capacity to deploy any acquired AI; and\n- Promoting adoption of cross-functional best practices for the duration of use.",
+        "title": "FACT SHEET: OMB Issues Guidance to Advance the Responsible Acquisition of AI in Government | OMB | The White House",
+        "url": "https://www.whitehouse.gov/omb/briefing-room/2024/10/03/fact-sheet-omb-issues-guidance-to-advance-the-responsible-acquisition-of-ai-in-government/",
+        "date": "2024-10-03",
+        "last_updated": "2024-10-03"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<div id="number-of-results">
+  ### Cantidad de resultados
+</div>
+
+Define `max_results` para controlar cuántos resultados recopila la herramienta en cada llamada a `web_search`. Es el total de la llamada; si hay varias consultas reformuladas, el presupuesto se reparte entre ellas (aproximadamente `ceil(max_results / number_of_queries)`). Si se omite, se aplica el presupuesto predeterminado.
+
+<CodeGroup>
+  ```python Python theme={null}
+  tools = [
+      {
+          "type": "web_search",
+          "search_context_size": "low",
+          "max_results": 20
+      }
+  ]
+  ```
+
+  ```typescript Typescript theme={null}
+  const tools = [
+    {
+      type: 'web_search' as const,
+      search_context_size: 'low',
+      max_results: 20,
+    },
+  ];
+  ```
+
+  ```bash cURL theme={null}
+  "tools": [
+    {
+      "type": "web_search",
+      "search_context_size": "low",
+      "max_results": 20
+    }
+  ]
+  ```
+</CodeGroup>
+
+<Note>
+  `max_results` acepta el rango documentado en la [referencia de la API](/es/api-reference/agent-post). Dentro de ese rango, el backend puede devolver menos resultados de los solicitados. Úsalo junto con `search_context_size` para equilibrar amplitud (cantidad de resultados) y profundidad (contenido extraído de cada resultado).
+</Note>
+
+<div id="filters">
+  ## Filtros
+</div>
+
+Usa filtros para restringir las fuentes, las fechas y el contexto de ubicación que utiliza `web_search`.
+
+| Filtro                       | Tipo             | Descripción                                                                                   |
+| ---------------------------- | ---------------- | --------------------------------------------------------------------------------------------- |
+| `search_domain_filter`       | array de cadenas | Incluye o excluye hasta 20 dominios o URL. Antepón `-` a las entradas para excluirlas.        |
+| `search_recency_filter`      | cadena           | Limita los resultados a `"hour"`, `"day"`, `"week"`, `"month"` o `"year"`.                    |
+| `search_after_date_filter`   | cadena           | Incluye resultados publicados después de una fecha en formato MM/DD/YYYY.                     |
+| `search_before_date_filter`  | cadena           | Incluye resultados publicados antes de una fecha en formato MM/DD/YYYY.                       |
+| `last_updated_after_filter`  | cadena           | Incluye resultados cuya última actualización sea posterior a una fecha en formato MM/DD/YYYY. |
+| `last_updated_before_filter` | cadena           | Incluye resultados cuya última actualización sea anterior a una fecha en formato MM/DD/YYYY.  |
+| `user_location`              | objeto           | Personaliza la búsqueda por país, región, ciudad, latitud y longitud.                         |
+
+<div id="domain-filter">
+  ### Filtro de dominios
+</div>
+
+<Warning>
+  Usa `search_domain_filter` en modo de lista de permitidos o en modo de lista de bloqueados, pero no en ambos. El filtro de dominios admite hasta 20 dominios o URL. Por ejemplo, `["nasa.gov", "wikipedia.org"]` incluye únicamente esos dominios, mientras que `["-reddit.com", "-pinterest.com"]` los excluye.
+</Warning>
+
+Las entradas pueden definirse a nivel de dominio (por ejemplo, `wikipedia.org`) o a nivel de URL (por ejemplo, `https://en.wikipedia.org/wiki/Chess`) para lograr un control más granular.
+
+<div id="recency-filter">
+  ### Filtro de actualidad
+</div>
+
+`search_recency_filter` asigna a cada valor una ventana relativa:
+
+| Valor   | Ventana                                                                                         |
+| ------- | ----------------------------------------------------------------------------------------------- |
+| `hour`  | Última hora: úsalo para datos en tiempo real, como noticias de última hora o eventos en directo |
+| `day`   | Últimas 24 horas                                                                                |
+| `week`  | Últimos 7 días                                                                                  |
+| `month` | Últimos 30 días                                                                                 |
+| `year`  | Últimos 365 días                                                                                |
+
+Para rangos exactos, usa `search_after_date_filter` / `search_before_date_filter` (fecha de publicación) o `last_updated_after_filter` / `last_updated_before_filter` (última actualización). Los valores de los filtros de fecha deben tener el formato `MM/DD/YYYY` (por ejemplo, `"03/01/2026"`).
+
+<div id="location-filter">
+  ### Filtro de ubicación
+</div>
+
+`user_location` acepta cualquier combinación de los siguientes campos:
+
+* `country` — Código de dos letras [ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2) (por ejemplo, `"US"`, `"FR"`).
+* `region` — Nombre de la región o del estado (por ejemplo, `"California"`).
+* `city` — Nombre de la ciudad (por ejemplo, `"San Francisco"`).
+* `latitude` y `longitude` — Coordenadas para una localización precisa.
+
+<Tip>
+  `city` y `region` mejoran notablemente la precisión de la ubicación. Inclúyelos junto con `country` siempre que sea posible.
+</Tip>
+
+<Warning>
+  `latitude` y `longitude` deben proporcionarse junto con `country`. No se pueden enviar por separado.
+</Warning>
+
+<div id="filter-usage-cheatsheet">
+  ### Guía rápida de uso de filtros
+</div>
+
+Copia cualquiera de estos fragmentos en un objeto de herramienta `web_search`. `user_location` va al mismo nivel que `filters`, mientras que los demás controles se colocan dentro de `filters`.
+
+| Filtro                        | Ejemplo                                                                                                          |
+| ----------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Lista de dominios permitidos  | `filters: { search_domain_filter: ["docs.perplexity.ai", "developer.mozilla.org"] }`                             |
+| Lista de dominios bloqueados  | `filters: { search_domain_filter: ["-reddit.com", "-pinterest.com"] }`                                           |
+| Actualidad                    | `filters: { search_recency_filter: "week" }`                                                                     |
+| Rango de fecha de publicación | `filters: { search_after_date_filter: "01/01/2026", search_before_date_filter: "05/01/2026" }`                   |
+| Rango de última actualización | `filters: { last_updated_after_filter: "01/01/2026", last_updated_before_filter: "05/01/2026" }`                 |
+| Ubicación del usuario         | `user_location: { country: "US", region: "CA", city: "San Francisco", latitude: 37.7749, longitude: -122.4194 }` |
+
+<Tip>
+  Los filtros se combinan sin restricciones. Puedes usar juntos los filtros de fuente, fecha, actualidad y ubicación anteriores en un mismo objeto de herramienta `web_search`: no hay límite por solicitud en cuanto a combinaciones de filtros.
+</Tip>
+
+<CodeGroup>
+  ```python Python theme={null}
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="What were the binding obligations of President Biden's 2023 Executive Order 14110 on AI?",
+      tools=[
+          {
+              "type": "web_search",
+              "search_context_size": "medium",
+              "filters": {
+                  "search_domain_filter": [".gov"],
+                  "search_recency_filter": "month"
+              },
+              "user_location": {
+                  "country": "US"
+              }
+          }
+      ],
+  )
+  ```
+
+  ```typescript Typescript theme={null}
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'What were the binding obligations of President Biden\'s 2023 Executive Order 14110 on AI?',
+    tools: [
+      {
+        type: 'web_search' as const,
+        search_context_size: 'medium',
+        filters: {
+          search_domain_filter: ['.gov'],
+          search_recency_filter: 'month',
+        },
+        user_location: {
+          country: 'US',
+        },
+      },
+    ],
+  });
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "What were the binding obligations of President Biden\u0027s 2023 Executive Order 14110 on AI?",
+      "tools": [
+        {
+          "type": "web_search",
+          "search_context_size": "medium",
+          "filters": {
+            "search_domain_filter": [".gov"],
+            "search_recency_filter": "month"
+          },
+          "user_location": {
+            "country": "US"
+          }
+        }
+      ]
+    }' | jq
+  ```
+</CodeGroup>
+
+<Accordion title="Respuesta">
+  ```json theme={null}
+  {
+    "id": "11c1c78d-b8c8-4442-8563-a79b7faac177",
+    "results": [
+      {
+        "snippet": "**Executive Order 14110**, titled **Executive Order on Safe, Secure, and Trustworthy Development and Use of Artificial Intelligence** (sometimes referred to as \"**Executive Order on Artificial Intelligence**\") was the 126th executive order signed by former U.S. President Joe Biden.\nSigned on October 30, 2023, the order defines the administration's policy goals regarding artificial intelligence (AI), and orders executive agencies to take actions pursuant to these goals.\nThe order is considered to be the most comprehensive piece of governance by the United States regarding AI.\nIt was rescinded by U.S. President Donald Trump within hours of his assuming office on January 20, 2025.\nPolicy goals outlined in the executive order pertain to promoting competition in the AI industry, preventing AI-enabled threats to civil liberties and national security, and ensuring U.S. global competitiveness in the AI field.\nThe executive order required a number of major federal agencies to create dedicated \"chief artificial intelligence officer\" positions within their organizations.\n...\nThe order has been characterized as an effort for the United States to capture potential benefits from AI while mitigating risks associated with AI technologies.\n...\nPolicy goals outlined by the order include the following:\n- Promoting competition and innovation in the AI industry\n- Upholding civil and labor rights and protecting consumers and their privacy from AI-enabled harms\n- Specifying federal policies governing procurement and use of AI\n- Developing watermarking systems for AI-generated content and warding off intellectual property theft stemming from the use of generative models\n- Maintaining the nation's place as a global leader in AI\n## Impact on agencies\n...\nThe executive order required a number of large federal agencies to appoint a chief artificial intelligence officer, with a number of departments having already appointed a relevant officer prior to the order.\n...\nUnder the executive order, the Department of Homeland Security (DHS) was responsible for developing AI-related security guidelines, including cybersecurity-related matters.\nThe DHS will also work with private sector firms in sectors including the energy industry and other \"critical infrastructure\" to coordinate responses to AI-enabled security threats.\nExecutive Order 14110 mandated the Department of Veterans Affairs to launch an AI technology competition aimed at reducing occupational burnout among healthcare workers through AI-assisted tools for routine tasks.\nThe order also mandated the Department of Commerce's National Institute of Standards and Technology (NIST) to develop a generative artificial intelligence-focused resource to supplement the existing AI Risk Management Framework.\n...\nThe executive order has been described as the most comprehensive piece of governance by the United States government pertaining to AI.\nEarlier in 2023 prior to the signing of the order, the Biden administration had announced a Blueprint for an AI Bill of Rights, and had secured non-binding AI safety commitments from major tech companies.\n...\nAccording to *Axios*, despite the wide scope of the executive order, it notably does not touch upon a number of AI-related policy proposals.\nThis includes proposals for a \"licensing regime\" to government advanced AI models, which has received support from industry leaders including Sam Altman.\nAdditionally, the executive order does not seek to prohibit 'high-risk' uses of AI technology, and does not aim to mandate that tech companies release information surrounding AI systems' training data and models.",
+        "title": "Executive Order 14110 - Wikipedia",
+        "url": "https://en.wikipedia.org/wiki/Executive_Order_14110",
+        "date": "2023-11-13",
+        "last_updated": "2026-03-21"
+      },
+      {
+        "snippet": "",
+        "title": "657",
+        "url": "https://www.govinfo.gov/content/pkg/CFR-2024-title3-vol1/pdf/CFR-2024-title3-vol1-eo14110.pdf",
+        "date": null,
+        "last_updated": "2025-01-28"
+      },
+      {
+        "snippet": "",
+        "title": "Federal Register, Volume 88 Issue 210 (Wednesday, November 1 ...",
+        "url": "https://www.govinfo.gov/content/pkg/FR-2023-11-01/html/2023-24283.htm",
+        "date": null,
+        "last_updated": "2026-03-08"
+      },
+      {
+        "snippet": "",
+        "title": "1",
+        "url": "https://www.govinfo.gov/content/pkg/DCPD-202300949/pdf/DCPD-202300949.pdf",
+        "date": null,
+        "last_updated": "2025-01-16"
+      },
+      {
+        "snippet": "",
+        "title": "Presidential Documents",
+        "url": "https://upload.wikimedia.org/wikipedia/commons/e/ef/Executive_Order_14110.pdf",
+        "date": null,
+        "last_updated": "2025-12-17"
+      },
+      {
+        "snippet": "",
+        "title": "Executive Order 14110 - Wikisource, the free online library",
+        "url": "https://en.wikisource.org/wiki/Executive_Order_14110",
+        "date": "2023-11-13",
+        "last_updated": "2025-03-10"
+      },
+      {
+        "snippet": "Today, President Biden is issuing a landmark Executive Order to ensure that America leads the way in seizing the promise and managing the risks of artificial intelligence (AI).\nThe Executive Order establishes new standards for AI safety and security, protects Americans’ privacy, advances equity and civil rights, stands up for consumers and workers, promotes innovation and competition, advances American leadership around the world, and more.\n...\nThe Executive Order directs the following actions:**New Standards for AI Safety and Security**\nAs AI’s capabilities grow, so do its implications for Americans’ safety and security.\n**With this Executive Order, the** ** President directs the ** **most sweeping ** **actions ** **ever taken ** **to protect Americans from ** **the potential ** **risks ** **of ** **AI** ** systems** **:**\n- **Require that developers of the most powerful AI systems share their safety test results and other critical information with the U.S. government.** In accordance with the Defense Production Act, the Order will require that companies developing any foundation model that poses a serious risk to national security, national economic security, or national public health and safety must notify the federal government when training the model, and must share the results of all red-team safety tests.\nThese measures will ensure AI systems are safe, secure, and trustworthy before companies make them public.\n- **Develop standards, tools, and tests to help ensure that AI systems are safe, secure, and trustworthy.** The National Institute of Standards and Technology will set the rigorous standards for extensive red-team testing to ensure safety before public release.\nThe Department of Homeland Security will apply those standards to critical infrastructure sectors and establish the AI Safety and Security Board.\nThe Departments of Energy and Homeland Security will also address AI systems’ threats to critical infrastructure, as well as chemical, biological, radiological, nuclear, and cybersecurity risks.\nTogether, these are the most significant actions ever taken by any government to advance the field of AI safety.\n- **Protect against the risks of using AI to engineer dangerous biological materials** by developing strong new standards for biological synthesis screening.\nAgencies that fund life-science projects will establish these standards as a condition of federal funding, creating powerful incentives to ensure appropriate screening and manage risks potentially made worse by AI.\n- **Protect Americans from AI-enabled fraud and deception by establishing standards and best practices for detecting AI-generated content and authenticating official content**.\nThe Department of Commerce will develop guidance for content authentication and watermarking to clearly label AI-generated content.\nFederal agencies will use these tools to make it easy for Americans to know that the communications they receive from their government are authentic—and set an example for the private sector and governments around the world.\n- **Establish an advanced cybersecurity program to develop AI tools to find and fix vulnerabilities in critical software,** building on the Biden-Harris Administration’s ongoing AI Cyber Challenge.\nTogether, these efforts will harness AI’s potentially game-changing cyber capabilities to make software and networks more secure.\n- **Order the development of a National Security Memorandum that directs further actions on AI and security,** to be developed by the National Security Council and White House Chief of Staff.\nThis document will ensure that the United States military and intelligence community use AI safely, ethically, and effectively in their missions, and will direct actions to counter adversaries’ military use of AI.\n...\n**To better protect Americans’ privacy, including from the risks posed by AI, the President calls on Congress to pass bipartisan data privacy legislation to protect all Americans, especially kids, and directs the following actions:**\n- **Protect Americans’ privacy by prioritizing federal support for accelerating the development and use of privacy-preserving techniques—** including ones that use cutting-edge AI and that let AI systems be trained while preserving the privacy of the training data.\n- **Strengthen privacy-preserving research** **and technologies,** such as cryptographic tools that preserve individuals’ privacy, by funding a Research Coordination Network to advance rapid breakthroughs and development.\nThe National Science Foundation will also work with this network to promote the adoption of leading-edge privacy-preserving technologies by federal agencies.\n- **Evaluate how agencies collect and use commercially available information**—including information they procure from data brokers—and**strengthen privacy guidance for federal agencies** to account for AI risks.\nThis work will focus in particular on commercially available information containing personally identifiable data.\n- **Develop guidelines for federal agencies to evaluate the effectiveness of privacy-preserving techniques,** including those used in AI systems.\nThese guidelines will advance agency efforts to protect Americans’ data.\n**Advancing Equity and Civil Rights**\nIrresponsible uses of AI can lead to and deepen discrimination, bias, and other abuses in justice, healthcare, and housing.\nThe Biden-Harris Administration has already taken action by publishing the Blueprint for an AI Bill of Rights and issuing an Executive Order directing agencies to combat algorithmic discrimination, while enforcing existing authorities to protect people’s rights and safety.\n**To ensure that AI advances equity and civil rights, the President directs the following additional actions:**\n- **Provide clear guidance to landlords, Federal benefits programs, and federal contractors** to keep AI algorithms from being used to exacerbate discrimination.\n- **Address algorithmic discrimination** through training, technical assistance, and coordination between the Department of Justice and Federal civil rights offices on best practices for investigating and prosecuting civil rights violations related to AI.\n- **Ensure fairness throughout the criminal justice system** by developing best practices on the use of AI in sentencing, parole and probation, pretrial release and detention, risk assessments, surveillance, crime forecasting and predictive policing, and forensic analysis.\n...\n**To protect consumers while ensuring that AI can make Americans better off, the President directs the following actions:**\n- **Advance the responsible use of AI** in healthcare and the development of affordable and life-saving drugs.\nThe Department of Health and Human Services will also establish a safety program to receive reports of—and act to remedy – harms or unsafe healthcare practices involving AI.\n- **Shape AI’s potential to transform education** by creating resources to support educators deploying AI-enabled educational tools, such as personalized tutoring in schools.\n**Supporting Workers**\nAI is changing America’s jobs and workplaces, offering both the promise of improved productivity but also the dangers of increased workplace surveillance, bias, and job displacement.\n**To mitigate these risks, support workers’ ability to bargain collectively, and invest in workforce training and development that is accessible to all, the President directs the following actions:**\n- **Develop principles and best practices to mitigate the harms and maximize the benefits of AI for workers** by addressing job displacement; labor standards; workplace equity, health, and safety; and data collection.\nThese principles and best practices will benefit workers by providing guidance to prevent employers from undercompensating workers, evaluating job applications unfairly, or impinging on workers’ ability to organize.\n- **Produce a report on AI’s potential labor-market impacts**, and**study and identify options for strengthening federal support for workers facing labor disruptions**, including from AI.\n**Promoting Innovation and Competition**\n...\n**The Executive Order ensures that we continue to lead the way in innovation and competition through the following actions:**\n- **Catalyze AI research across the United States** through a pilot of the National AI Research Resource—a tool that will provide AI researchers and students access to key AI resources and data—and expanded grants for AI research in vital areas like healthcare and climate change.\n- **Promote a fair, open, and competitive AI ecosystem** by providing small developers and entrepreneurs access to technical assistance and resources, helping small businesses commercialize AI breakthroughs, and encouraging the Federal Trade Commission to exercise its authorities.\n- **Use existing authorities to expand the ability of highly skilled immigrants and nonimmigrants with expertise in critical areas to study, stay, and work in the United States** by modernizing and streamlining visa criteria, interviews, and reviews.\n...\nAI’s challenges and opportunities are global.\n**The Biden-Harris Administration will continue working with other nations to support safe, secure, and trustworthy deployment and use of AI worldwide.\nTo that end, the President directs the following actions:**\n- **Expand bilateral, multilateral, and multistakeholder engagements to collaborate on AI**.\nThe State Department, in collaboration, with the Commerce Department will lead an effort to establish robust international frameworks for harnessing AI’s benefits and managing its risks and ensuring safety.\nIn addition, this week, Vice President Harris will speak at the UK Summit on AI Safety, hosted by Prime Minister Rishi Sunak.\n- **Accelerate development and implementation of vital AI standards** with international partners and in standards organizations, ensuring that the technology is safe, secure, trustworthy, and interoperable.\n- **Promote the safe, responsible, and rights-affirming development and deployment of AI abroad to solve global challenges,** such as advancing sustainable development and mitigating dangers to critical infrastructure.\n**Ensuring Responsible and Effective Government Use of AI**\nAI can help government deliver better results for the American people.\nIt can expand agencies’ capacity to regulate, govern, and disburse benefits, and it can cut costs and enhance the security of government systems.\nHowever, use of AI can pose risks, such as discrimination and unsafe decisions.\n**To ensure the responsible government deployment of AI and modernize federal AI infrastructure, the President directs the following actions:**\n- **Issue guidance for agencies’ use of AI,** including clear standards to protect rights and safety, improve AI procurement, and strengthen AI deployment.\n- **Help agencies acquire specified AI products and services** faster, more cheaply, and more effectively through more rapid and efficient contracting.\n- **Accelerate the rapid hiring of AI professionals** as part of a government-wide AI talent surge led by the Office of Personnel Management, U.S. Digital Service, U.S. Digital Corps, and Presidential Innovation Fellowship.\nAgencies will provide AI training for employees at all levels in relevant fields.",
+        "title": "FACT SHEET: President Biden Issues Executive Order on Safe, Secure, and Trustworthy Artificial Intelligence | The White House",
+        "url": "https://web.archive.org/web/20250101021400/https:/www.whitehouse.gov/briefing-room/statements-releases/2023/10/30/fact-sheet-president-biden-issues-executive-order-on-safe-secure-and-trustworthy-artificial-intelligence/",
+        "date": "2023-10-30",
+        "last_updated": "2026-02-27"
+      },
+      {
+        "snippet": "",
+        "title": "Executive Order on the Safe, Secure, and Trustworthy Development ...",
+        "url": "https://bidenwhitehouse.archives.gov/briefing-room/presidential-actions/2023/10/30/executive-order-on-the-safe-secure-and-trustworthy-development-and-use-of-artificial-intelligence/",
+        "date": "2023-10-30",
+        "last_updated": "2025-12-25"
+      },
+      {
+        "snippet": "On October 30, 2023, United States President Joseph Biden signed Executive Order 14110 on the \"Safe, Secure, and Trustworthy Development and Use of Artificial Intelligence.\"^1^ The Order is the culmination of ongoing efforts by the Biden Administration to articulate its policies and priorities on AI.^2^ Sweeping in scope and addressing agencies across industries and sectors, the Order is premised on the understanding that \"[h]arnessing AI for good and realizing its myriad benefits requires mitigating its substantial risks.\"^3^\nWhile the Order applies primarily and most immediately to federal agencies, it includes an important provision for foundation model developers and more generally illustrates the Biden Administration's vision for how it intends to pursue AI development and regulation while federal legislation remains forthcoming.\n...\nSection 4 includes some of the Order's most novel and notable requirements, setting out detailed directives for the development of new standards, tools, testing protocols, and best practices for AI safety and security.\n- **Mandating the development of federal standards:** Section 4.1 provides that, within 270 days of the date of the Order (i.e., July 26, 2024), the National Institute of Standards and Technology (\"**NIST**\") shall establish guidelines and best practices, including setting standards for \"red-team testing,\" defined in Section 3 to mean structured testing efforts, often through adversarial methods, to identify flaws and vulnerabilities associated with the misuse of the AI system.\n-\n**Requiring developers of the most powerful AI systems to share safety tests results and other critical information with the U.S. government: ** Section 4.2 outlines reporting requirements for AI model owners and large data centers.\nThe Order directs the Secretary of Commerce, within 90 days of the date of the Order (i.e., January 28, 2024), to require \"companies developing or demonstrating an intent to develop potential dual-use foundation models\" (defined in Sec.\n3) to provide detailed information about their activities and models to the federal government on an ongoing basis.\nThis includes the results of any developed dual-use foundation model's performance in relevant AI red-team testing based on the guidance developed by NIST.^4^ By applying to \"companies developing or demonstrating an intent to develop\" such models, the Order seems to contemplate that information subject to the reporting requirements must be shared with the federal government before the relevant AI systems are made available to the public.\nWithin the same 90 days, the Secretary of Commerce is also directed to require companies to report their acquisition, development, or possession of large-scale computing clusters, including the existence and location of such clusters and the total amount of computing power available in each.^5^ Section 4.2(b) sets forth interim criteria to identify the minimum threshold for foundation models and computing clusters that would be subject to the reporting requirements.\n^6^ While Section 4.2 explicitly invokes the authority under the Defense Production Act, a law traditionally used during times of war or national emergencies such as the COVID-19 pandemic, it does not cite a specific provision.\n- **Developing methods to detect and denote AI-generated content: ** Section 4.5 articulates requirements for reducing the risks posed by \"synthetic\" – i.e., AI-generated – content.\nThe Order requires the Department of Commerce to develop guidance for content authentication and watermarking to clearly label AI-generated content.\nThe fact sheet on the Executive Order released by the White House specifies, \"Federal agencies will use these tools to make it easy for Americans to know that the communications they receive from their government are authentic—and set an example for the private sector and governments around the world.\"^7^\n...\nThe organizing principle of the Order is the Biden Administration's desire to balance the unique risks of AI against the novel benefits.\nWhile privacy is a recurring theme throughout the Order, Section 9 is dedicated to privacy and includes specific directives to strengthen privacy-protecting technologies.\nFor example, the Director of the Office of Management and Budget is directed to evaluate commercially available information (\"**CAI**\") procured by agencies, including CAI procured from data brokers and CAI procured and processed indirectly through vendors, with a particular emphasis on CAI that contains personally identifiable information.\n...\nDedicated to civil rights, Section 7 includes detailed directives to government agencies to address and prevent unlawful discrimination and other harms that may be exacerbated by AI in the criminal justice system, the administration of government benefits and programs, and other areas such as hiring and housing.\nSection 8 lays out additional protections for consumers, patients, passengers, and students.\nThe Order also devotes lengthy sections to the efforts the federal government must undertake to position the United States as a global leader in AI, including calls to catalyze AI research across the United States (see Sec.\n5.2) and encouraging the FTC to exercise its authorities to help small businesses commercialize AI breakthroughs (see Sec.\n5.3).\nWhile the Order includes directives to expand the recruitment efforts of \"AI talent,\" including highly skilled immigrants by updating and streamlining visa criteria and processing (see Sec.\n5.1), the Order also calls out the need to mitigate the harms of AI for workers (see Sec. 6).\nSection 11 directs the Secretary of State to expand engagement with international allies to advance global technical standards for AI development, among other initiatives.\n...\nVarious provisions within the Order provide that its directives must be implemented over the range of 90 days to one year, making clear the Government's priority that AI governance be treated with urgency.\nWhile federal legislation remains elusive, federal agencies implementing the Order may begin shaping AI regulation in the meantime.\n...\nThe Order articulates the following key principles and priorities: (1) AI must be safe and secure; (2) To lead in AI, the U.S. must promote responsible innovation, competition, and collaboration; (3) Responsible development and use of AI require a commitment to supporting American workers; (4) AI policies must advance equity and civil rights;",
+        "title": "Biden Executive Order seeks to govern the “promise and peril” of AI",
+        "url": "https://www.whitecase.com/insight-our-thinking/biden-executive-order-seeks-govern-promise-and-peril-ai",
+        "date": "2023-11-03",
+        "last_updated": "2026-03-21"
+      },
+      {
+        "snippet": "",
+        "title": "Key Provisions and Impacts of Biden's Executive Order on AI…",
+        "url": "https://www.fenwick.com/insights/publications/key-provisions-and-impacts-of-bidens-executive-order-on-ai-regulation-and-development",
+        "date": "2023-11-09",
+        "last_updated": "2026-03-04"
+      }
+    ],
+    "server_time": null
+  }
+  ```
+</Accordion>
+
+<div id="parameters">
+  ## Parámetros
+</div>
+
+| Parámetro             | Tipo    | Obligatorio | Descripción                                                                                                                                                 |
+| --------------------- | ------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`                | string  | Sí          | Debe ser `"web_search"`.                                                                                                                                    |
+| `search_context_size` | string  | No          | Presupuesto de tokens recomendado: `"low"`, `"medium"` o `"high"`. Consulta [Uso de presupuestos de tokens recomendados](#using-recommended-token-budgets). |
+| `filters`             | object  | No          | Filtros de dominio, fecha, actualidad y ubicación. Consulta [Filtros](#filters).                                                                            |
+| `user_location`       | object  | No          | Contexto de ubicación para personalizar la búsqueda.                                                                                                        |
+| `max_results`         | integer | No          | Límite máximo de resultados recopilados por llamada (1-50). Consulta [Número de resultados](#number-of-results).                                            |
+| `max_tokens`          | integer | No          | Número total máximo de tokens para el contexto de búsqueda.                                                                                                 |
+| `max_tokens_per_page` | integer | No          | Número máximo de tokens extraídos de cada página de resultados.                                                                                             |
+
+<div id="response-shape">
+  ## Estructura de la respuesta
+</div>
+
+Cuando se ejecuta `web_search`, la respuesta puede incluir un elemento de salida `search_results` antes del mensaje final del asistente. El objeto `usage` final incluye el recuento de tokens, los detalles de costos y `tool_calls_details.search_web.invocation` cuando se reporta el uso de llamadas a herramientas.
+
+```json theme={null}
+{
+  "output": [
+    {
+      "type": "search_results",
+      "queries": ["AI infrastructure announcements"],
+      "results": [
+        {
+          "id": 1,
+          "url": "https://example.com/news",
+          "title": "Example AI infrastructure announcement",
+          "snippet": "A short snippet from the search result.",
+          "date": "2026-05-01",
+          "last_updated": "2026-05-01",
+          "source": "web"
+        }
+      ]
+    },
+    {
+      "type": "message",
+      "role": "assistant",
+      "content": [
+        {
+          "type": "output_text",
+          "text": "The answer generated from the search results."
+        }
+      ]
+    }
+  ],
+  "usage": {
+    "input_tokens": 1200,
+    "output_tokens": 300,
+    "total_tokens": 1500,
+    "tool_calls_details": {
+      "search_web": {
+        "invocation": 1
+      }
+    }
+  }
+}
+```
+
+Cada entrada de `results` incluye los siguientes campos:
+
+| Campo          | Tipo   | Descripción                                                             |
+| -------------- | ------ | ----------------------------------------------------------------------- |
+| `id`           | entero | Índice estable que se usa para referenciar el resultado en las citas.   |
+| `url`          | cadena | URL canónica de la página de origen.                                    |
+| `title`        | cadena | Título de la página tal como lo devuelve la fuente.                     |
+| `snippet`      | cadena | Fragmento de texto extraído de la página durante la búsqueda.           |
+| `date`         | cadena | Fecha de publicación original de la página, en formato `YYYY-MM-DD`.    |
+| `last_updated` | cadena | Fecha de la última actualización de la página, en formato `YYYY-MM-DD`. |
+| `source`       | cadena | Origen del resultado (por ejemplo, `"web"`).                            |
+
+<Tip>
+  **¿Quieres citas en línea?** Que el model añada marcadores a la respuesta depende del prompt, así que pídelos de forma explícita: por ejemplo, agrega a tu prompt: *&quot;Cita tus fuentes en línea con marcadores entre corchetes, una fuente por corchete, como `[1][2]`.&quot;* Cada número corresponde entonces al `id` de un resultado. Haya marcadores o no, toma los campos `id` y `url` de cada entrada de `search_results` como la fuente de verdad para las citas.
+</Tip>
+
+<div id="pricing">
+  ## Precios
+</div>
+
+`web_search` se cobra a **$2,50 por cada 1.000 invocaciones**. El uso de tokens del modelo se factura por separado según los precios por token de la Agent API.
+
+<Note>
+  Los precios siguen el mismo esquema que el resto de llamadas a herramientas: se paga por las invocaciones de la herramienta más los tokens del modelo. Consulta [Precios](/es/docs/getting-started/pricing).
+</Note>
+
+<div id="limits-quotas">
+  ## Límites / Cuotas
+</div>
+
+`web_search` se ejecuta dentro de las solicitudes de la Agent API y se rige por los límites de tasa de solicitudes de la Agent API. Consulta [Límites de tasa y niveles de uso](/es/docs/admin/rate-limits-usage-tiers#agent-api-rate-limits) para conocer los límites actuales de la Agent API según el nivel.
+
+| Límite                                 | Se aplica a                                                | Recomendación                                                                                                                                                               |
+| -------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Límites de tasa                        | Solicitudes de la Agent API que incluyen `web_search`      | A la solicitud se le aplican los límites del nivel de la Agent API. Implementa reintentos y retroceso exponencial para el tráfico en producción.                            |
+| Entradas de dominio                    | `search_domain_filter`                                     | Hasta 20 dominios o URL por solicitud. Usa el modo de lista de permitidos o de bloqueados, tal como se describe en la advertencia de [Filtros](#filters).                   |
+| Presupuesto de contexto de búsqueda    | `search_context_size`, `max_tokens`, `max_tokens_per_page` | Los presets de `search_context_size` gestionan el contexto automáticamente. Usa límites explícitos de tokens cuando necesites un control más estricto de costos o latencia. |
+| Facturación de llamadas a herramientas | Invocaciones de `web_search`                               | Cada invocación de búsqueda computa en el uso y el precio de las llamadas a herramientas, de forma independiente del uso de tokens del modelo.                              |
+
+<div id="next-steps">
+  ## Próximos pasos
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Obtener contenido de una URL" icon="file-text" href="/es/docs/agent-api/tools/fetch-url-content">
+    Obtén el contenido completo de URLs conocidas.
+  </Card>
+
+  <Card title="Búsqueda de personas" icon="users" href="/es/docs/agent-api/tools/people-search">
+    Busca profesionales, empleados y personas.
+  </Card>
+
+  <Card title="Presets de la Agent API" icon="settings" href="/es/docs/agent-api/presets">
+    Usa presets optimizados para las cargas de trabajo más habituales de la Agent API.
+  </Card>
+
+  <Card title="Referencia de la API" icon="code-circle" href="/es/api-reference/agent-post">
+    Consulta la documentación completa del endpoint.
+  </Card>
+</CardGroup>

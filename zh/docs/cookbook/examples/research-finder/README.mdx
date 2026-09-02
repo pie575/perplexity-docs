@@ -1,0 +1,140 @@
+---
+title: "学术研究检索命令行工具"
+description: "一个基于 Perplexity Sonar API 的命令行工具，用于查找并总结学术文献"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="academic-research-finder-cli">
+  # 学术研究检索命令行工具
+</div>
+
+一款命令行工具，借助 Perplexity 的 Sonar API 查找并总结与指定问题或主题相关的学术文献 (研究论文、文章等) 。
+
+<div id="features">
+  ## 功能特性
+</div>
+
+* 接受自然语言问题或主题作为输入，尤其适合学术研究类查询。
+* 借助 Perplexity Sonar API，并通过专门设计的提示词优先检索学术来源 (如期刊、会议论文集、学术数据库) 。
+* 基于学术文献的检索结果输出简洁摘要。
+* 列出所引用的主要学术来源，并尽可能包含作者、年份、标题、出版物以及 DOI/链接等信息。
+* 支持不同的 Perplexity 模型 (默认为 `sonar-pro`) 。
+* 支持以 JSON 格式输出结果。
+
+<div id="installation">
+  ## 安装
+</div>
+
+<div id="1-install-required-dependencies">
+  ### 1. 安装所需依赖
+</div>
+
+请确保使用你计划运行该脚本的那个 Python 环境 (例如，若目标环境为 `python3.10`，就在该环境下操作) 。
+
+```bash theme={null}
+# 从 requirements 文件安装（推荐）
+pip install -r requirements.txt
+
+# 或手动安装
+pip install requests
+```
+
+<div id="2-make-the-script-executable-optional">
+  ### 2. 为脚本添加可执行权限 (可选) 
+</div>
+
+```bash theme={null}
+chmod +x research_finder.py
+```
+
+或者，你也可以通过 `python3 research_finder.py ...` 运行该脚本。
+
+<div id="api-key-setup">
+  ## API 密钥 配置
+</div>
+
+该工具需要 Perplexity API 密钥 (`PPLX_API_KEY`) 才能运行。你可以通过以下任一方式提供 (按此顺序依次检查) ：
+
+1. **作为命令行参数：**
+   ```bash theme={null}
+   python3 research_finder.py "Your query" --api-key YOUR_API_KEY
+   ```
+2. **作为环境变量：**
+   ```bash theme={null}
+   export PPLX_API_KEY=YOUR_API_KEY
+   python3 research_finder.py "Your query"
+   ```
+3. **写入文件：** 在*脚本所在目录*或*当前工作目录*下创建一个名为 `pplx_api_key`、`.pplx_api_key`、`PPLX_API_KEY` 或 `.PPLX_API_KEY` 的文件，文件内容仅为你的 API 密钥。
+   ```bash theme={null}
+   echo "YOUR_API_KEY" > .pplx_api_key
+   chmod 600 .pplx_api_key # 可选：限制文件权限
+   python3 research_finder.py "Your query"
+   ```
+
+<div id="usage">
+  ## 用法
+</div>
+
+在 `sonar-use-cases/research_finder` 目录下运行该脚本，或提供其完整路径。
+
+```bash theme={null}
+# 基本用法
+python3 research_finder.py "What are the latest advancements in quantum computing?"
+
+# 指定使用某个模型
+python3 research_finder.py "Explain the concept of Large Language Models" --model sonar-small-online
+
+# 以 JSON 格式输出
+python3 research_finder.py "Summarize the plot of Dune Part Two" --json
+
+# 使用自定义系统提示词文件
+python3 research_finder.py "Benefits of renewable energy" --prompt-file /path/to/your/custom_prompt.md
+
+# 通过参数传入 API 密钥
+python3 research_finder.py "Who won the last FIFA World Cup?" --api-key sk-...
+
+# 直接运行可执行文件（前提是已执行 chmod +x）
+./research_finder.py "Latest news about Mars exploration"
+```
+
+<div id="arguments">
+  ### 参数
+</div>
+
+* `query`： (必填) 研究问题或主题 (如包含空格，请用引号括起) 。
+* `-m`、`--model`：指定 Perplexity 模型 (默认值：`sonar-pro`) 。
+* `-k`、`--api-key`：直接提供 API 密钥。
+* `-p`、`--prompt-file`：自定义 系统提示词 文件的路径。
+* `-j`、`--json`：以 JSON 格式输出结果。
+
+<div id="example-output-human-readable-note-actual-output-depends-heavily-on-the-query-and-api-results">
+  ## 输出示例 (易读格式 —— *注意：实际输出很大程度上取决于查询内容和 API 返回结果*) 
+</div>
+
+```
+正在为查询初始化研究助手："Recent studies on transformer models in NLP"……
+研究进行中……
+
+✅ 研究完成！
+
+📝 摘要：
+自然语言处理（NLP）领域中 transformer 模型的近期研究，仍在持续探索架构改进、效率优化与新的应用场景。主要方向包括：改进注意力机制（如稀疏注意力、线性注意力）以更高效地处理长序列；模型压缩与知识蒸馏技术；以及文本之外的应用，如计算机视觉和多模态任务。研究还着眼于理解大型 transformer 模型的内部运作机制及其局限性。
+
+🔗 来源：
+  1. Vaswani, A., Shazeer, N., Parmar, N., Uszkoreit, J., Jones, L., Gomez, A. N., ... & Polosukhin, I. (2017). Attention is all you need. Advances in neural information processing systems, 30. (arXiv:1706.03762)
+  2. Tay, Y., Dehghani, M., Bahri, D., & Metzler, D. (2020). Efficient transformers: A survey. arXiv preprint arXiv:2009.06732.
+  3. Beltagy, I., Peters, M. E., & Cohan, A. (2020). Longformer: The long-document transformer. arXiv preprint arXiv:2004.05150.
+  4. Rogers, A., Kovaleva, O., & Rumshisky, A. (2020). A primer in bertology: What we know about how bert works. Transactions of the Association for Computational Linguistics, 8, 842-866. (arXiv:2002.12327)
+```
+
+<div id="limitations">
+  ## 限制
+</div>
+
+* Sonar API 能否稳定地优先访问特定学术数据库，或提取详细的引用信息 (如 DOI) ，可能因情况而异。结果质量取决于 API 的搜索能力以及来源网站的结构。
+* 该脚本只做基础解析来区分摘要与来源；遇到结构复杂或异常的 API 响应时，可能无法完美解析。如有问题，请检查原始响应。
+* 过于宽泛或不适合学术检索的查询，可能返回相关性较低的结果。
+* 针对 API 速率限制或特定 API 错误的错误处理仍有细化空间。

@@ -1,0 +1,311 @@
+---
+title: "TypeScript Agent CLI"
+description: "一个交互式 TypeScript CLI，基于 Perplexity Agent API 实现流式响应、model 选择与联网搜索"
+---
+
+<div id="typescript-agent-cli">
+  # TypeScript Agent CLI
+</div>
+
+一个 TypeScript 优先的交互式命令行界面，可连接 Perplexity Agent API，支持流式响应、运行时选择 model 以及内置的网页搜索。
+
+<div id="features">
+  ## 功能特性
+</div>
+
+* 交互式 REPL，支持流式 token 输出
+* 可在运行时从精选列表中选择 model
+* 通过 `web_search` 工具集成网页搜索
+* TypeScript 特有模式：类型收窄、const 断言、带类型的错误类
+* 支持多轮交互的对话历史
+* 优雅的错误处理与干净的关闭流程
+
+<div id="installation">
+  ## 安装
+</div>
+
+```bash theme={null}
+mkdir typescript-agent-cli && cd typescript-agent-cli
+npm init -y
+npm install @perplexity-ai/perplexity_ai
+npm install -D typescript @types/node tsx
+```
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## 用法
+</div>
+
+```bash theme={null}
+npx tsx src/cli.ts
+```
+
+CLI 会提示你选择一个 model，然后进入交互式循环：
+
+```
+可用模型：
+  1. OpenAI GPT-5.1 (openai/gpt-5.4)
+  2. Google Gemini 3 Flash (google/gemini-3.1-flash-lite)
+
+选择模型 (1-2)：1
+
+> 量子计算目前的发展现状如何？
+```
+
+命令：`/search` (启用网页搜索) 、`/nosearch` (禁用搜索) 、`/clear` (清除对话历史) 、`/quit` (退出) 。
+
+<div id="full-code">
+  ## 完整代码
+</div>
+
+保存为 `src/cli.ts`：
+
+```typescript theme={null}
+import Perplexity from "@perplexity-ai/perplexity_ai";
+import * as readline from "readline";
+
+// --- 配置 ---
+
+const AVAILABLE_MODELS = [
+  { name: "openai/gpt-5.4", label: "OpenAI GPT-5.1" },
+  { name: "google/gemini-3.1-flash-lite", label: "Google Gemini 3 Flash" },
+] as const;
+
+type ModelName = (typeof AVAILABLE_MODELS)[number]["name"];
+
+interface Message {
+  role: "user" | "assistant";
+  content: string;
+}
+
+// --- 辅助函数 ---
+
+function createRL(): readline.Interface {
+  return readline.createInterface({ input: process.stdin, output: process.stdout });
+}
+
+function ask(rl: readline.Interface, prompt: string): Promise<string> {
+  return new Promise((resolve) => rl.question(prompt, (a) => resolve(a.trim())));
+}
+
+// --- 模型选择 ---
+
+async function selectModel(rl: readline.Interface): Promise<ModelName> {
+  console.log("\nAvailable models:");
+  AVAILABLE_MODELS.forEach((m, i) =>
+    console.log(`  ${i + 1}. ${m.label} (${m.name})`)
+  );
+  while (true) {
+    const idx = parseInt(await ask(rl, `\nSelect a model (1-${AVAILABLE_MODELS.length}): `), 10) - 1;
+    if (idx >= 0 && idx < AVAILABLE_MODELS.length) {
+      console.log(`Using model: ${AVAILABLE_MODELS[idx].name}\n`);
+      return AVAILABLE_MODELS[idx].name;
+    }
+    console.log("Invalid selection.");
+  }
+}
+
+// --- 流式查询 ---
+
+async function streamQuery(
+  client: Perplexity,
+  model: ModelName,
+  history: Message[],
+  userMessage: string,
+  useWebSearch: boolean
+): Promise<string> {
+  const input = [
+    ...history.map((m) => ({ role: m.role as "user" | "assistant", content: m.content })),
+    { role: "user" as const, content: userMessage },
+  ];
+
+  const tools: Array<{ type: "web_search" }> = useWebSearch
+    ? [{ type: "web_search" as const }]
+    : [];
+
+  const stream = await client.responses.create({
+    model,
+    input,
+    tools,
+    stream: true,
+    instructions: "You are a helpful assistant. Use web search when available for current events. Be concise.",
+    max_output_tokens: 2048,
+  });
+
+  let fullResponse = "";
+  for await (const chunk of stream) {
+    if (chunk.type === "response.output_text.delta") {
+      const delta = (chunk as any).delta as string;
+      process.stdout.write(delta);
+      fullResponse += delta;
+    }
+    if (chunk.type === "response.output_item.added") {
+      const item = (chunk as any).item;
+      if (item?.type === "search_results") {
+        process.stdout.write("\n[Searching the web...]\n");
+      }
+    }
+    if (chunk.type === "response.completed") {
+      const usage = (chunk as any).response?.usage;
+      if (usage) {
+        process.stdout.write(`\n\n[Tokens: ${usage.input_tokens} in / ${usage.output_tokens} out]`);
+      }
+    }
+  }
+  process.stdout.write("\n");
+  return fullResponse;
+}
+
+// --- 命令处理 ---
+
+function handleCommand(cmd: string, state: { webSearch: boolean; history: Message[] }): boolean {
+  switch (cmd.toLowerCase()) {
+    case "/quit": case "/exit":
+      console.log("Goodbye."); return true;
+    case "/search":
+      state.webSearch = true; console.log("Web search enabled."); return false;
+    case "/nosearch":
+      state.webSearch = false; console.log("Web search disabled."); return false;
+    case "/clear":
+      state.history = []; console.log("History cleared."); return false;
+    case "/help":
+      console.log("\n  /search  /nosearch  /clear  /quit  /help\n"); return false;
+    default:
+      console.log(`Unknown command: ${cmd}. Type /help.`); return false;
+  }
+}
+
+// --- 主程序 ---
+
+async function main(): Promise<void> {
+  const client = new Perplexity();
+  const rl = createRL();
+  const model = await selectModel(rl);
+  const state = { webSearch: true, history: [] as Message[] };
+
+  console.log("Type a message to chat, or /help for commands. Web search is ON.\n");
+  process.on("SIGINT", () => { console.log("\nGoodbye."); rl.close(); process.exit(0); });
+
+  while (true) {
+    const input = await ask(rl, "> ");
+    if (!input) continue;
+    if (input.startsWith("/")) { if (handleCommand(input, state)) break; continue; }
+
+    try {
+      const response = await streamQuery(client, model, state.history, input, state.webSearch);
+      state.history.push({ role: "user", content: input });
+      state.history.push({ role: "assistant", content: response });
+      if (state.history.length > 20) state.history = state.history.slice(-20);
+    } catch (error: unknown) {
+      if (error instanceof Perplexity.APIConnectionError) {
+        console.error("\nConnection error. Check your network.");
+      } else if (error instanceof Perplexity.RateLimitError) {
+        console.error("\nRate limit exceeded. Wait and retry.");
+      } else if (error instanceof Perplexity.APIStatusError) {
+        console.error(`\nAPI error: ${(error as any).message}`);
+      } else {
+        console.error("\nUnexpected error:", error);
+      }
+    }
+    console.log();
+  }
+  rl.close();
+}
+
+main();
+```
+
+<div id="example-session">
+  ## 会话示例
+</div>
+
+```
+可用模型：
+  1. OpenAI GPT-5.1 (openai/gpt-5.4)
+  2. Google Gemini 3 Flash (google/gemini-3.1-flash-lite)
+
+选择模型（1-2）：1
+正在使用模型：openai/gpt-5.4
+
+输入消息即可开始对话，或输入 /help 查看命令。联网搜索已开启。
+
+> 本周有哪些重要的 AI 发布？
+[正在搜索网页...]
+本周有多项值得关注的 AI 进展：
+1. Anthropic 发布了推理能力更强的 Claude 4……
+2. Google DeepMind 公布了新的蛋白质折叠研究成果……
+3. OpenAI 宣布了面向企业的 GPT-5 合作……
+
+[Token：输入 1420 / 输出 287]
+
+> /nosearch
+联网搜索已关闭。
+
+> 用简单的话解释一下 transformer
+transformer 是一种神经网络架构，它同时处理输入的所有部分，
+而不是按顺序逐个处理……
+
+[Token：输入 2580 / 输出 195]
+
+> /quit
+再见。
+```
+
+<div id="key-typescript-patterns">
+  ## 关键 TypeScript 模式
+</div>
+
+<div id="const-assertions-for-tool-types">
+  ### 工具类型的常量断言
+</div>
+
+使用 `as const` 收窄工具类型字面量：
+
+```typescript theme={null}
+const tools = [{ type: "web_search" as const }];
+```
+
+<div id="streaming-event-type-narrowing">
+  ### 流式事件类型收窄
+</div>
+
+在访问特定事件的字段之前，先检查 `chunk.type`：
+
+```typescript theme={null}
+for await (const chunk of stream) {
+  if (chunk.type === "response.output_text.delta") {
+    process.stdout.write((chunk as any).delta);
+  }
+}
+```
+
+<div id="typed-error-handling">
+  ### 类型化错误处理
+</div>
+
+```typescript theme={null}
+try {
+  // API 调用
+} catch (error) {
+  if (error instanceof Perplexity.APIConnectionError) {
+    // 处理网络问题
+  } else if (error instanceof Perplexity.RateLimitError) {
+    // 处理速率限制
+  }
+}
+```
+
+<Tip>
+  对话历史会在多轮之间保留，因此 model 可以引用之前的消息。使用 `/clear` 即可无需重启 CLI 直接开始新的对话。
+</Tip>
+
+<div id="limitations">
+  ## 限制
+</div>
+
+* 该 CLI 使用 Node.js 的 `readline`，不支持用方向键翻阅历史输入。如需更丰富的交互体验，可考虑使用 `inquirer` 或 `prompts`。
+* 对话历史仅保存在内存中，进程退出后即丢失。
+* 流式事件可能因 model 提供方而异。`response.output_text.delta` 事件在所有 model 上保持一致。

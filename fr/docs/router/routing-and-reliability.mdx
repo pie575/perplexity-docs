@@ -1,0 +1,55 @@
+---
+title: "Routage et fiabilité"
+description: "Comment l'API Router de Perplexity répartit les requêtes entre les déploiements de modèles, et ce qui se passe automatiquement lorsqu'un fournisseur se dégrade ou échoue."
+---
+
+<Note>
+  L&#39;API Router est en préversion privée. Écrivez à [api@perplexity.ai](mailto:api@perplexity.ai) pour demander l&#39;accès.
+</Note>
+
+<div id="overview">
+  ## Vue d&#39;ensemble
+</div>
+
+Selon le model, un identifiant de model du [catalogue](/fr/docs/router/models) peut être pris en charge par plusieurs déploiements sous-jacents. C&#39;est la plateforme qui détermine où chaque requête est exécutée : aucun paramètre de routage à définir, aucune configuration par fournisseur de votre côté. Vous envoyez un identifiant de model ; le routage, la surveillance de l&#39;état de santé et le basculement sont automatiques.
+
+Les réponses renvoient toujours l&#39;identifiant de model demandé, et la facturation applique toujours les [tarifs publiés](/fr/docs/router/models) de ce model, quel que soit le déploiement ayant traité la requête.
+
+<div id="how-requests-are-routed">
+  ## Comment les requêtes sont routées
+</div>
+
+Lorsqu&#39;un model dispose de plusieurs déploiements, le trafic est réparti entre eux selon une pondération continuellement ajustée en fonction de l&#39;état de santé observé — taux d&#39;erreur, capacité et latence. Les déploiements qui se dégradent délestent automatiquement leur trafic vers ceux en bonne santé, puis le récupèrent progressivement à mesure qu&#39;ils se rétablissent.
+
+Les conversations multi-tours sont maintenues sur le même déploiement dans la mesure du possible, afin que la mise en cache des prompts continue de fonctionner d&#39;une requête à l&#39;autre : envoyez le même préfixe de conversation et vous bénéficiez de la [tarification de lecture en cache](/fr/docs/router/models) sans rien avoir à faire de particulier.
+
+<div id="automatic-failover">
+  ## Basculement automatique
+</div>
+
+Lorsqu&#39;un déploiement échoue — erreur du fournisseur, limite de débit ou expiration du délai —, la requête est relancée sur un autre déploiement du même model, s&#39;il en existe un de disponible. Chaque tentative est encadrée par une limite de délai avant le premier token et une limite de durée totale ; dépasser l&#39;une ou l&#39;autre équivaut à un échec.
+
+Deux comportements à anticiper dans votre conception :
+
+* **Les erreurs que vous pouvez corriger ne donnent pas lieu à une nouvelle tentative.** Les erreurs client déterministes — requête invalide ou prompt dépassant la fenêtre de contexte du model — sont remontées immédiatement sous forme de `400` plutôt que d&#39;être relancées sur d&#39;autres déploiements.
+* **Lorsque tous les déploiements échouent**, la requête renvoie un `429` indiquant que le model est surchargé, accompagné d&#39;un en-tête `Retry-After`. Réessayer après l&#39;intervalle indiqué est sans risque : les requêtes qui échouent avant d&#39;avoir produit la moindre sortie ne sont pas facturées.
+
+<div id="streaming-and-reliability">
+  ## Streaming et fiabilité
+</div>
+
+Les échecs survenant avant le premier token sont gérés de façon transparente : le basculement a lieu avant le démarrage du flux et vous recevez une réponse normale. Si un flux échoue après le début de la génération, il se termine par un événement d&#39;erreur émis dans le flux ; votre client doit considérer tout flux non terminé comme incomplet. Les requêtes en streaming sont facturées sur la base des tokens effectivement livrés.
+
+<div id="next-steps">
+  ## Étapes suivantes
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Modèles et tarifs" icon="brain" href="/fr/docs/router/models">
+    Le catalogue de modèles avec les tarifs par token.
+  </Card>
+
+  <Card title="Référence de l'API" icon="code" href="/fr/api-reference/gateway-chat-completions-post">
+    Schémas de requête et de réponse, y compris la structure des erreurs.
+  </Card>
+</CardGroup>

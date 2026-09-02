@@ -1,0 +1,1053 @@
+---
+title: "ストリームモード: concise と full"
+description: "stream_mode でストリーミングレスポンスの形式を制御し、統合を最適化する方法を解説します"
+---
+
+import SonarDeprecationNotice from "/snippets/ja/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概要
+</div>
+
+`stream_mode` パラメータを使うと、ストリーミングレスポンスの形式を制御できます。次の2つのモードから選択します。
+
+* **`full`** (デフォルト)  - 各チャンクに完全なメッセージオブジェクトを含む従来のストリーミング形式
+* **`concise`** - 冗長性を削減し、推論過程の可視性を高めた最適化ストリーミング形式
+
+<Info>
+  `concise` モードは、帯域幅の使用量を最小限に抑え、モデルの推論過程をより把握しやすくすることを目的としています。
+</Info>
+
+<div id="quick-comparison">
+  ## 比較の概要
+</div>
+
+| 機能           | Full モード                       | Concise モード     |
+| ------------ | ------------------------------ | --------------- |
+| **メッセージの集約** | サーバー側 (`choices.message` を含む)  | クライアント側 (差分のみ)  |
+| **チャンクタイプ**  | 単一 (`chat.completion.chunk`)   | 段階ごとに複数の種類      |
+| **検索結果**     | ストリーム中に複数回                     | `done` チャンクのみ   |
+| **帯域幅**      | 大きい (冗長なデータを含む)                | 小さい (効率重視に最適化)  |
+
+<div id="using-concise-mode">
+  ## Concise モードの使用
+</div>
+
+ストリーミング補完を作成する際に `stream_mode: "concise"` を指定します。
+
+<Tabs>
+  <Tab title="Python SDK">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "Current weather and 7-day forecast for Seattle, Washington"}],
+        stream=True,
+        stream_mode="concise"
+    )
+
+    for chunk in stream:
+        print(f"Chunk type: {chunk.object}")
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="")
+    ```
+  </Tab>
+
+  <Tab title="Typescript SDK">
+    ```typescript theme={null}
+    import Perplexity from '@perplexity-ai/perplexity_ai';
+
+    const client = new Perplexity();
+
+    const stream = await client.chat.completions.create({
+      model: "sonar-pro",
+      messages: [{ role: "user", content: "Current weather and 7-day forecast for Seattle, Washington" }],
+      stream: true,
+      stream_mode: "concise"
+    });
+
+    for await (const chunk of stream) {
+      console.log(`Chunk type: ${chunk.object}`);
+      if (chunk.choices[0]?.delta?.content) {
+        process.stdout.write((chunk.choices[0]?.delta?.content ?? '') as string);
+      }
+    }
+    ```
+  </Tab>
+
+  <Tab title="cURL">
+    ```bash theme={null}
+    curl -X POST "https://api.perplexity.ai/v1/sonar" \
+      -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "sonar-pro",
+        "messages": [{"role": "user", "content": "What is the weather in Seattle?"}],
+        "stream": true,
+        "stream_mode": "concise"
+      }'
+    ```
+  </Tab>
+</Tabs>
+
+<AccordionGroup>
+  <Accordion title="応答 — ワシントン州シアトルの現在の天気と7日間の天気予報">
+    ```json theme={null}
+    {
+      "id": "300fab98-92a3-4a69-9e84-fe05c918f831",
+      "results": [
+        {
+          "snippet": "**現在の気象状況**\n## ボーイングフィールド - キング郡国際空港 (KBFI)\n**緯度: ** 北緯47.54548°**経度: ** 西経122.3147°**標高: ** 20.0フィート\nおおむね曇り\n61°F\n16°C\n|**湿度**|63%|\n|--|--|\n|**風速**|北 0 MPH|\n|**気圧**|29.95 in (1014.22 mb)|\n|**露点**|48°F (9°C)|\n|**視程**|10.00 マイル|\n|**最終更新**|5月26日 午後3:00 PDT|\n...\n**長期予報**\n## ワシントン州シアトル\n- 今夜\n最低: 50 °F\nおおむね晴れ\n- 水曜日\n最高: 71 °F\n晴れ\n- 水曜日の夜\n最低: 54 °F\nおおむね晴れ\n- 木曜日\n最高: 77 °F\n晴れ\n- 木曜日の夜\n最低: 53 °F\n雨の可能性\n- 金曜日\n最高: 60 °F\n雨の可能性\n- 金曜日の夜\n最低: 49 °F\nおおむね曇り\n- 土曜日\n最高: 62 °F\n晴れ時々曇り\n- 土曜日の夜\n最低: 48 °F\n所により曇り\n## 詳細予報\n**今夜**\nおおむね晴れ、最低気温は50度前後。\n北の風5〜8マイル/時、夕方には無風に。\n**水曜日**\n晴れ、最高気温は71度前後。\n弱く不規則な風が朝には北の風5〜10マイル/時に。\n**水曜日の夜**\nおおむね晴れ、最低気温は54度前後。\n北の風5〜8マイル/時、夕方には無風に。\n**木曜日**\n晴れ、最高気温は77度前後。\n無風、午後には北北西の風約5マイル/時に。\n**木曜日の夜**\n主に午後11時以降、降水確率30パーセント。\nおおむね曇り、最低気温は53度前後。\n北北西の風5〜9マイル/時、深夜以降は南寄りに。\n**金曜日**\n降水確率50パーセント。\nおおむね曇り、最高気温は60度前後。\n**金曜日の夜**\nおおむね曇り、最低気温は49度前後。\n**土曜日**\n晴れ時々曇り、最高気温は62度前後。\n**土曜日の夜**\n所により曇り、最低気温は48度前後。\n**日曜日**\nおおむね晴れ、最高気温は64度前後。\n**日曜日の夜**\nおおむね晴れ、最低気温は49度前後。\n**月曜日**\n晴れ、最高気温は70度前後。\n**月曜日の夜**\n所により曇り、最低気温は53度前後。\n**火曜日**\nおおむね晴れ、最高気温は78度前後。\n...\nワシントン州シアトル\n北緯47.62° 西経122.36° (標高 105 フィート)\n最終更新:\n2026年5月26日 午前11:26 PDT\n予報有効期間:\n2026年5月26日 午後3時 PDT〜2026年6月2日 午後6時 PDT",
+          "title": "7日間予報 北緯47.62 西経122.36",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6218&lon=-122.3503",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-26"
+        },
+        {
+          "snippet": "ワシントン州シアトルの天気予報 | AccuWeather\n## 今日の天気\n5月26日(火)\n主に曇り、朝は短時間のにわか雨、午後は所によりにわか雨\n**最高: 62°**\n今夜: 所により曇り\n**最低: 51°**\n## 現在の天気\n午後2:32\n57°F\nRealFeel®\n60°\n曇り 詳細を見る\nRealFeel Shade™ 56°\n風 北西 2 mph\n突風 5 mph\n大気質 普通\n## 今後の見通し\n気温が上昇し、金曜日には再び目立って涼しい天候に\n## 1時間ごとの天気\n午後3時 59°\n40%\n午後4時 61°\n37%\n午後5時 62°\n32%\n午後6時 62°\n32%\n午後7時 61°\n21%\n午後8時 60°\n0%\n午後9時 59°\n0%\n午後10時 57°\n0%\n午後11時 56°\n0%\n午前0時 54°\n0%\n午前1時 53°\n0%\n午前2時 53°\n0%\n## 10日間天気予報\n今日\n5/26\n62° 51°\n今朝は数回のにわか雨\n夜: 所により曇り\n80%\n水\n5/27\n73° 55°\n晴れ時々曇りで快適\n所により曇り\n0%\n木\n5/28\n77° 53°\nおおむね晴れで快適\n所により曇り\n12%\n金\n5/29\n59° 47°\n涼しい\n低い雲\n25%\n土\n5/30\n62° 47°\nおおむね曇り\nおおむね曇り\n25%\n日\n5/31\n70° 50°\n曇りと晴れで快適\n主に晴れ\n19%\n月\n6/1\n76° 57°\nおおむね晴れで快適\n主に晴れ\n13%\n火\n6/2\n93° 58°\n上層雲を伴う暑さ\n曇り\n2%\n水\n6/3\n76° 55°\nおおむね曇り\nおおむね曇り\n6%\n木\n6/4\n73° 53°\n日差しと少しの雲\n主に晴れ\n1%\n...\n大気質 普通\n大気質はほとんどの人にとっておおむね許容範囲です。\nただし、敏感な方は長期間の暴露により軽度から中程度の症状が出る場合があります。",
+          "title": "ワシントン州シアトルの天気予報",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-26"
+        },
+        {
+          "snippet": "その他の気象条件\n気圧\n29.93 °in\n視程\n10 °マイル\n雲\n所により曇り\n露点\n47 °F\n湿度\n60 °%\n降水量\n0 °in\n積雪深\n0 °in\n注目の動画ニュース\n...\n午前5:20\n午後8:55",
+          "title": "ワシントン州シアトル 10日間天気予報",
+          "url": "https://www.wunderground.com/forecast/us/wa/seattle",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-27"
+        },
+        {
+          "snippet": "**現在の気象状況**\n## ボーイングフィールド - キング郡国際空港 (KBFI)\n**緯度: ** 北緯47.54548°**経度: ** 西経122.3147°**標高: ** 20.0フィート\nおおむね曇り\n華氏52度\n摂氏11度\n|**湿度**|66%|\n|--|--|\n|**風速**|西南西 6 MPH|\n|**気圧**|30.15インチ (1021.0 mb)|\n|**露点**|華氏41度 (摂氏5度)|\n|**視程**|10.00 マイル|\n|**最終更新**|5月16日 午後6:20 PDT|\n...\n**長期予報**\n## ワシントン州シアトル・ダウンタウン\n- 今夜\n最低: 華氏43度\n雨の可能性\nのち一部\n曇り\n- 日曜日\n最高: 華氏62度\nおおむね晴れ\n- 日曜夜\n最低: 華氏48度\n雲が\n増加\n- 月曜日\n最高: 華氏66度\n雲が\n減少\n- 月曜夜\n最低: 華氏50度\n一部曇り\n- 火曜日\n最高: 華氏65度\n晴れ時々曇り\n- 火曜夜\n最低: 華氏50度\nおおむね曇り\n- 水曜日\n最高: 華氏68度\nおおむね晴れ\n- 水曜夜\n最低: 華氏51度\n一部曇り\n## 詳細予報\n**今夜**\n主に午後8時前に50パーセントの降雨確率。\nおおむね曇り、最低気温は43度前後。\n西の風およそ5 mph、夕方には無風となる。\n**日曜日**\nおおむね晴れ、最高気温は62度近く。\n弱く変わりやすい風。\n**日曜夜**\n雲が増加、最低気温は48度前後。\n無風。\n**月曜日**\n曇りのち次第におおむね晴れ、最高気温は66度近く。\n弱く変わりやすい風。\n**月曜夜**\n一部曇り、最低気温は50度前後。\n北の風およそ6 mph、夕方には無風となる。\n**火曜日**\n晴れ時々曇り、最高気温は65度近く。\n**火曜夜**\nおおむね曇り、最低気温は50度前後。\n**水曜日**\nおおむね晴れ、最高気温は68度近く。\n**水曜夜**\n一部曇り、最低気温は51度前後。\n**木曜日**\nおおむね晴れ、最高気温は69度近く。\n**木曜夜**\n一部曇り、最低気温は52度前後。\n**金曜日**\nおおむね晴れ、最高気温は69度近く。\n**金曜夜**\nおおむね快晴、最低気温は52度前後。\n**土曜日**\nおおむね晴れ、最高気温は73度近く。\n...\nワシントン州シアトル・ダウンタウン\n北緯47.61° 西経122.32° (標高 240 フィート)\n最終更新:\n2026年5月16日 午前11:27 PDT\n予報有効期間:\n2026年5月16日午後6時 PDT〜2026年5月23日午後6時 PDT\n予報解説",
+          "title": "7日間予報 47.61N 122.32W - 米国国立気象局",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6032&lon=-122.3303",
+          "date": "2026-05-17",
+          "last_updated": "2026-05-17"
+        },
+        {
+          "snippet": "**現在の気象状況**\n## シアトル気象予報事務所 (SEAW1)\n**緯度: ** 北緯47.68528°**経度: ** 西経122.25111°**標高: ** 29.0フィート\nNA\n華氏45度\n摂氏7度\n|**湿度**|75%|\n|--|--|\n|**風速**|南南西 5 MPH|\n|**気圧**|30.45インチ (1031.16 mb)|\n|**露点**|華氏37度 (摂氏3度)|\n|**視程**|NA|\n|**体感温度**|華氏42度 (摂氏6度)|\n|**最終更新**|3月26日 午前9:30 PDT|\n...\n**長期予報**\n## ワシントン州シアトル・ユニバーシティ南南東2マイル\n- 今日\n最高: 華氏53度\n晴れ\n- 今夜\n最低: 華氏35度\n雲が\n増加\n- 金曜日\n最高: 華氏56度\nおおむね晴れ\n- 金曜夜\n最低: 華氏38度\nおおむね曇り\n- 土曜日\n最高: 華氏54度\n晴れ時々曇り\n- 土曜夜\n最低: 華氏39度\nおおむね曇り\n- 日曜日\n最高: 華氏54度\nわずかに\n雨の可能性\n- 日曜夜\n最低: 華氏39度\n雨の可能性\n- 月曜日\n最高: 華氏51度\n雨の可能性\n## 詳細予報\n**今日**\n晴れ、最高気温は53度近く。\n南の風およそ6 mph。\n**今夜**\n雲が増加、最低気温は35度前後。\n無風。\n**金曜日**\nおおむね晴れ、最高気温は56度近く。\n無風、午後には北の風5〜7 mphとなる。\n**金曜夜**\nおおむね曇り、最低気温は38度前後。\n北の風5〜8 mph、夕方には無風となる。\n**土曜日**\n晴れ時々曇り、最高気温は54度近く。\n無風、午後には北北西の風およそ5 mphとなる。\n**土曜夜**\nおおむね曇り、最低気温は39度前後。\n**日曜日**\n午前11時以降、20パーセントの降雨確率。\nおおむね曇り、最高気温は54度近く。\n**日曜夜**\n雨の可能性あり。\nおおむね曇り、最低気温は39度前後。\n**月曜日**\n雨の可能性あり。\nおおむね曇り、最高気温は51度近く。\n**月曜夜**\n主に午後11時前に雨の可能性あり。\n一部曇り、最低気温は36度前後。\n**火曜日**\nわずかに雨の可能性あり。\nおおむね晴れ、最高気温は53度近く。\n**火曜夜**\n雨の可能性あり。\nおおむね曇り、最低気温は40度前後。\n**水曜日**\n雨の可能性あり。\nおおむね曇り、最高気温は53度近く。\n...\nワシントン州シアトル・ユニバーシティ南南東2マイル\n北緯47.63° 西経122.3° (標高 190 フィート)\n最終更新:\n2026年3月25日 午後11:27 PDT\n予報有効期間:\n2026年3月26日午前10時 PDT〜2026年4月1日午後6時 PDT\n予報解説",
+          "title": "7日間予報 47.63N 122.3W - 米国国立気象局",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6329523&lon=-122.28918880000003&site=all&smap=1&searchresult=Seattle%2C+WA+98112%2C+USA",
+          "date": "2026-03-26",
+          "last_updated": "2026-03-26"
+        },
+        {
+          "snippet": "オレゴン州およびネバダ州の広範囲で、強い突風と低湿度により、火曜日にかけて「高い」から「危機的」レベルの火災気象条件が予想されます。\n北西部ではにわか雨と雷雨が発生する見込みです。\n...\n**現在の観測地点**\n## シアトル気象予報事務所 (SEAW1)\n**緯度: ** 47.68528°N**経度: ** 122.25111°W**標高: ** 29.0フィート\nNA\n53°F\n12°C\n|**湿度**|86%|\n|--|--|\n|**風速**|東南東 5 MPH|\n|**気圧**|29.71 in (1006.1 mb)|\n|**露点**|49°F (9°C)|\n|**視程**|NA|\n|**最終更新**|5月25日 午後10時30分 PDT|\n...\n**長期予報**\n## ワシントン州シアトル・ユニバーシティ\n- 今夜\n最低気温: 48 °F\nわずかに雨の\n可能性\n- 火曜日\n最高気温: 65 °F\n雨の可能性\nのち\n晴れ時々曇り\n- 火曜日の夜\n最低気温: 49 °F\n曇り時々晴れ\n- 水曜日\n最高気温: 74 °F\n晴れ\n- 水曜日の夜\n最低気温: 53 °F\nおおむね快晴\n- 木曜日\n最高気温: 78 °F\n晴れ\n- 木曜日の夜\n最低気温: 53 °F\n曇り時々晴れ\n- 金曜日\n最高気温: 64 °F\n雨の可能性\n- 金曜日の夜\n最低気温: 48 °F\n雨の可能性\nのち\nおおむね曇り\n## 詳細予報\n**今夜**\n午前5時以降、降水確率10パーセント。\n曇り時々晴れ、最低気温は48度前後。\n南の風 約6mph、深夜以降は静穏。\n**火曜日**\n降水確率30パーセント、主に午前9時前。\n晴れ時々曇り、最高気温は65度近く。\n静穏な風、午後は北北西の風 5〜7mph。\n**火曜日の夜**\n曇り時々晴れ、最低気温は49度前後。\n北の風 約6mph、夜には静穏。\n**水曜日**\n晴れ、最高気温は74度近く。\n静穏な風、午後は北の風 5〜8mph。\n**水曜日の夜**\nおおむね快晴、最低気温は53度前後。\n北の風 5〜7mph、夜には静穏。\n**木曜日**\n晴れ、最高気温は78度近く。\n**木曜日の夜**\n曇り時々晴れ、最低気温は53度前後。\n**金曜日**\n雨の可能性あり。\nおおむね曇り、最高気温は64度近く。\n**金曜日の夜**\n午後11時前に雨の可能性あり。\nおおむね曇り、最低気温は48度前後。\n**土曜日**\n晴れ時々曇り、最高気温は65度近く。\n**土曜日の夜**\n曇り時々晴れ、最低気温は47度前後。\n**日曜日**\nおおむね晴れ、最高気温は66度近く。\n**日曜日の夜**\n曇り時々晴れ、最低気温は48度前後。\n**月曜日**\nおおむね晴れ、最高気温は72度近く。\n...\nワシントン州シアトル・ユニバーシティ\n47.65°N 122.3°W (標高 33 フィート)\n最終更新:\n2026年5月25日 午後1時00分 PDT\n予報有効期間:\n2026年5月25日 午後11時 PDT〜2026年6月1日 午後6時 PDT\n予報解説",
+          "title": "7日間予報 47.65N 122.3W - アメリカ国立気象局",
+          "url": "https://forecast.weather.gov/MapClick.php?CityName=Seattle&state=WA&site=SEW&lat=47.6606&lon=-122.292",
+          "date": "2026-05-26",
+          "last_updated": "2026-05-26"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+
+  <Accordion title="応答 — シアトルの天気は？">
+    ```json theme={null}
+    {
+      "id": "3b076c08-870a-45e5-881d-ddaf39781638",
+      "results": [
+        {
+          "snippet": "ワシントン州シアトルの天気予報 | AccuWeather\n## 今日の天気\n5月20日（水）\n雲の切れ間から日差し\n**最高: 68°**\n今夜: おおむね晴れ\n**最低: 51°**\n## 現在の天気\n午後1時47分\n64°F\n体感温度（RealFeel®）\n77°\nおおむね曇り 詳細を見る\nRealFeel Shade™ 65°\n風 北北西 3 mph\n最大瞬間風速 6 mph\n大気質 普通\n## 今後の見通し\n...\n68° 51°\n雲の切れ間から日差し\n夜: おおむね晴れ",
+          "title": "ワシントン州シアトルの天気予報 - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "**現在の気象状況**\n## ボーイング・フィールド - キング郡国際空港 (KBFI)\n**緯度: ** 47.54548°N**経度: ** 122.3147°W**標高: ** 20.0ft.\n晴れ\n64°F\n18°C\n|**湿度**|52%|\n|--|--|\n|**風速**|西北西 10 MPH|\n|**気圧**|30.19 in (1022.35 mb)|\n|**露点**|46°F (8°C)|\n|**視程**|10.00 mi|\n|**最終更新**|5月20日 午後2時30分 PDT|\n...\n## ワシントン州シアトル\n- 今日の午後\n最高: 67 °F\nおおむね晴れ\n- 今夜\n最低: 51 °F\n雲が次第に減少\n- 木曜日\n...\n**今日の午後**\nおおむね晴れ、最高気温は67度前後。\n北北西の風、約8 mph。\n**今夜**\nおおむね曇りのち次第に晴れ、最低気温は51度前後。\n北の風5〜7 mph、深夜以降は静穏に。\n...\n2026年5月20日午後2時 PDT〜2026年5月26日午後6時 PDT",
+          "title": "7日間予報 47.62N 122.36W - 米国国立気象局",
+          "url": "https://forecast.weather.gov/MapClick.php?lat=47.6218&lon=-122.3503",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "*access_time* ** 2026年5月20日 午後10時20分 PDT** (GMT -7) | 2秒前に更新\n--° | 50°\n体感 61°\n晴れ\n北\n突風\n明日の気温は今日より高くなる見込みです。",
+          "title": "ワシントン州シアトルの気象状況 | Weather Underground",
+          "url": "https://www.wunderground.com/weather/us/wa/seattle",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "晴れ\n56°\n73°\n49°\n降水確率:0%\n風:3 mph 北北東\n湿度:69%\nUV指数:低\nワシントン州シアトル\n地域を変更\n水曜日\n73\n49\n0%\n晴れ\n風:3 mph 北北東\n湿度:69%\nUV指数:低\n木曜日\n73\n51\n...\n晴れ時々曇り\n風:9 mph 北\n湿度:56%\nUV指数:高\n金曜日\n74\n...\n快晴\n風:7 mph 北北西\n湿度:60%\nUV指数:高\n土曜日\n...\n午前曇り／午後晴れ\n...\n日曜日\n...\n曇り\n...\n月曜日\n56\n48\n40%\nにわか雨\n風:12 mph 南南西\n湿度:74%\nUV指数:中程度\n火曜日\n61\n49\n30%\n午前にわか雨\n風:8 mph 西\n湿度:71%\nUV指数:高",
+          "title": "天気 - KOMO News",
+          "url": "https://komonews.com/weather",
+          "date": "2026-05-21",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "5月20日（水）\n# 現在の天気\n午後2時37分\n65°F\n快晴\nRealFeel® 75°\n快適\nRealFeel Shade™ 64°\n快適\nRealFeel®\n75°\nRealFeel Shade™\n64°\n最大UV指数\n5.8 (高)\n風\n北北西 4 mph\n最大瞬間風速\n7 mph\n湿度\n65%\n室内湿度\n59% (理想的な湿度)\n露点\n53° F\n気圧\n↓ 30.21 in\n雲量\n1%\n視程\n6 mi\n雲底高度\n40000 ft\n## 日中\n5/20\n68°最高\nRealFeel®\n75°\n快適\nRealFeel Shade™\n65°\n快適\n雲の切れ間から日差し\n最大UV指数8.0 (非常に高い)\nAccuLumen明度指数™6 (中)\n風 北 7 mph\n最大瞬間風速13 mph\n降水確率0%\n雷雨の確率0%\n降水量0.00 in\n雲量59%\n...\n5/20\n51°最低\nRealFeel®\n50°\n肌寒い\nおおむね晴れ\n風 北北東 6 mph\n最大瞬間風速12 mph\n降水確率0%\n雷雨の確率0%\n降水量0.00 in\n雲量22%\n...\n## シアトルの現在の気象状況\nワシントン州シアトルは現在快晴で、気温は65°です。\n現在のRealFeel®体感温度は75°（快適）で、湿度65%、雲量1%、UV指数6、風速4 mphなどの観測条件に基づいています。\n日陰でのRealFeel Shade™は64°です。",
+          "title": "現在の天気 - ワシントン州シアトル - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/current-weather/351409",
+          "date": null,
+          "last_updated": "2026-05-20"
+        },
+        {
+          "snippet": "その他の気象条件\n気圧\n30.14 °in\n視程\n10 °マイル\n雲\n晴れ時々曇り\n露点\n45 °F\n湿度\n44 °%\n降水量\n0 °in\n積雪深\n0 °in\n注目の動画ニュース",
+          "title": "ワシントン州シアトルの10日間天気予報",
+          "url": "https://www.wunderground.com/forecast/us/wa/seattle",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "ワシントン州シアトル\n57°\n体感温度 **57°**\n最高: ° 最低: 49° 午前1時48分 PDT時点\n午前2時\n...\nライブ\nシアトル\n、ワシントン州\n57°\nライブ\nシアトル\n、ワシントン州\n57°\nライブ\nシアトル\n、ワシントン州\n57°\nライブ\n...\nシアトルの天気: 週末にかけて晴れと70度台が戻る",
+          "title": "FOX 13 シアトル＆ワシントン州西部の天気",
+          "url": "https://www.fox13seattle.com/weather",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "18\n°C\n晴れ\n体感 18\n最高: 18°   最低: 10°\n## 1時間ごと\n...\n晴れ時々曇り。\n...\n## ワシントン州シアトルの天気に関するよくある質問\nシアトルの現在の気温は？\n18°\nシアトルの「体感温度」は？\n18°\n今日のシアトルの最高気温と最低気温は？\n18°\n10°\n今日のシアトルの雨や雪の確率は？\n降水確率20%\n今日のシアトルの雨や雪の量は？\n予想なし\nシアトルの現在の風速と風向は？\n9 km/h 北西\nシアトルの現在の湿度は？\n52%\nシアトルに発表中の気象警報はありますか？\nいいえ\nシアトルの現在のUV指数は？\n低\n今日のシアトルの日の出と日の入りの時刻は？\n日の出 午前5時25分\n日の入り 午後8時45分",
+          "title": "ワシントン州シアトルの現在の天気",
+          "url": "https://www.theweathernetwork.com/en/city/us/washington/seattle/current?_guid_iss_=1",
+          "date": "2026-05-20",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "# Seattle, WA Weather\nAs of\n- **Current Temperature**\n52\nFeels like:52°\n- **Today's high temperature**\n72°\n- **Today's low temperature**\n52°\nCurrent Weather ConditionSunny\n## Live Weather Radar\n...\n## Current Weather Details\n- **Windchill**\n52°\n- **Daily Rain**\n0\"\n- **Dew point**\n46°\n- **Monthly Rain**\n0.35\"\n- **Humidity**\n81%\n- **Avg.\nWind**\nW 2 mph\n- **Pressure**\n30.19\" →\n- **Wind Gust**\nW 3 mph\n- **Sunrise**\n5:25 AM\n- **Moon**\nWaxing Crescent\n- **Sunset**\n8:47 PM\n- **UV Index**\n7 (High)\n## Weather Forecast\n- ### Today\nHi\nSunny.\nHighs in the upper 60s to mid 70s.\nLight wind becoming northwest around 10 mph in the afternoon.\n- ### Tonight\nLo\nMostly clear.\nLows in the lower 50s.\nNorth wind to 10 mph in the evening becoming light.",
+          "title": "Seattle, WA Weather Today & Tomorrow - Local Forecast & Live ...",
+          "url": "https://www.weatherbug.com/weather-forecast/now/seattle-wa-98104",
+          "date": "2026-05-21",
+          "last_updated": "2026-05-21"
+        },
+        {
+          "snippet": "Seattle, WA Hourly Weather | AccuWeather\n## 11 PM\n56°\nRealFeel®\n53°\nCool\n0%\nMostly clear\nWindNNE 7 mph\nAir QualityPoor\nWind Gusts9 mph\nHumidity68%\nIndoor Humidity44% (Ideal Humidity)\nDew Point45° F\nAccuLumen Brightness Index™0 (Dark)\nCloud Cover13%\nVisibility10 mi\nCloud Ceiling34000 ft\n...\nAccuWeather's hourly forecast for Seattle provides hour-by-hour temperatures, RealFeel® Temperature, and precipitation probability through the next 10 days.\nThe current hour shows 56° with a RealFeel® of 53°, mostly clear with a 0% chance of precipitation.",
+          "title": "Seattle, WA Hourly Weather - AccuWeather",
+          "url": "https://www.accuweather.com/en/us/seattle/98104/hourly-weather-forecast/351409",
+          "date": null,
+          "last_updated": "2026-05-21"
+        }
+      ],
+      "server_time": null
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+<div id="understanding-chunk-types">
+  ## チャンクタイプの理解
+</div>
+
+concise モードでは、ストリーム中に 4 種類のチャンクが送信されます。
+
+<div id="1-chatreasoning">
+  ### 1. `chat.reasoning`
+</div>
+
+推論ステージ中にストリーミングされ、リアルタイムの推論ステップと検索処理の内容を含みます。
+
+<Tabs>
+  <Tab title="構造">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441590,
+      "object": "chat.reasoning",
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": ""
+        },
+        "delta": {
+          "role": "assistant",
+          "content": "",
+          "reasoning_steps": [{
+            "thought": "Searching the web for Seattle's current weather...",
+            "type": "web_search",
+            "web_search": {
+              "search_results": [...],
+              "search_keywords": ["Seattle current weather"]
+            }
+          }]
+        }
+      }],
+      "type": "message"
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python ハンドラー">
+    ```python theme={null}
+    def handle_reasoning_chunk(chunk):
+        """推論ステージの更新を処理する"""
+        if chunk.object == "chat.reasoning":
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'reasoning_steps'):
+                for step in delta.reasoning_steps:
+                    print(f"\n[Reasoning] {step.thought}")
+
+                    if step.type == "web_search":
+                        keywords = step.web_search.search_keywords
+                        print(f"[Search] Keywords: {', '.join(keywords)}")
+    ```
+  </Tab>
+
+  <Tab title="TypeScript ハンドラー">
+    ```typescript theme={null}
+    function handleReasoningChunk(chunk: any) {
+      if (chunk.object === "chat.reasoning") {
+        const delta = chunk.choices[0].delta;
+
+        if (delta.reasoning_steps) {
+          for (const step of delta.reasoning_steps) {
+            console.log(`\n[Reasoning] ${step.thought}`);
+
+            if (step.type === "web_search") {
+              const keywords = step.web_search.search_keywords;
+              console.log(`[Search] Keywords: ${keywords.join(', ')}`);
+            }
+          }
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="2-chatreasoningdone">
+  ### 2. `chat.reasoning.done`
+</div>
+
+推論ステージの終了を示し、すべての検索結果 (Web、画像、動画) と推論ステップを含みます。
+
+<Tabs>
+  <Tab title="構造">
+    ```json theme={null}
+    {
+      "id": "3dd9d463-0fef-47e3-af70-92f9fcc4db1f",
+      "model": "sonar-pro",
+      "created": 1759459505,
+      "object": "chat.reasoning.done",
+      "usage": {
+        "prompt_tokens": 6,
+        "completion_tokens": 0,
+        "total_tokens": 6,
+        "search_context_size": "low"
+      },
+      "search_results": [...],
+      "images": [...],
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": "",
+          "reasoning_steps": [...]
+        },
+        "delta": {
+          "role": "assistant",
+          "content": ""
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python ハンドラー">
+    ```python theme={null}
+    def handle_reasoning_done(chunk):
+        """推論ステージの終了を処理する"""
+        if chunk.object == "chat.reasoning.done":
+            print("\n[Reasoning Complete]")
+
+            # すべての検索結果を取得する
+            if hasattr(chunk, 'search_results'):
+                print(f"Found {len(chunk.search_results)} sources")
+                for result in chunk.search_results[:3]:
+                    print(f"  • {result['title']}")
+
+            # 画像の結果を取得する
+            if hasattr(chunk, 'images'):
+                print(f"Found {len(chunk.images)} images")
+
+            # この時点での使用量の統計を取得できる
+            if hasattr(chunk, 'usage'):
+                print(f"Tokens used so far: {chunk.usage.total_tokens}")
+    ```
+  </Tab>
+
+  <Tab title="Typescript ハンドラー">
+    ```typescript theme={null}
+    function handleReasoningDone(chunk: any) {
+      if (chunk.object === "chat.reasoning.done") {
+        console.log("\n[Reasoning Complete]");
+
+        // すべての検索結果を取得する
+        if (chunk.search_results) {
+          console.log(`Found ${chunk.search_results.length} sources`);
+          chunk.search_results.slice(0, 3).forEach((result: any) => {
+            console.log(`  • ${result.title}`);
+          });
+        }
+
+        // 画像の結果を取得する
+        if (chunk.images) {
+          console.log(`Found ${chunk.images.length} images`);
+        }
+
+        // この時点での使用量の統計を取得できる
+        if (chunk.usage) {
+          console.log(`Tokens used so far: ${chunk.usage.total_tokens}`);
+        }
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="3-chatcompletionchunk">
+  ### 3. `chat.completion.chunk`
+</div>
+
+応答生成の段階でストリーミングされ、実際に生成中のコンテンツが含まれます。
+
+<Tabs>
+  <Tab title="構造">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441592,
+      "object": "chat.completion.chunk",
+      "choices": [{
+        "index": 0,
+        "finish_reason": null,
+        "message": {
+          "role": "assistant",
+          "content": ""
+        },
+        "delta": {
+          "role": "assistant",
+          "content": " tonight"
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python ハンドラー">
+    ```python theme={null}
+    def handle_completion_chunk(chunk):
+        """コンテンツ生成の更新を処理する"""
+        if chunk.object == "chat.completion.chunk":
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'content') and delta.content:
+                # コンテンツをユーザーにストリーミングする
+                print(delta.content, end='', flush=True)
+                return delta.content
+
+        return ""
+    ```
+  </Tab>
+
+  <Tab title="Typescript ハンドラー">
+    ```typescript theme={null}
+    function handleCompletionChunk(chunk: any): string {
+      if (chunk.object === "chat.completion.chunk") {
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.content) {
+          // コンテンツをユーザーにストリーミングする
+          process.stdout.write(delta.content);
+          return delta.content;
+        }
+      }
+
+      return "";
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="4-chatcompletiondone">
+  ### 4. `chat.completion.done`
+</div>
+
+ストリームの完了を示す最終チャンクです。最終的な検索結果、使用量の統計、コスト情報が含まれます。
+
+<Tabs>
+  <Tab title="構造">
+    ```json theme={null}
+    {
+      "id": "cfa38f9d-fdbc-4ac6-a5d2-a3010b6a33a6",
+      "model": "sonar-pro",
+      "created": 1759441595,
+      "object": "chat.completion.done",
+      "usage": {
+        "prompt_tokens": 6,
+        "completion_tokens": 238,
+        "total_tokens": 244,
+        "search_context_size": "low",
+        "cost": {
+          "input_tokens_cost": 0.0,
+          "output_tokens_cost": 0.004,
+          "request_cost": 0.006,
+          "total_cost": 0.01
+        }
+      },
+      "search_results": [...],
+      "images": [...],
+      "choices": [{
+        "index": 0,
+        "finish_reason": "stop",
+        "message": {
+          "role": "assistant",
+          "content": "## Seattle Weather Forecast\n\nSeattle is experiencing...",
+          "reasoning_steps": [...]
+        },
+        "delta": {
+          "role": "assistant",
+          "content": ""
+        }
+      }]
+    }
+    ```
+  </Tab>
+
+  <Tab title="Python ハンドラー">
+    ```python theme={null}
+    def handle_completion_done(chunk):
+        """ストリームの完了を処理する"""
+        if chunk.object == "chat.completion.done":
+            print("\n\n[Stream Complete]")
+
+            # 集約された最終メッセージ
+            full_message = chunk.choices[0].message.content
+
+            # 最終的な検索結果
+            if hasattr(chunk, 'search_results'):
+                print(f"\nFinal sources: {len(chunk.search_results)}")
+
+            # 使用量とコストの完全な情報
+            if hasattr(chunk, 'usage'):
+                usage = chunk.usage
+                print(f"\nTokens: {usage.total_tokens}")
+
+                if hasattr(usage, 'cost'):
+                    print(f"Cost: ${usage.cost.total_cost:.4f}")
+
+            return {
+                'content': full_message,
+                'search_results': getattr(chunk, 'search_results', []),
+                'images': getattr(chunk, 'images', []),
+                'usage': getattr(chunk, 'usage', None)
+            }
+    ```
+  </Tab>
+
+  <Tab title="Typescript ハンドラー">
+    ```typescript theme={null}
+    function handleCompletionDone(chunk: any) {
+      if (chunk.object === "chat.completion.done") {
+        console.log("\n\n[Stream Complete]");
+
+        // 集約された最終メッセージ
+        const fullMessage = chunk.choices[0].message.content;
+
+        // 最終的な検索結果
+        if (chunk.search_results) {
+          console.log(`\nFinal sources: ${chunk.search_results.length}`);
+        }
+
+        // 使用量とコストの完全な情報
+        if (chunk.usage) {
+          console.log(`\nTokens: ${chunk.usage.total_tokens}`);
+
+          if (chunk.usage.cost) {
+            console.log(`Cost: $${chunk.usage.cost.total_cost.toFixed(4)}`);
+          }
+        }
+
+        return {
+          content: fullMessage,
+          search_results: chunk.search_results || [],
+          images: chunk.images || [],
+          usage: chunk.usage || null
+        };
+      }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+<div id="complete-implementation-examples">
+  ## 完全な実装例
+</div>
+
+<div id="full-concise-mode-handler">
+  ### Concise モードの完全なハンドラー
+</div>
+
+<Tabs>
+  <Tab title="Python SDK">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    class ConciseStreamHandler:
+        def __init__(self):
+            self.content = ""
+            self.reasoning_steps = []
+            self.search_results = []
+            self.images = []
+            self.usage = None
+
+        def stream_query(self, query: str, model: str = "sonar-pro"):
+            """Handle a complete concise streaming request"""
+            client = Perplexity()
+
+            stream = client.chat.completions.create(
+                model=model,
+                messages=[{"role": "user", "content": query}],
+                stream=True,
+                stream_mode="concise"
+            )
+
+            for chunk in stream:
+                self.process_chunk(chunk)
+
+            return self.get_result()
+
+        def process_chunk(self, chunk):
+            """Route chunk to appropriate handler"""
+            chunk_type = chunk.object
+
+            if chunk_type == "chat.reasoning":
+                self.handle_reasoning(chunk)
+            elif chunk_type == "chat.reasoning.done":
+                self.handle_reasoning_done(chunk)
+            elif chunk_type == "chat.completion.chunk":
+                self.handle_content(chunk)
+            elif chunk_type == "chat.completion.done":
+                self.handle_done(chunk)
+
+        def handle_reasoning(self, chunk):
+            """Process reasoning updates"""
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'reasoning_steps'):
+                for step in delta.reasoning_steps:
+                    self.reasoning_steps.append(step)
+                    print(f"💭 {step.thought}")
+
+        def handle_reasoning_done(self, chunk):
+            """Process end of reasoning"""
+            if hasattr(chunk, 'search_results'):
+                self.search_results = chunk.search_results
+                print(f"\n🔍 Found {len(self.search_results)} sources")
+
+            if hasattr(chunk, 'images'):
+                self.images = chunk.images
+                print(f"🖼️  Found {len(self.images)} images")
+
+            print("\n📝 Generating response...\n")
+
+        def handle_content(self, chunk):
+            """Process content chunks"""
+            delta = chunk.choices[0].delta
+
+            if hasattr(delta, 'content') and delta.content:
+                self.content += delta.content
+                print(delta.content, end='', flush=True)
+
+        def handle_done(self, chunk):
+            """Process completion"""
+            if hasattr(chunk, 'usage'):
+                self.usage = chunk.usage
+                print(f"\n\n✅ Complete | Tokens: {self.usage.total_tokens}")
+
+                if hasattr(self.usage, 'cost'):
+                    print(f"💰 Cost: ${self.usage.cost.total_cost:.4f}")
+
+        def get_result(self):
+            """Return complete result"""
+            return {
+                'content': self.content,
+                'reasoning_steps': self.reasoning_steps,
+                'search_results': self.search_results,
+                'images': self.images,
+                'usage': self.usage
+            }
+
+    # 使用例
+    handler = ConciseStreamHandler()
+    result = handler.stream_query("What's the latest news in AI?")
+
+    print(f"\n\nFinal content length: {len(result['content'])} characters")
+    print(f"Sources used: {len(result['search_results'])}")
+    ```
+  </Tab>
+
+  <Tab title="TypeScript SDK">
+    ```typescript theme={null}
+    import Perplexity from '@perplexity-ai/perplexity_ai';
+
+    interface StreamResult {
+      content: string;
+      reasoning_steps: any[];
+      search_results: any[];
+      images: any[];
+      usage: any;
+    }
+
+    class ConciseStreamHandler {
+      private content: string = "";
+      private reasoning_steps: any[] = [];
+      private search_results: any[] = [];
+      private images: any[] = [];
+      private usage: any = null;
+
+      async streamQuery(query: string, model: string = "sonar-pro"): Promise<StreamResult> {
+        const client = new Perplexity();
+
+        const stream = await client.chat.completions.create({
+          model,
+          messages: [{ role: "user", content: query }],
+          stream: true,
+          stream_mode: "concise"
+        });
+
+        for await (const chunk of stream) {
+          this.processChunk(chunk);
+        }
+
+        return this.getResult();
+      }
+
+      private processChunk(chunk: any) {
+        const chunkType = chunk.object;
+
+        switch (chunkType) {
+          case "chat.reasoning":
+            this.handleReasoning(chunk);
+            break;
+          case "chat.reasoning.done":
+            this.handleReasoningDone(chunk);
+            break;
+          case "chat.completion.chunk":
+            this.handleContent(chunk);
+            break;
+          case "chat.completion.done":
+            this.handleDone(chunk);
+            break;
+        }
+      }
+
+      private handleReasoning(chunk: any) {
+        const delta = chunk.choices[0].delta;
+
+        if (delta.reasoning_steps) {
+          for (const step of delta.reasoning_steps) {
+            this.reasoning_steps.push(step);
+            console.log(`💭 ${step.thought}`);
+          }
+        }
+      }
+
+      private handleReasoningDone(chunk: any) {
+        if (chunk.search_results) {
+          this.search_results = chunk.search_results;
+          console.log(`\n🔍 Found ${this.search_results.length} sources`);
+        }
+
+        if (chunk.images) {
+          this.images = chunk.images;
+          console.log(`🖼️  Found ${this.images.length} images`);
+        }
+
+        console.log("\n📝 Generating response...\n");
+      }
+
+      private handleContent(chunk: any) {
+        const delta = chunk.choices[0]?.delta;
+
+        if (delta?.content) {
+          this.content += delta.content;
+          process.stdout.write(delta.content);
+        }
+      }
+
+      private handleDone(chunk: any) {
+        if (chunk.usage) {
+          this.usage = chunk.usage;
+          console.log(`\n\n✅ Complete | Tokens: ${this.usage.total_tokens}`);
+
+          if (this.usage.cost) {
+            console.log(`💰 Cost: $${this.usage.cost.total_cost.toFixed(4)}`);
+          }
+        }
+      }
+
+      private getResult(): StreamResult {
+        return {
+          content: this.content,
+          reasoning_steps: this.reasoning_steps,
+          search_results: this.search_results,
+          images: this.images,
+          usage: this.usage
+        };
+      }
+    }
+
+    // 使用例
+    const handler = new ConciseStreamHandler();
+    const result = await handler.streamQuery("What's the latest news in AI?");
+
+    console.log(`\n\nFinal content length: ${result.content.length} characters`);
+    console.log(`Sources used: ${result.search_results.length}`);
+    ```
+  </Tab>
+
+  <Tab title="生の HTTP">
+    ```python theme={null}
+    import os
+    import requests
+    import json
+
+    def stream_concise_mode(query: str):
+        """生のHTTPで簡潔なストリーミングを処理する"""
+        url = "https://api.perplexity.ai/v1/sonar"
+        headers = {
+            "Authorization": f"Bearer {os.environ.get('PERPLEXITY_API_KEY')}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "sonar-pro",
+            "messages": [{"role": "user", "content": query}],
+            "stream": True,
+            "stream_mode": "concise"
+        }
+
+        response = requests.post(url, headers=headers, json=payload, stream=True)
+
+        content = ""
+        search_results = []
+        usage = None
+
+        for line in response.iter_lines():
+            if line:
+                line = line.decode('utf-8')
+                if line.startswith('data: '):
+                    data_str = line[6:]
+                    if data_str == '[DONE]':
+                        break
+
+                    try:
+                        chunk = json.loads(data_str)
+                        chunk_type = chunk.get('object')
+
+                        if chunk_type == 'chat.reasoning':
+                            # 推論を処理
+                            delta = chunk['choices'][0]['delta']
+                            if 'reasoning_steps' in delta:
+                                for step in delta['reasoning_steps']:
+                                    print(f"💭 {step['thought']}")
+
+                        elif chunk_type == 'chat.reasoning.done':
+                            # 推論の完了を処理
+                            if 'search_results' in chunk:
+                                search_results = chunk['search_results']
+                                print(f"\n🔍 {len(search_results)} 件の情報源が見つかりました\n")
+
+                        elif chunk_type == 'chat.completion.chunk':
+                            # コンテンツを処理
+                            delta = chunk['choices'][0]['delta']
+                            if 'content' in delta and delta['content']:
+                                content += delta['content']
+                                print(delta['content'], end='', flush=True)
+
+                        elif chunk_type == 'chat.completion.done':
+                            # 完了を処理
+                            if 'usage' in chunk:
+                                usage = chunk['usage']
+                                print(f"\n\n✅ トークン数: {usage['total_tokens']}")
+
+                    except json.JSONDecodeError:
+                        continue
+
+        return {
+            'content': content,
+            'search_results': search_results,
+            'usage': usage
+        }
+
+    # 使用例
+    result = stream_concise_mode("AI分野の最新ニュースは何ですか?")
+    ```
+  </Tab>
+</Tabs>
+
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
+
+<Steps>
+  <Step title="クライアント側でコンテンツを集約する">
+    concise モードでは、`choices.message` は逐次更新されません。チャンクは自分で集約する必要があります。
+
+    ```python theme={null}
+    # コンテンツを自分で追跡する
+    content = ""
+    for chunk in stream:
+        if chunk.object == "chat.completion.chunk":
+            if chunk.choices[0].delta.content:
+                content += chunk.choices[0].delta.content
+    ```
+  </Step>
+
+  <Step title="透明性のために推論ステップを活用する">
+    推論ステップをユーザーに表示することで、透明性と信頼性が高まります。
+
+    ```python theme={null}
+    def display_reasoning(step):
+        """ユーザーに推論内容を表示する"""
+        print(f"🔍 Searching for: {step.web_search.search_keywords}")
+        print(f"💭 {step.thought}")
+    ```
+  </Step>
+
+  <Step title="検索結果は done チャンクからのみ扱う">
+    検索結果と使用量の情報は、`chat.reasoning.done` および `chat.completion.done` チャンクにのみ含まれます。
+
+    ```python theme={null}
+    # 他のチャンクタイプで search_results を確認しないこと
+    if chunk.object in ["chat.reasoning.done", "chat.completion.done"]:
+        if hasattr(chunk, 'search_results'):
+            process_search_results(chunk.search_results)
+    ```
+  </Step>
+
+  <Step title="適切な型チェックを実装する">
+    `object` フィールドを使って、チャンクを適切なハンドラーに振り分けます。
+
+    ```python theme={null}
+    chunk_handlers = {
+        "chat.reasoning": handle_reasoning,
+        "chat.reasoning.done": handle_reasoning_done,
+        "chat.completion.chunk": handle_content,
+        "chat.completion.done": handle_done
+    }
+
+    handler = chunk_handlers.get(chunk.object)
+    if handler:
+        handler(chunk)
+    ```
+  </Step>
+
+  <Step title="最終チャンクからコストを追跡する">
+    コスト情報は `chat.completion.done` チャンクでのみ取得できます。
+
+    ```python theme={null}
+    if chunk.object == "chat.completion.done":
+        if hasattr(chunk.usage, 'cost'):
+            total_cost = chunk.usage.cost.total_cost
+            print(f"Request cost: ${total_cost:.4f}")
+    ```
+  </Step>
+</Steps>
+
+<div id="migration-from-full-mode">
+  ## Full モードからの移行
+</div>
+
+Full モードから Concise モードへ移行する場合の主な変更点は次のとおりです。
+
+<Tabs>
+  <Tab title="移行前（Full モード）">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "What's the weather?"}],
+        stream=True
+        # stream_mode の既定値は "full"
+    )
+
+    for chunk in stream:
+        # すべてのチャンクは chat.completion.chunk
+        if chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="")
+
+        # 検索結果は複数のチャンクにまたがって現れることがある
+        if hasattr(chunk, 'search_results'):
+            print(f"Sources: {len(chunk.search_results)}")
+    ```
+  </Tab>
+
+  <Tab title="移行後（Concise モード）">
+    ```python theme={null}
+    from perplexity import Perplexity
+
+    client = Perplexity()
+
+    stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=[{"role": "user", "content": "What's the weather?"}],
+        stream=True,
+        stream_mode="concise"  # Concise モードを有効化
+    )
+
+    for chunk in stream:
+        # チャンクタイプが複数あるため、適切に振り分ける
+        if chunk.object == "chat.reasoning":
+            # 新規: 推論ステップを処理
+            if chunk.choices[0].delta.reasoning_steps:
+                print("Reasoning in progress...")
+
+        elif chunk.object == "chat.reasoning.done":
+            # 新規: 推論が完了し、検索結果が利用可能になる
+            if hasattr(chunk, 'search_results'):
+                print(f"Sources: {len(chunk.search_results)}")
+
+        elif chunk.object == "chat.completion.chunk":
+            # コンテンツのチャンク（Full モードと同様）
+            if chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end="")
+
+        elif chunk.object == "chat.completion.done":
+            # 完全なメタデータを含む最終チャンク
+            print(f"\nTotal tokens: {chunk.usage.total_tokens}")
+    ```
+  </Tab>
+</Tabs>
+
+<div id="when-to-use-each-mode">
+  ## 各モードの使い分け
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Full モードが適するケース" icon="clipboard-list">
+    * SDK に集約処理を任せたいシンプルな統合
+    * 既存実装との後方互換性が必要な場合
+    * 推論過程の可視性が不要な場合
+  </Card>
+
+  <Card title="Concise モードが適するケース" icon="bolt">
+    * 帯域幅を最適化したい本番アプリケーション
+    * 推論過程の透明性が求められるアプリケーション
+    * 推論過程を表示するリアルタイムチャット UI
+    * コストを重視するアプリケーション
+  </Card>
+</CardGroup>
+
+<div id="resources">
+  ## リソース
+</div>
+
+* [ストリーミングレスポンスガイド](/ja/docs/agent-api/output-control#streaming-responses) - ストリーミング全般のドキュメント
+* [Sonar API ガイド](/ja/docs/sonar/quickstart) - Sonar API の完全ガイド
+* [API リファレンス - Sonar API](/ja/api-reference/sonar-post) - API ドキュメント

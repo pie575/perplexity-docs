@@ -1,0 +1,363 @@
+---
+title: "Sandbox"
+description: "在 Agent API 请求内部于隔离容器中执行代码。"
+---
+
+<div id="overview">
+  ## 概述
+</div>
+
+`sandbox` 工具让模型能在 Agent API 请求过程中运行代码。智能体可以在隔离容器中执行代码、查看输出，并将结果用于最终回答。
+
+你无需提供代码。只要启用该工具，模型就会根据你的提示词和指令自行编写并运行代码——再读回自己的 `stdout`/`stderr`，将其用于作答。模型实际运行的代码会随响应返回给你 (参见[响应结构](#response-shape)) ，便于你核实究竟执行了什么。
+
+将该工具添加到 `tools` 数组即可启用。模型会根据你的提示词和指令决定何时调用它。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory's stated fix version.",
+      tools=[{"type": "sandbox"}, {"type": "web_search"}],
+      instructions="Use the sandbox and web search to gather and verify the advisories before answering.",
+  )
+
+  print(get_output_text(response))
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: "For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory's stated fix version.",
+    tools: [{ type: 'sandbox' as const }, { type: 'web_search' as const }],
+    instructions: 'Use the sandbox and web search to gather and verify the advisories before answering.',
+  });
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "For 230+ qualifying high-severity CVEs (CVE-YYYY-NNNNN published 2023–2025, CVSS ≥ 7.0), find the canonical vendor security advisory URL per CVE and name the affected product and the advisory'\''s stated fix version.",
+      "tools": [
+        {
+          "type": "sandbox"
+        },
+        {
+          "type": "web_search"
+        }
+      ],
+      "instructions": "Use the sandbox and web search to gather and verify the advisories before answering."
+    }' | jq
+  ```
+</CodeGroup>
+
+<div id="use-cases">
+  ## 使用场景
+</div>
+
+* 网页搜索
+* 数值计算与统计分析
+* 数据清洗、解析与转换
+* 执行代码以验证逻辑或复现错误
+* 生成结构化产物，例如 CSV、JSON 或报告
+* 需要中间文件或计算状态的多步骤工作流
+
+<div id="how-the-container-works">
+  ## 容器的工作方式
+</div>
+
+sandbox 是一个隔离的 Linux 容器。了解它能做什么、不能做什么，有助于你预判 model 何时会调用它，以及会返回什么结果。
+
+| 属性           | 行为                                                                                                                                 |
+| ------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| **语言**       | model 使用 **Python** 进行计算，使用 **bash** 执行 shell 命令。每次执行都会在响应中报告所用的 `language`。                                                       |
+| **网络访问**     | 容器具备网络访问能力，因此 model 生成的代码可以在运行时安装所需的软件包，并访问外部端点。                                                                                   |
+| **单次响应内的状态** | 单次响应中的多次执行共享同一个容器：前序步骤写入的文件和安装的软件包，在后续步骤中依然可用。多步骤工作流和中间文件正是借此实现的。                                                                  |
+| **输出捕获**     | 每次执行都会捕获 `stdout` 和 `stderr`。超大输出会被截断 (每个流约 ~1 MiB) ，因此应让 model 把大体量结果写入文件后返回 (参见[获取生成的文件](#retrieving-generated-files)) ，而不是直接打印。 |
+| **运行时长上限**   | 每次执行都有运行时长上限。一旦超出，该次执行的 `status` 为 `timed_out` (参见[错误处理](#error-handling)) 。对于耗时较长的任务，请使用[后台模式](#running-in-the-background)。       |
+
+<div id="calling-other-tools-from-inside-the-sandbox">
+  ### 在 sandbox 内部调用其他工具
+</div>
+
+容器预装了 Perplexity SDK，因此 model 在 sandbox 中运行的代码可以直接调用 [网页搜索](/zh/docs/agent-api/tools/web-search)、[获取 URL 内容](/zh/docs/agent-api/tools/fetch-url-content) 和 [人物搜索](/zh/docs/agent-api/tools/people-search)——无需你在请求中声明这些工具——并基于其返回结果进行计算。每次此类调用均按标准的单次调用费率计费 (参见[定价](#pricing)) 。
+
+<div id="use-connectors-in-the-sandbox">
+  ## 在 sandbox 中使用连接器
+</div>
+
+部分连接器会将其凭据提供给 sandbox 命令使用。
+
+<Note>
+  **预览版：** 连接器目前处于预览阶段，支持的服务和行为可能会发生变化。
+</Note>
+
+<div id="github-connector">
+  ### GitHub 连接器
+</div>
+
+[GitHub 连接器](/zh/docs/agent-api/tools/connectors#use-connectors-in-the-sandbox)可让 model 在 sandbox 命令中使用你已连接的 GitHub 凭据。
+请在请求中同时启用 `sandbox` 和 GitHub 连接器。
+随后 model 即可使用 `git` 和 `gh` 克隆私有仓库、修改代码、提交更改，以及创建或更新拉取请求。
+它只能访问你所连接的 GitHub 账号允许访问的仓库，也只能执行该账号允许的操作。
+
+有关请求结构和 GitHub 示例，请参见[连接器](/zh/docs/agent-api/tools/connectors)。
+
+<div id="running-in-the-background">
+  ## 后台运行
+</div>
+
+对于耗时较长的 sandbox 调用，可在提交请求时设置 `background: true`，然后按 ID 轮询响应，直至其完成。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import time
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def get_output_text(response) -> str:
+      return "".join(
+          content.text
+          for item in response.output or []
+          if getattr(item, "type", None) == "message"
+          for content in getattr(item, "content", None) or []
+          if getattr(content, "type", None) == "output_text"
+      )
+
+
+  response = client.responses.create(
+      model="openai/gpt-5.6-sol",
+      input="Create a CSV with the first 10 Fibonacci numbers and their squares.",
+      tools=[{"type": "sandbox"}],
+      background=True,
+  )
+
+  while response.status in ("queued", "in_progress"):
+      time.sleep(2)
+      response = client.responses.retrieve(response.id)
+
+  print(get_output_text(response))
+  ```
+
+  ```typescript Typescript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  let response = await client.responses.create({
+    model: 'openai/gpt-5.6-sol',
+    input: 'Create a CSV with the first 10 Fibonacci numbers and their squares.',
+    tools: [{ type: 'sandbox' as const }],
+    background: true,
+  });
+
+  while (response.status === 'queued' || response.status === 'in_progress') {
+    await new Promise((r) => setTimeout(r, 2000));
+    response = await client.responses.retrieve(response.id);
+  }
+
+  console.log(response.output_text);
+  ```
+
+  ```bash cURL theme={null}
+  # 1. 提交请求时设置 background: true
+  curl https://api.perplexity.ai/v1/agent \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "model": "openai/gpt-5.6-sol",
+      "input": "Create a CSV with the first 10 Fibonacci numbers and their squares.",
+      "tools": [{ "type": "sandbox" }],
+      "background": true
+    }'
+
+  # 2. 按 ID 轮询响应，直到状态变为 completed、failed、cancelled 或 incomplete
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY"
+  ```
+</CodeGroup>
+
+<div id="error-handling">
+  ## 错误处理
+</div>
+
+sandbox 错误通过常规的 Agent API 响应返回。
+
+| 情况        | 你会看到什么                                                                                                             |
+| --------- | ------------------------------------------------------------------------------------------------------------------ |
+| **超时**    | `results[]` 中受影响条目 (以及外层 `sandbox_results` 项) 的 `status` 为 `timed_out`。如果请求无法完成，顶层响应状态为 `failed`，并附带一个 `error` 对象。 |
+| **运行时错误** | `results[]` 中对应条目的 `exit_code` 为非零值，`stderr` 中包含错误输出。若容器本身运行成功，Agent API 响应仍可能正常完成。                                |
+| **配额或限制** | 响应失败，并返回说明该限制的 `error` 对象。Agent API 的速率限制同样适用。                                                                     |
+
+<div id="limits-and-quotas">
+  ## 限制与配额
+</div>
+
+sandbox 在 Agent API 请求内运行，因此同样受 Agent API 速率限制的约束。各等级的请求限制请参阅 [Rate Limits &amp; Usage Tiers](/zh/docs/admin/rate-limits-usage-tiers#agent-api-rate-limits)。
+
+<div id="response-shape">
+  ## 响应结构
+</div>
+
+当 model 调用 sandbox 工具时，Agent API 响应的 `output` 数组中会包含一个 `sandbox_results` 项，与其中的 `message` 项并列。如果 model 发起了多次 sandbox 调用，单个响应中可能包含多个 `sandbox_results` 项。
+
+每个 `sandbox_results` 项对应一次 sandbox 调用，并将每次执行的输出嵌套在 `results` 数组中。
+
+| 字段             | 类型       | 说明                                                          |
+| -------------- | -------- | ----------------------------------------------------------- |
+| `type`         | `string` | 始终为 `sandbox_results`。                                      |
+| `call_id`      | `string` | 本次 sandbox 工具调用的标识符。                                        |
+| `container_id` | `string` | 执行代码的隔离容器的标识符。                                              |
+| `language`     | `string` | sandbox 运行该代码所使用的语言 (例如 `python`) 。                         |
+| `code`         | `string` | 在 sandbox 内执行的代码。                                           |
+| `status`       | `string` | 本次 sandbox 调用的总体状态。取值为 `completed`、`timed_out`、`failed` 之一。 |
+| `results`      | `array`  | 容器内每次执行对应一个条目。字段见下文。                                        |
+
+`results` 中的每个条目包含以下字段：
+
+| 字段            | 类型        | 说明                                               |
+| ------------- | --------- | ------------------------------------------------ |
+| `stdout`      | `string`  | 执行过程中捕获的标准输出。                                    |
+| `stderr`      | `string`  | 执行过程中捕获的标准错误。                                    |
+| `exit_code`   | `integer` | 进程退出码。非零表示发生了运行时错误。                              |
+| `duration_ms` | `integer` | 本次执行的实际耗时，单位为毫秒。                                 |
+| `status`      | `string`  | 单次执行的状态。取值为 `completed`、`timed_out`、`failed` 之一。 |
+
+示例：
+
+```json theme={null}
+{
+  "type": "sandbox_results",
+  "call_id": "call_Y1Lo4H6cGFgNVsn4mwC0oSgc",
+  "code": "vals = [(i, i*i) for i in range(1, 11)]\nprint('\\n'.join(f'{a},{b}' for a, b in vals))",
+  "container_id": "i6dr97ven2qfm0sdtvfzc",
+  "language": "python",
+  "results": [
+    {
+      "duration_ms": 9011,
+      "exit_code": 0,
+      "status": "completed",
+      "stderr": "",
+      "stdout": "1,1\n2,4\n3,9\n4,16\n5,25\n6,36\n7,49\n8,64\n9,81\n10,100\n"
+    }
+  ],
+  "status": "completed"
+}
+```
+
+完整的请求和响应结构请参阅 [Agent API 参考文档](/zh/api-reference/agent-post)。
+
+<div id="retrieving-generated-files">
+  ## 获取生成的文件
+</div>
+
+当 sandbox 中的代码写入文件并通过 `share_file` 工具进行分发时，响应的 `output` 数组中会包含一个 `share_file` 项。文件内容不会内联返回——需使用响应的 `id`，通过响应文件端点获取。
+
+列出某个响应生成的文件：
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  files = client.responses.files.list("resp_abc123")
+
+  for file in files.data:
+      print(file.id, file.filename, file.bytes)
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" | jq
+  ```
+</CodeGroup>
+
+```json theme={null}
+{
+  "data": [
+    {
+      "bytes": 8002,
+      "created_at": 1780923289,
+      "filename": "anthropic_news.csv",
+      "id": "9198548a-490b-4119-858f-fd3676b60319",
+      "object": "file"
+    }
+  ],
+  "object": "list"
+}
+```
+
+每个条目包含以下字段：
+
+| 字段           | 类型        | 描述                           |
+| ------------ | --------- | ---------------------------- |
+| `id`         | `string`  | 文件标识符，用于下载文件内容。与响应的 `id` 不同。 |
+| `filename`   | `string`  | sandbox 为该文件指定的名称。           |
+| `bytes`      | `integer` | 文件大小 (字节) 。                  |
+| `created_at` | `integer` | 文件创建时间的 Unix 时间戳。            |
+| `object`     | `string`  | 始终为 `file`。                  |
+
+通过文件的 `id` 下载其内容。该端点返回原始文件字节 (而非 JSON) ，`Content-Type` 与文件类型相匹配，并通过 `Content-Disposition: attachment` 响应头携带原始文件名。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  content = client.responses.files.content(
+      file_id="9198548a-490b-4119-858f-fd3676b60319",
+      response_id="resp_abc123",
+  )
+  content.write_to_file("anthropic_news.csv")
+  ```
+
+  ```bash cURL theme={null}
+  curl https://api.perplexity.ai/v1/agent/$RESPONSE_ID/files/$FILE_ID/content \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -o anthropic_news.csv
+  ```
+</CodeGroup>
+
+<div id="pricing">
+  ## 定价
+</div>
+
+`sandbox` 按三个维度计费：
+
+| 维度             | 价格         | 说明                                                                                                                                                                                      |
+| -------------- | ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **token**      | 按 model 计费 | model 的 token 用量按 Agent API 的 token 定价单独计费。各 model 的费率详见 [模型](/zh/docs/agent-api/models)。                                                                                                  |
+| **sandbox 会话** | 每个会话 $0.03 | 每个 sandbox 容器计费一次。一个会话即单个隔离容器的生命周期，计费上最多涵盖 20 分钟的活跃使用时间——这是计费窗口，而非运行时长上限。                                                                                                               |
+| **所用工具**       | 按工具计费      | 在 sandbox 内运行的代码可以调用 [网页搜索](/zh/docs/agent-api/tools/web-search)、[获取 URL 内容](/zh/docs/agent-api/tools/fetch-url-content) 和 [人物搜索](/zh/docs/agent-api/tools/people-search) 工具，每个工具均按其标准的单次调用费率计费。 |
+
+sandbox 的调用次数统计在 `usage.tool_calls_details.sandbox.invocation` 中。
+
+完整的 Agent API 工具定价表请参见 [定价](/zh/docs/getting-started/pricing#tool-pricing)。

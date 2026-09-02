@@ -1,0 +1,184 @@
+---
+title: "在 Haystack 中使用 Perplexity"
+description: "在 Haystack 流水线中使用 Perplexity 的 Agent API、Embeddings API 以及有据可循的 Search API。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+`perplexity-haystack` 包为 Perplexity 的 Agent API、Embeddings API 以及有据可循的 Search API 提供了 Haystack 组件，助你构建融合对话、嵌入与实时网页搜索的检索增强与智能体流水线。
+
+<Info>
+  **Haystack** 是 [deepset](https://deepset.ai) 推出的开源 Python 框架，用于构建生产级 LLM 应用，包括 RAG 流水线和智能体工作流。更多信息请访问 [haystack.deepset.ai](https://haystack.deepset.ai)。
+</Info>
+
+该集成包含：
+
+* **PerplexityChatGenerator** —— 通过 [Agent API](/zh/docs/agent-api/quickstart) 进行对话生成。
+* **PerplexityTextEmbedder** 和 **PerplexityDocumentEmbedder** —— 通过 [Embeddings API](/zh/docs/embeddings/quickstart) 生成嵌入。
+* **PerplexityWebSearch** —— 通过 [Search API](/zh/docs/search/quickstart) 获取经过排序、有据可循的网页结果。
+
+<div id="installation">
+  ## 安装
+</div>
+
+<Tabs>
+  <Tab title="pip">
+    ```bash theme={null}
+    pip install perplexity-haystack
+    ```
+  </Tab>
+
+  <Tab title="uv">
+    ```bash theme={null}
+    uv add perplexity-haystack
+    ```
+  </Tab>
+</Tabs>
+
+<div id="api-key-setup">
+  ## API key 配置
+</div>
+
+将你的 Perplexity API key 设置为环境变量：
+
+```python theme={null}
+import os
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+```
+
+<Card title="获取 API key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 Perplexity 控制台中生成你的 API key。
+</Card>
+
+<div id="quick-start-chat-agent-api">
+  ## 快速开始：对话 (Agent API)
+</div>
+
+`PerplexityChatGenerator` 基于 Perplexity Agent API 构建，默认使用 `openai/gpt-5.4`。
+
+```python theme={null}
+import os
+
+from haystack.dataclasses import ChatMessage
+from haystack_integrations.components.generators.perplexity import PerplexityChatGenerator
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+client = PerplexityChatGenerator()
+response = client.run(
+    messages=[ChatMessage.from_user("What are Agentic Pipelines? Be brief.")]
+)
+
+print(response["replies"])
+```
+
+<div id="selecting-a-model">
+  ### 选择模型
+</div>
+
+你可以通过 `model` 参数选择任意受支持的 Agent API 模型：
+
+```python theme={null}
+client = PerplexityChatGenerator(model="anthropic/claude-sonnet-4-6")
+```
+
+支持的 model 包括 `openai/gpt-5.4` (默认) 、`openai/gpt-5.5`、`anthropic/claude-sonnet-4-6`、`xai/grok-4.5` 和 `google/gemini-3-flash-preview`。完整列表请参见 [Agent API 模型页面](/zh/docs/agent-api/models)。
+
+<div id="quick-start-embeddings">
+  ## 快速开始：Embeddings
+</div>
+
+使用 `PerplexityTextEmbedder` 对单个查询进行嵌入：
+
+```python theme={null}
+import os
+
+from haystack_integrations.components.embedders.perplexity import PerplexityTextEmbedder
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+embedder = PerplexityTextEmbedder()
+response = embedder.run(text="What is Haystack by deepset?")
+
+print(response["embedding"])
+```
+
+使用 `PerplexityDocumentEmbedder` 对一组文档进行嵌入：
+
+```python theme={null}
+from haystack import Document
+from haystack_integrations.components.embedders.perplexity import PerplexityDocumentEmbedder
+
+docs = [Document(content="What is Haystack by deepset?")]
+result = PerplexityDocumentEmbedder().run(documents=docs)
+
+print(result["documents"][0].embedding)
+```
+
+两种嵌入器默认均使用 `pplx-embed-v1-0.6b`。更大的 `pplx-embed-v1-4b` 模型也可使用——通过 `model` 参数进行设置。
+
+<div id="quick-start-web-search-search-api">
+  ## 快速开始：网页搜索 (Search API)
+</div>
+
+使用 `PerplexityWebSearch`，在 Haystack 流水线中获取有据可循的排序网页结果：
+
+```python theme={null}
+import os
+
+from haystack.utils import Secret
+from haystack_integrations.components.websearch.perplexity import PerplexityWebSearch
+
+os.environ["PERPLEXITY_API_KEY"] = "your_api_key_here"
+
+websearch = PerplexityWebSearch(
+    api_key=Secret.from_env_var("PERPLEXITY_API_KEY"),
+    top_k=5,
+)
+result = websearch.run(query="What is Haystack by deepset?")
+
+documents = result["documents"]
+links = result["links"]
+
+print(documents)
+print(links)
+```
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Haystack 集成" icon="book" href="https://haystack.deepset.ai/integrations/perplexity">
+    haystack.deepset.ai 上的目录条目
+  </Card>
+
+  <Card title="源代码" icon="github" href="https://github.com/deepset-ai/haystack-core-integrations/tree/main/integrations/perplexity">
+    GitHub 上的 perplexity-haystack
+  </Card>
+
+  <Card title="PyPI 包" icon="brand-python" href="https://pypi.org/project/perplexity-haystack">
+    在 PyPI 上查看
+  </Card>
+
+  <Card title="Haystack 文档" icon="book-open" href="https://docs.haystack.deepset.ai">
+    完整的 Haystack 文档
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中需要帮助？
+
+* 查阅 [Haystack 文档](https://docs.haystack.deepset.ai)
+* 在 [haystack-core-integrations](https://github.com/deepset-ai/haystack-core-integrations/issues) 提交 issue
+* 查看我们的[常见问题](/zh/docs/resources/faq)

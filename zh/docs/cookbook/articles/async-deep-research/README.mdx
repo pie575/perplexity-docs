@@ -1,0 +1,401 @@
+---
+title: "深度研究工作流"
+description: "使用 Agent API 的 medium preset 完成全面的多步研究任务 —— 同步调用、批量并发、结果处理与生产环境实践"
+---
+
+本指南介绍如何使用 Agent API 的 `medium` preset 完成全面的多步研究任务。深度研究会执行深入的网络研究，沿来源链条层层追溯，并综合出详尽的答案。你将学到如何运行深度研究查询、处理结果、应对长时间运行的请求，以及运行批量研究工作流。
+
+<Info>
+  Agent API 上的 `medium` preset 会执行多步网络研究，沿来源链条层层追溯，并综合出全面的答案。它会自动选择最合适的 model，并为深度研究配置好工具。有关 preset 的更多信息，请参阅 [Agent API Presets](/zh/docs/agent-api/presets) 文档。
+</Info>
+
+<div id="prerequisites">
+  ## 前置条件
+</div>
+
+安装 Perplexity SDK：
+
+<CodeGroup>
+  ```bash Python theme={null}
+  pip install perplexityai
+  ```
+
+  ```bash TypeScript theme={null}
+  npm install @perplexity-ai/perplexity_ai
+  ```
+</CodeGroup>
+
+如果你还没有 API key：
+
+<Card title="获取你的 Perplexity API Key" icon="key" arrow="True" horizontal="True" iconType="solid" cta="点击这里" href="https://perplexity.ai/account/api">
+  在 API 门户中打开 **API Keys** 标签页，生成一个新的 key。
+</Card>
+
+然后将 API key 导出为环境变量：
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your-api-key"
+```
+
+<div id="basic-deep-research">
+  ## 基础深度研究
+</div>
+
+对于综合性研究查询，使用 `medium` preset。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  response = client.responses.create(
+      preset="medium",
+      input=(
+          "Provide a comprehensive analysis of the current state of nuclear fusion research. "
+          "Cover the main approaches (tokamak, stellarator, inertial confinement, laser-driven), "
+          "key milestones achieved in the past 2 years, major private companies involved, "
+          "and realistic timelines for commercial fusion power."
+      ),
+  )
+
+  print(f"Model: {response.model}")
+  print(f"\n{response.output_text}")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      preset: "medium",
+      input: "Provide a comprehensive analysis of the current state of nuclear fusion research. Cover the main approaches (tokamak, stellarator, inertial confinement, laser-driven), key milestones achieved in the past 2 years, major private companies involved, and realistic timelines for commercial fusion power.",
+  });
+
+  console.log(`Model: ${response.model}`);
+  console.log(`\n${response.output_text}`);
+  ```
+
+  ```bash curl theme={null}
+  curl "https://api.perplexity.ai/v1/agent" \
+    -H "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{
+      "preset": "medium",
+      "input": "Provide a comprehensive analysis of the current state of nuclear fusion research."
+    }'
+  ```
+</CodeGroup>
+
+<Tip>
+  `medium` preset 会自动选择最合适的 model，并针对多步骤研究配置好相应工具。使用 preset 时无需再指定 model 或工具。
+</Tip>
+
+<div id="processing-deep-research-results">
+  ## 处理深度研究结果
+</div>
+
+从深度研究响应中提取关键部分并进行格式化。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+
+  def deep_research(query: str) -> dict:
+      """执行深度研究查询并提取结构化结果。"""
+      print(f"Researching: {query[:80]}...")
+
+      response = client.responses.create(
+          preset="medium",
+          input=query,
+      )
+
+      content = response.output_text
+      usage = response.usage
+
+      return {
+          "content": content,
+          "model": response.model,
+          "tokens": {
+              "input": usage.input_tokens if usage else 0,
+              "output": usage.output_tokens if usage else 0,
+          },
+          "word_count": len(content.split()),
+      }
+
+
+  if __name__ == "__main__":
+      output = deep_research(
+          "What is the current state of solid-state battery technology? "
+          "Cover the leading companies, technical challenges remaining, "
+          "and expected timeline for mass production in EVs."
+      )
+      print(f"\nModel: {output['model']}")
+      print(f"Words: {output['word_count']}")
+      print(f"Tokens: {output['tokens']['input']} in, {output['tokens']['output']} out")
+      print(f"\n{'='*60}\n")
+      print(output["content"][:2000])
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  async function deepResearch(query: string) {
+      console.log(`Researching: ${query.slice(0, 80)}...`);
+
+      const response = await client.responses.create({
+          preset: "medium",
+          input: query,
+      });
+
+      const content = response.output_text;
+      const usage = response.usage;
+
+      return {
+          content,
+          model: response.model,
+          tokens: {
+              input: usage?.input_tokens ?? 0,
+              output: usage?.output_tokens ?? 0,
+          },
+          wordCount: content.split(/\s+/).length,
+      };
+  }
+
+  const output = await deepResearch(
+      "What is the current state of solid-state battery technology? Cover the leading companies, technical challenges remaining, and expected timeline for mass production in EVs."
+  );
+
+  console.log(`\nModel: ${output.model}`);
+  console.log(`Words: ${output.wordCount}`);
+  console.log(`Tokens: ${output.tokens.input} in, ${output.tokens.output} out`);
+  console.log(`\n${"=".repeat(60)}\n`);
+  console.log(output.content.slice(0, 2000));
+  ```
+</CodeGroup>
+
+<div id="deep-research-with-domain-filtering">
+  ## 结合域名过滤的深度研究
+</div>
+
+将深度研究与域名过滤结合，让研究更聚焦、更权威。
+
+<CodeGroup>
+  ```python Python theme={null}
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  # 将深度研究限制在政府和学术来源
+  response = client.responses.create(
+      model="openai/gpt-5.2",
+      input=(
+          "Analyze the current regulatory landscape for AI in healthcare. "
+          "Cover FDA guidance, EU AI Act implications, and recent enforcement actions."
+      ),
+      tools=[{
+          "type": "web_search",
+          "filters": {
+              "search_domain_filter": [".gov", ".europa.eu", "who.int", "nature.com", ".edu"],
+          },
+      }],
+      instructions=(
+          "Conduct thorough research using only government and academic sources. "
+          "Provide specific regulatory references, dates, and policy details."
+      ),
+  )
+
+  print(response.output_text)
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  const client = new Perplexity();
+
+  const response = await client.responses.create({
+      model: "openai/gpt-5.2",
+      input: "Analyze the current regulatory landscape for AI in healthcare. Cover FDA guidance, EU AI Act implications, and recent enforcement actions.",
+      tools: [{
+          type: "web_search" as const,
+          filters: {
+              search_domain_filter: [".gov", ".europa.eu", "who.int", "nature.com", ".edu"],
+          },
+      }],
+      instructions: "Conduct thorough research using only government and academic sources. Provide specific regulatory references, dates, and policy details.",
+  });
+
+  console.log(response.output_text);
+  ```
+</CodeGroup>
+
+<div id="batch-research-with-concurrency">
+  ## 并发批量研究
+</div>
+
+使用 asyncio 和 Perplexity SDK 并发运行多个深度研究查询。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import asyncio
+  import time
+  from perplexity import AsyncPerplexity
+
+
+  async def single_research(client: AsyncPerplexity, query: str) -> dict:
+      """运行单个深度研究查询。"""
+      start = time.time()
+      try:
+          response = await client.responses.create(
+              preset="medium",
+              input=query,
+          )
+          return {
+              "query": query,
+              "content": response.output_text,
+              "model": response.model,
+              "elapsed": time.time() - start,
+          }
+      except Exception as e:
+          return {"query": query, "error": str(e), "elapsed": time.time() - start}
+
+
+  async def batch_research(queries: list[str], max_concurrent: int = 3) -> list[dict]:
+      """在并发限制下运行多个深度研究查询。"""
+      semaphore = asyncio.Semaphore(max_concurrent)
+
+      async def limited_research(client, query):
+          async with semaphore:
+              return await single_research(client, query)
+
+      async with AsyncPerplexity() as client:
+          tasks = [limited_research(client, q) for q in queries]
+          return await asyncio.gather(*tasks)
+
+
+  if __name__ == "__main__":
+      queries = [
+          "What are the latest advances in room-temperature superconductors?",
+          "What is the current state of quantum error correction?",
+          "What are the most promising approaches to carbon capture and storage?",
+      ]
+
+      print(f"Starting batch research: {len(queries)} queries\n")
+      results = asyncio.run(batch_research(queries, max_concurrent=3))
+
+      for r in results:
+          status = "OK" if "content" in r else f"FAILED ({r.get('error')})"
+          word_count = len(r.get("content", "").split()) if "content" in r else 0
+          print(f"  [{r['elapsed']:.0f}s] {r['query'][:60]}... → {status} ({word_count} words)")
+  ```
+
+  ```typescript TypeScript theme={null}
+  import Perplexity from '@perplexity-ai/perplexity_ai';
+
+  interface ResearchResult {
+    query: string;
+    content?: string;
+    model?: string;
+    elapsed: number;
+    error?: string;
+  }
+
+  const client = new Perplexity();
+
+  async function singleResearch(query: string): Promise<ResearchResult> {
+    const start = Date.now();
+    try {
+      const response = await client.responses.create({
+        preset: 'medium',
+        input: query,
+      });
+      return {
+        query,
+        content: response.output_text,
+        model: response.model,
+        elapsed: (Date.now() - start) / 1000,
+      };
+    } catch (e) {
+      return { query, error: String(e), elapsed: (Date.now() - start) / 1000 };
+    }
+  }
+
+  async function batchResearch(queries: string[], maxConcurrent = 3) {
+    const results: ResearchResult[] = [];
+    const queue = [...queries];
+    async function worker() {
+      while (queue.length) {
+        const q = queue.shift()!;
+        results.push(await singleResearch(q));
+      }
+    }
+    await Promise.all(
+      Array.from({ length: maxConcurrent }, () => worker())
+    );
+    return results;
+  }
+
+  const queries = [
+    'What are the latest advances in room-temperature superconductors?',
+    'What is the current state of quantum error correction?',
+    'What are the most promising approaches to carbon capture and storage?',
+  ];
+
+  console.log(`Starting batch research: ${queries.length} queries\n`);
+  const results = await batchResearch(queries, 3);
+
+  for (const r of results) {
+    const status = r.content ? 'OK' : `FAILED (${r.error})`;
+    const words = r.content ? r.content.split(/\s+/).length : 0;
+    console.log(`  [${r.elapsed.toFixed(0)}s] ${r.query.slice(0, 60)}... → ${status} (${words} words)`);
+  }
+  ```
+</CodeGroup>
+
+<Warning>
+  深度研究查询会消耗大量计算资源。请将并发请求数控制在 3 到 5 个，以免超出速率限制而被限流。具体阈值请查看你的[速率限制](/zh/docs/admin/rate-limits-usage-tiers)。
+</Warning>
+
+<div id="tips-and-best-practices">
+  ## 提示与最佳实践
+</div>
+
+1. **使用 `medium` preset**，这是最简单的集成方式。它会自动选择最合适的 model 并配置好工具。
+
+2. **在需要权威来源时结合域名过滤使用。** 通过 `search_domain_filter` 将结果限定在特定域名。
+
+3. **使用 `instructions`** 引导研究的深度和重点，明确说明需要涵盖哪些方面。
+
+4. **限制并发。** 同时运行过多深度研究查询可能触发速率限制。可用信号量将并发请求数控制在 3-5 个。
+
+5. **批量工作流请使用异步客户端。** `AsyncPerplexity` 可在不阻塞的情况下发起并发请求。
+
+6. **设置 `max_output_tokens`** 以控制成本，适用于只需简短摘要、无需详尽报告的场景。
+
+<div id="next-steps">
+  ## 后续步骤
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Agent API Presets" icon="settings" href="/zh/docs/agent-api/presets">
+    可用 preset 的完整参考，包括 medium。
+  </Card>
+
+  <Card title="Agent API 快速入门" icon="rocket" href="/zh/docs/agent-api/quickstart">
+    开始使用 Agent API，接入多家模型提供方与各类工具。
+  </Card>
+
+  <Card title="域名过滤" icon="filter" href="/zh/docs/cookbook/articles/search-domain-filtering/README">
+    控制搜索包含或排除哪些域名。
+  </Card>
+
+  <Card title="速率限制" icon="gauge-max" href="/zh/docs/admin/rate-limits-usage-tiers">
+    了解研究类与批量工作流的速率限制。
+  </Card>
+</CardGroup>

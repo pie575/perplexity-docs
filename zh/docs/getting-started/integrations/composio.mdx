@@ -1,0 +1,176 @@
+---
+title: "在 Composio 中使用 Perplexity"
+description: "通过 Composio 将 Perplexity 的 Agent、Search 和 Embeddings API 以 MCP 工具或直接 API 操作的形式，开放给任意 AI 智能体框架使用。"
+---
+
+import SonarDeprecationNotice from "/snippets/zh/sonar-deprecation-notice.mdx";
+
+<SonarDeprecationNotice />
+
+<div id="overview">
+  ## 概览
+</div>
+
+[Composio](https://composio.dev) 是面向 AI 智能体的通用工具网关。Composio Perplexity 工具包将 Perplexity 的 Agent、Search 和 Embeddings API 封装为工具，任何智能体框架都可通过单个 MCP URL 或直接的 API 集成来调用。
+
+<Info>
+  **Composio** 为 1000 多个应用处理身份验证、凭据安全存储、OAuth 流程和工具路由。详见 [composio.dev](https://composio.dev)。
+</Info>
+
+该工具包提供以下 Perplexity 操作：
+
+* **Execute Agent** — `POST /v1/agent` (Agent API 响应)
+* **Perplexity Search (Raw Results)** — `POST /search`
+* **Create Embeddings** — `POST /v1/embeddings`
+* **Create Contextualized Embeddings** — `POST /v1/contextualizedembeddings`
+* **List Models** — `GET /v1/models`
+
+<div id="prerequisites">
+  ## 前提条件
+</div>
+
+* 一个 [Composio 账户](https://composio.dev)及其 API key
+* 一个 Perplexity API key
+
+<Card title="获取 API Key" icon="key" href="https://console.perplexity.ai/project/keys">
+  在 API 门户中生成你的 Perplexity API key。
+</Card>
+
+<div id="installation">
+  ## 安装
+</div>
+
+```bash theme={null}
+pip install composio
+```
+
+如需集成智能体框架，请在安装 Composio 的同时安装对应的框架 SDK (Composio 支持 Claude Agent SDK、OpenAI Agents SDK、LangChain、LlamaIndex、Mastra、Pydantic AI、AutoGen、CrewAI、Google ADK 等) 。
+
+<div id="quick-start-tool-router-mcp">
+  ## 快速开始：Tool Router (MCP)
+</div>
+
+Tool Router 将 Perplexity 暴露为一个 MCP 服务器，供你的智能体连接使用。它可与任何兼容 MCP 的客户端配合使用 (Claude Code、Cursor、OpenCode 等) 。
+
+```python theme={null}
+from composio import Composio
+
+composio = Composio(api_key="your-composio-api-key")
+session = composio.create(user_id="your-user-id")
+url = session.mcp.url
+
+print(f"MCP URL: {url}")
+```
+
+将该 URL 配置到 agent 的 MCP 配置中：
+
+```python theme={null}
+import asyncio
+from claude_agent_sdk import ClaudeSDKClient, ClaudeAgentOptions
+
+options = ClaudeAgentOptions(
+    permission_mode="bypassPermissions",
+    mcp_servers={
+        "tool_router": {
+            "type": "http",
+            "url": url,
+            "headers": {"x-api-key": "your-composio-api-key"},
+        }
+    },
+    system_prompt="You are a helpful assistant with access to Perplexity tools.",
+    max_turns=10,
+)
+
+async def main():
+    async with ClaudeSDKClient(options=options) as client:
+        await client.query("Summarize the latest AI research papers")
+        async for message in client.receive_response():
+            if hasattr(message, "content"):
+                for block in message.content:
+                    if hasattr(block, "text"):
+                        print(block.text)
+
+asyncio.run(main())
+```
+
+<div id="quick-start-direct-api-actions">
+  ## 快速开始：直接 API 操作
+</div>
+
+你也可以不经过 MCP 层，直接从 Composio 执行 Perplexity 操作：
+
+```python theme={null}
+from composio import Composio
+
+composio = Composio(api_key="your-composio-api-key")
+
+# 一次性连接用户的 Perplexity 账户
+composio.toolkits.authorize(
+    user_id="your-user-id",
+    toolkit="perplexityai",
+)
+
+# 发起一次 Agent API 请求
+result = composio.tools.execute(
+    slug="PERPLEXITYAI_EXECUTE_AGENT",
+    user_id="your-user-id",
+    arguments={
+        "model": "openai/gpt-5.6-sol",
+        "tools": [{"type": "web_search"}],
+        "input": "What are the latest fusion-energy headlines?",
+    },
+)
+
+print(result["data"])
+```
+
+<div id="supported-agent-frameworks">
+  ## 支持的智能体框架
+</div>
+
+Composio 的 Perplexity 工具包适用于 Composio 支持的所有智能体框架，包括：
+
+* ChatGPT、OpenAI Agents SDK、Codex
+* Claude Agents SDK、Claude Code
+* Cursor、VS Code、OpenCode
+* Google ADK、LangChain、AI SDK、Mastra AI
+* LlamaIndex、CrewAI、Pydantic AI、AutoGen
+
+每个框架均在 [Composio Perplexity 工具包](https://composio.dev/toolkits/perplexityai)页面中提供了专门的配置指南。
+
+<div id="authentication">
+  ## 身份验证
+</div>
+
+Composio 会安全存储你的 Perplexity API key，并在每次请求时自动注入。你只需在工具包授权流程中提供一次 key——既可以通过 Composio 控制台，也可以调用 `composio.toolkits.authorize(...)` 以编程方式完成。后续每次调用的 token 刷新、作用域管理和请求签名均由 Composio 处理。
+
+<div id="links-resources">
+  ## 链接与资源
+</div>
+
+<CardGroup cols={2}>
+  <Card title="Composio Perplexity 工具包" icon="toolbox" href="https://composio.dev/toolkits/perplexityai">
+    完整的工具包文档，含各框架专属指南。
+  </Card>
+
+  <Card title="Composio 文档" icon="book" href="https://docs.composio.dev">
+    Composio 平台文档。
+  </Card>
+
+  <Card title="Perplexity API 参考" icon="code" href="/zh/api-reference">
+    完整的 Perplexity API 参考。
+  </Card>
+
+  <Card title="Agent API 模型" icon="sparkles" href="/zh/docs/agent-api/models">
+    可用模型与定价。
+  </Card>
+</CardGroup>
+
+<div id="support">
+  ## 支持
+</div>
+
+集成过程中需要帮助？
+
+* 浏览 [Composio 文档](https://docs.composio.dev)
+* 查看我们的[常见问题](/zh/docs/resources/faq)

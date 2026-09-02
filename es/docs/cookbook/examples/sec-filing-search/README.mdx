@@ -1,0 +1,346 @@
+---
+title: "Búsqueda de informes de la SEC"
+description: "Usa el filtrado por dominio de búsqueda para consultar SEC.gov y EDGAR en busca de informes financieros, extraer datos financieros clave y crear resúmenes financieros estructurados"
+---
+
+<div id="sec-filing-search">
+  # Búsqueda de informes de la SEC
+</div>
+
+Busca informes financieros en SEC.gov y EDGAR mediante filtrado por dominio, extrae métricas financieras clave y genera resúmenes estructurados de los informes de empresas cotizadas. Este ejemplo muestra cómo extraer datos financieros en la práctica con la Agent API y filtros de dominio específicos.
+
+<div id="features">
+  ## Características
+</div>
+
+* Búsqueda exclusiva en SEC.gov y EDGAR mediante `search_domain_filter`
+* Extracción de métricas clave de los informes 10-K, 10-Q y 8-K
+* Salida JSON estructurada para datos financieros
+* Comparación de informes entre empresas o periodos
+* Combinación de datos de la SEC con un contexto de mercado más amplio mediante búsqueda web
+
+<Info>
+  Este ejemplo utiliza la herramienta `web_search` de la Agent API con filtrado por dominio para apuntar específicamente a SEC.gov. La búsqueda se fundamenta en los informes reales ante la SEC y no en informes secundarios.
+</Info>
+
+<div id="installation">
+  ## Instalación
+</div>
+
+```bash theme={null}
+pip install perplexityai
+```
+
+```bash theme={null}
+export PERPLEXITY_API_KEY="your_api_key_here"
+```
+
+<div id="usage">
+  ## Uso
+</div>
+
+Guarda el código completo que se muestra a continuación en `sec_search.py` y ejecútalo:
+
+```bash theme={null}
+python sec_search.py "Apple 10-K 2025 revenue and operating income"
+```
+
+Compara empresas:
+
+```bash theme={null}
+python sec_search.py --compare AAPL MSFT GOOGL --metric revenue
+```
+
+<div id="full-code">
+  ## Código completo
+</div>
+
+<CodeGroup>
+  ```python Python theme={null}
+  import sys
+  import json
+  import argparse
+  from perplexity import Perplexity
+
+  client = Perplexity()
+
+  SEC_DOMAINS = [
+      "sec.gov",
+      "edgar.sec.gov",
+      "efts.sec.gov",
+  ]
+
+
+  def search_sec_filings(query: str) -> dict:
+      """Search SEC filings with domain-filtered web search."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=query,
+          tools=[{
+              "type": "web_search",
+              "filters": {
+                  "search_domain_filter": SEC_DOMAINS,
+              },
+          }],
+          instructions=(
+              "You are a financial analyst assistant. Search SEC filings for the requested "
+              "information. Cite specific filing types (10-K, 10-Q, 8-K) and dates. "
+              "Report exact numbers from the filings, not estimates."
+          ),
+          max_output_tokens=2048,
+      )
+
+      return {
+          "query": query,
+          "answer": response.output_text,
+          "model": response.model,
+          "cost": response.usage.cost.total_cost,
+      }
+
+
+  def extract_financial_metrics(company: str, filing_type: str = "10-K") -> dict:
+      """Extract structured financial metrics from SEC filings."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=f"Find the most recent {filing_type} filing for {company} on SEC EDGAR and extract key financial metrics.",
+          tools=[{
+              "type": "web_search",
+              "filters": {
+                  "search_domain_filter": SEC_DOMAINS,
+              },
+          }],
+          instructions=(
+              f"Search SEC EDGAR for {company}'s most recent {filing_type} filing. "
+              "Extract the exact financial figures reported. Use numbers directly from the filing."
+          ),
+          response_format={
+              "type": "json_schema",
+              "json_schema": {
+                  "name": "sec_financials",
+                  "schema": {
+                      "type": "object",
+                      "properties": {
+                          "company": {"type": "string"},
+                          "ticker": {"type": "string"},
+                          "filing_type": {"type": "string"},
+                          "filing_period": {"type": "string"},
+                          "filing_date": {"type": "string"},
+                          "total_revenue": {"type": "string"},
+                          "net_income": {"type": "string"},
+                          "total_assets": {"type": "string"},
+                          "total_debt": {"type": "string"},
+                          "operating_income": {"type": "string"},
+                          "eps_diluted": {"type": "string"},
+                          "cash_and_equivalents": {"type": "string"},
+                      },
+                      "required": [
+                          "company", "ticker", "filing_type", "filing_period", "filing_date",
+                          "total_revenue", "net_income", "total_assets", "total_debt",
+                          "operating_income", "eps_diluted", "cash_and_equivalents",
+                      ],
+                      "additionalProperties": False,
+                  },
+              },
+          },
+      )
+
+      return json.loads(response.output_text)
+
+
+  def compare_companies(tickers: list[str], metric: str = "revenue") -> list[dict]:
+      """Compare a specific financial metric across multiple companies."""
+      results = []
+      for ticker in tickers:
+          print(f"  Searching {ticker}...")
+          try:
+              data = extract_financial_metrics(ticker)
+              results.append(data)
+          except Exception as e:
+              results.append({"ticker": ticker, "error": str(e)})
+      return results
+
+
+  def search_filing_changes(company: str) -> str:
+      """Search for material changes or risk factors in recent filings."""
+      response = client.responses.create(
+          model="openai/gpt-5.4",
+          input=(
+              f"What are the key risk factors and material changes disclosed in {company}'s "
+              f"most recent 10-K or 10-Q filing on SEC EDGAR?"
+          ),
+          tools=[{
+              "type": "web_search",
+              "filters": {
+                  "search_domain_filter": SEC_DOMAINS,
+              },
+          }],
+          instructions=(
+              "Focus on risk factors (Item 1A) and material changes. "
+              "Cite specific sections and filing dates."
+          ),
+          max_output_tokens=2048,
+      )
+      return response.output_text
+
+
+  def main():
+      parser = argparse.ArgumentParser(description="SEC Filing Search")
+      parser.add_argument("query", nargs="?", help="Search query for SEC filings")
+      parser.add_argument("--extract", help="Extract financial metrics for a company ticker")
+      parser.add_argument("--compare", nargs="+", help="Compare companies by ticker")
+      parser.add_argument("--metric", default="revenue", help="Metric to compare")
+      parser.add_argument("--risks", help="Search risk factors for a company")
+      parser.add_argument("--json", action="store_true", help="Output as JSON")
+      args = parser.parse_args()
+
+      if args.compare:
+          print(f"Comparing {len(args.compare)} companies...\n")
+          results = compare_companies(args.compare, args.metric)
+          if args.json:
+              print(json.dumps(results, indent=2))
+          else:
+              for r in results:
+                  if "error" in r:
+                      print(f"  {r['ticker']}: ERROR - {r['error']}")
+                  else:
+                      print(f"  {r['company']} ({r['ticker']}) — {r['filing_type']} ({r['filing_period']})")
+                      print(f"    Revenue: {r['total_revenue']}")
+                      print(f"    Net Income: {r['net_income']}")
+                      print(f"    Operating Income: {r['operating_income']}")
+                      print(f"    EPS: {r['eps_diluted']}")
+                      print()
+
+      elif args.extract:
+          print(f"Extracting financials for {args.extract}...\n")
+          data = extract_financial_metrics(args.extract)
+          if args.json:
+              print(json.dumps(data, indent=2))
+          else:
+              print(f"{data['company']} ({data['ticker']})")
+              print(f"Filing: {data['filing_type']} for {data['filing_period']} (filed {data['filing_date']})")
+              print(f"  Revenue:          {data['total_revenue']}")
+              print(f"  Net Income:       {data['net_income']}")
+              print(f"  Operating Income: {data['operating_income']}")
+              print(f"  Total Assets:     {data['total_assets']}")
+              print(f"  Total Debt:       {data['total_debt']}")
+              print(f"  Cash:             {data['cash_and_equivalents']}")
+              print(f"  EPS (diluted):    {data['eps_diluted']}")
+
+      elif args.risks:
+          print(f"Searching risk factors for {args.risks}...\n")
+          print(search_filing_changes(args.risks))
+
+      elif args.query:
+          result = search_sec_filings(args.query)
+          if args.json:
+              print(json.dumps(result, indent=2))
+          else:
+              print(result["answer"])
+
+      else:
+          print("Error: Provide a query, --extract TICKER, --compare TICKERS, or --risks COMPANY", file=sys.stderr)
+          sys.exit(1)
+
+
+  if __name__ == "__main__":
+      main()
+  ```
+</CodeGroup>
+
+<div id="example-output">
+  ## Ejemplo de salida
+</div>
+
+<div id="basic-filing-search">
+  ### Búsqueda básica de informes de la SEC
+</div>
+
+```bash theme={null}
+python sec_search.py "Apple 10-K 2025 revenue breakdown by segment"
+```
+
+```
+Según el informe 10-K del ejercicio fiscal 2025 de Apple (presentado en octubre de 2025),
+los ingresos netos totales ascendieron a 394.300 millones de dólares. Ingresos por segmento:
+
+- iPhone: 200.600 M USD (50,8 %)
+- Servicios: 96.200 M USD (24,4 %)
+- Mac: 29.400 M USD (7,5 %)
+- iPad: 28.300 M USD (7,2 %)
+- Wearables, hogar y accesorios: 39.800 M USD (10,1 %)
+
+Los ingresos por servicios crecieron un 14 % interanual y siguen siendo el
+segmento de mayor crecimiento. (Fuente: Apple Inc. 10-K, SEC EDGAR)
+```
+
+<div id="structured-extraction">
+  ### Extracción estructurada
+</div>
+
+```bash theme={null}
+python sec_search.py --extract AAPL --json
+```
+
+```json theme={null}
+{
+  "company": "Apple Inc.",
+  "ticker": "AAPL",
+  "filing_type": "10-K",
+  "filing_period": "FY2025 (ending September 2025)",
+  "filing_date": "2025-10-31",
+  "total_revenue": "$394.3 billion",
+  "net_income": "$101.2 billion",
+  "total_assets": "$352.6 billion",
+  "total_debt": "$98.3 billion",
+  "operating_income": "$123.4 billion",
+  "eps_diluted": "$6.72",
+  "cash_and_equivalents": "$29.9 billion"
+}
+```
+
+<div id="company-comparison">
+  ### Comparación de empresas
+</div>
+
+```bash theme={null}
+python sec_search.py --compare AAPL MSFT GOOGL
+```
+
+```
+Comparando 3 empresas...
+
+  Apple Inc. (AAPL) — 10-K (FY2025)
+    Ingresos: 394,3 mil millones de USD
+    Beneficio neto: 101,2 mil millones de USD
+    Resultado operativo: 123,4 mil millones de USD
+    BPA: 6,72 USD
+
+  Microsoft Corporation (MSFT) — 10-K (FY2025)
+    Ingresos: 254,2 mil millones de USD
+    Beneficio neto: 89,4 mil millones de USD
+    Resultado operativo: 115,6 mil millones de USD
+    BPA: 12,01 USD
+
+  Alphabet Inc. (GOOGL) — 10-K (FY2025)
+    Ingresos: 348,2 mil millones de USD
+    Beneficio neto: 86,7 mil millones de USD
+    Resultado operativo: 108,3 mil millones de USD
+    BPA: 7,02 USD
+```
+
+<Tip>
+  SEC EDGAR contiene los datos financieros oficiales y auditados de todas las empresas que cotizan en bolsa en EE. UU. Al restringir la búsqueda a `sec.gov` y `edgar.sec.gov`, garantizas que tus datos financieros provengan de los informes presentados ante el regulador (fuente primaria) y no de informes secundarios.
+</Tip>
+
+<Warning>
+  Los datos financieros extraídos por el modelo deben contrastarse con el informe original antes de usarlos en reportes oficiales o decisiones de inversión. En ocasiones, el modelo puede interpretar mal tablas o notas al pie.
+</Warning>
+
+<div id="limitations">
+  ## Limitaciones
+</div>
+
+* La búsqueda se limita a lo que SEC EDGAR pone a disposición pública y permite indexar.
+* Es posible que los informes más recientes aún no estén indexados por el motor de búsqueda.
+* Las tablas financieras complejas (comparativas de varios años, desgloses por segmento con notas al pie) pueden resumirse en lugar de extraerse por completo.
+* El modelo proporciona los datos tal como aparecen en los informes. No realiza ajustes por cambios en los métodos contables entre periodos.

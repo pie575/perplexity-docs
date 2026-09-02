@@ -1,0 +1,574 @@
+---
+title: "API keyの管理"
+description: "安全なアクセスを実現するために、API keyを生成・無効化・ローテーションする方法を説明します"
+---
+
+<div id="overview">
+  ## 概要
+</div>
+
+API keyは、Perplexity APIへのリクエストを認証するために不可欠です。このガイドでは、認証トークン管理エンドポイントを使ってAPI keyを作成・管理・ローテーションする方法を説明します。
+
+<Warning>
+  **API keyが表示されるのは一度だけです。** コンソールまたはプログラム経由でAPI keyを作成すると、その時点で完全なトークンが返されますが、**後から再取得することはできません**。ページを閉じたりレスポンスを破棄したりする前に、必ず安全な場所に保存してください。
+</Warning>
+
+<Info>
+  API keyは機密性の高い認証情報として扱ってください。安全に保管し、クライアントサイドのコードや公開リポジトリに絶対に含めないでください。
+</Info>
+
+<div id="getting-started-create-your-project-first">
+  ## はじめに: まずプロジェクトを作成する
+</div>
+
+<Warning>
+  **重要な前提条件**: API keyを生成するには、事前にPerplexityのWebインターフェースでプロジェクトを作成しておく必要があります。
+</Warning>
+
+<Steps>
+  <Step title="プロジェクトを作成する">
+    Projectsページを開き、最初のプロジェクトを作成します。
+
+    **[プロジェクト設定を開く →](https://console.perplexity.ai/project/settings)**
+
+    プロジェクトを使うと、キーを整理し、チームや環境ごとにアクセスを管理できます。
+
+    <Tip>
+      プロジェクトには内容がわかる名前 (例: 「Production」や「Development」) を付けておくと、管理しやすくなります。
+    </Tip>
+  </Step>
+
+  <Step title="API keyを生成する">
+    プロジェクトを作成したら、API Keysページを開いて最初のキーを生成します。
+
+    **[API keyを生成する →](https://console.perplexity.ai/project/keys)**
+
+    各プロジェクト内では、用途や環境ごとに複数のキーを作成できます。キーの完全な値が表示されるのは作成時の一度だけです。ページを離れる前に必ずコピーしてください。
+  </Step>
+</Steps>
+
+<Note>
+  Webインターフェースで最初のAPI keyを作成した後は、以下のエンドポイントを使ってプログラムから追加のキーを生成・管理できます。
+</Note>
+
+<div id="key-management-endpoints">
+  ## キー管理エンドポイント
+</div>
+
+Perplexity は、API key をプログラムから管理するための 2 つのエンドポイントを提供しています。
+
+* **`/generate_auth_token`** - 新しい API key を作成します
+* **`/revoke_auth_token`** - 既存の API key を失効させます
+
+<Warning>
+  API key は一度失効させると復元できません。古いキーを失効させる前に、アプリケーション側を新しいキーに更新してください。
+</Warning>
+
+<div id="generating-api-keys">
+  ## API keyの生成
+</div>
+
+新しいAPI keyをプログラムから作成します。必ず内容がわかる `token_name` を指定してください。キーの作成後はトークンの値全体を確認できなくなるため、この名前が後からキーを識別する主な手段になります。
+
+<div id="request">
+  ### リクエスト
+</div>
+
+<CodeGroup>
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/generate_auth_token \
+    --header "Authorization: Bearer YOUR_EXISTING_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "token_name": "Production API Key"
+    }'
+  ```
+
+  ```python Python theme={null}
+  import requests
+
+  url = "https://api.perplexity.ai/generate_auth_token"
+  headers = {
+      "Authorization": "Bearer YOUR_EXISTING_API_KEY",
+      "Content-Type": "application/json"
+  }
+  payload = {
+      "token_name": "Production API Key"  # 任意
+  }
+
+  response = requests.post(url, headers=headers, json=payload)
+  data = response.json()
+  print(f"New API Key: {data['auth_token']}")
+  print(f"Created at: {data['created_at_epoch_seconds']}")
+  ```
+
+  ```typescript Typescript theme={null}
+  const response = await fetch("https://api.perplexity.ai/generate_auth_token", {
+    method: "POST",
+    headers: {
+      "Authorization": "Bearer YOUR_EXISTING_API_KEY",
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      token_name: "Production API Key"  // 任意
+    })
+  });
+
+  const data = await response.json();
+  console.log(`New API Key: ${data.auth_token}`);
+  console.log(`Created at: ${data.created_at_epoch_seconds}`);
+  ```
+</CodeGroup>
+
+<div id="response">
+  ### レスポンス
+</div>
+
+```json theme={null}
+{
+  "auth_token": "pplx-1234567890abcdef",
+  "created_at_epoch_seconds": 1735689600,
+  "token_name": "Production API Key"
+}
+```
+
+<Warning>
+  `auth_token` は直ちに安全な場所へ保管してください。トークンの完全な値が返されるのはこのときだけ**のみ**であり、後からエンドポイントやコンソールで取得することはできません。
+</Warning>
+
+<div id="revoking-api-keys">
+  ## API keyの失効
+</div>
+
+不要になったAPI key、または漏洩の可能性があるAPI keyは失効させてください。
+
+<div id="request-2">
+  ### リクエスト
+</div>
+
+<CodeGroup>
+  ```bash cURL theme={null}
+  curl --request POST \
+    --url https://api.perplexity.ai/revoke_auth_token \
+    --header "Authorization: Bearer $PERPLEXITY_API_KEY" \
+    --header "Content-Type: application/json" \
+    --data '{
+      "auth_token": "pplx-1234567890abcdef"
+    }'
+  ```
+
+  ```python Python theme={null}
+  import os
+  import requests
+
+  url = "https://api.perplexity.ai/revoke_auth_token"
+  headers = {
+      "Authorization": f"Bearer {os.environ.get('PERPLEXITY_API_KEY')}",
+      "Content-Type": "application/json"
+  }
+  payload = {
+      "auth_token": "pplx-1234567890abcdef"
+  }
+
+  response = requests.post(url, headers=headers, json=payload)
+  if response.status_code == 200:
+      print("API key successfully revoked")
+  ```
+
+  ```typescript Typescript theme={null}
+  const response = await fetch("https://api.perplexity.ai/revoke_auth_token", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${process.env.PERPLEXITY_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      auth_token: "pplx-1234567890abcdef"
+    })
+  });
+
+  if (response.status === 200) {
+    console.log("API key successfully revoked");
+  }
+  ```
+</CodeGroup>
+
+<div id="response-2">
+  ### レスポンス
+</div>
+
+失効に成功した場合、`200 OK` ステータスコードを返します。
+
+<div id="api-key-rotation">
+  ## API keyのローテーション
+</div>
+
+定期的なキーのローテーションは、キー漏洩時の影響を最小限に抑えるためのセキュリティのベストプラクティスです。ダウンタイムなしでキーをローテーションする方法は次のとおりです。
+
+<div id="rotation-strategy">
+  ### ローテーション戦略
+</div>
+
+<Steps>
+  <Step title="新しいキーを生成する">
+    現在のキーが有効なまま、新しい API key を作成します。
+
+    ```python theme={null}
+    # 新しいキーを生成
+    new_key_response = requests.post(
+        "https://api.perplexity.ai/generate_auth_token",
+        headers={"Authorization": f"Bearer {current_key}"},
+        json={"token_name": f"Rotated Key - {datetime.now().isoformat()}"}
+    )
+    new_key = new_key_response.json()["auth_token"]
+    ```
+  </Step>
+
+  <Step title="アプリケーションを更新する">
+    新しいキーをアプリケーションにデプロイします。
+
+    ```python theme={null}
+    # 環境変数またはシークレット管理を更新
+    os.environ["PERPLEXITY_API_KEY"] = new_key
+
+    # 新しいキーが動作することを確認
+    test_response = requests.post(
+        "https://api.perplexity.ai/v1/agent",
+        headers={"Authorization": f"Bearer {new_key}"},
+        json={
+            "preset": "low",
+            "input": "Test"
+        }
+    )
+    assert test_response.status_code == 200
+    ```
+  </Step>
+
+  <Step title="移行状況を監視する">
+    次の手順に進む前に、すべてのサービスが新しいキーを使用していることを確認します。
+
+    ```python theme={null}
+    # アプリケーションのログを監視して、
+    # すべてのインスタンスが新しいキーを使用していることを確認する
+    time.sleep(300)  # 反映されるまで待機
+    ```
+  </Step>
+
+  <Step title="古いキーを失効させる">
+    確認できたら、古いキーを失効させます。
+
+    ```python theme={null}
+    # 古いキーを無効化
+    revoke_response = requests.post(
+        "https://api.perplexity.ai/revoke_auth_token",
+        headers={"Authorization": f"Bearer {new_key}"},
+        json={"auth_token": current_key}
+    )
+    assert revoke_response.status_code == 200
+    print("Key rotation completed successfully")
+    ```
+  </Step>
+</Steps>
+
+<div id="automated-rotation-example">
+  ### 自動ローテーションの例
+</div>
+
+キーの自動ローテーションを行うスクリプトの完全な例を以下に示します。
+
+<CodeGroup>
+  ```python Python theme={null}
+  import requests
+  import os
+  import time
+  from datetime import datetime
+  import logging
+
+  logging.basicConfig(level=logging.INFO)
+  logger = logging.getLogger(__name__)
+
+  class PerplexityKeyRotator:
+      def __init__(self, current_key):
+          self.base_url = "https://api.perplexity.ai"
+          self.current_key = current_key
+
+      def generate_new_key(self, name=None):
+          """Generate a new API key"""
+          url = f"{self.base_url}/generate_auth_token"
+          headers = {"Authorization": f"Bearer {self.current_key}"}
+          payload = {}
+          if name:
+              payload["token_name"] = name
+
+          response = requests.post(url, headers=headers, json=payload)
+          response.raise_for_status()
+          return response.json()
+
+      def test_key(self, key):
+          """Test if a key is valid"""
+          url = f"{self.base_url}/v1/agent"
+          headers = {"Authorization": f"Bearer {key}"}
+          payload = {
+              "preset": "low",
+              "input": "Test",
+              "max_output_tokens": 1
+          }
+
+          try:
+              response = requests.post(url, headers=headers, json=payload)
+              return response.status_code == 200
+          except:
+              return False
+
+      def revoke_key(self, key_to_revoke):
+          """Revoke an API key"""
+          url = f"{self.base_url}/revoke_auth_token"
+          headers = {"Authorization": f"Bearer {self.current_key}"}
+          payload = {"auth_token": key_to_revoke}
+
+          response = requests.post(url, headers=headers, json=payload)
+          return response.status_code == 200
+
+      def rotate_key(self, update_callback=None):
+          """Perform complete key rotation"""
+          logger.info("Starting key rotation...")
+
+          # ステップ1: 新しいキーを生成
+          new_key_data = self.generate_new_key(
+              name=f"Rotated-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
+          )
+          new_key = new_key_data["auth_token"]
+          logger.info(f"New key generated: {new_key[:10]}...")
+
+          # ステップ2: 新しいキーをテスト
+          if not self.test_key(new_key):
+              raise Exception("New key validation failed")
+          logger.info("New key validated successfully")
+
+          # ステップ3: アプリケーションを更新（コールバック）
+          if update_callback:
+              update_callback(new_key)
+              logger.info("Application updated with new key")
+
+          # ステップ4: 反映を待機
+          logger.info("Waiting for propagation...")
+          time.sleep(30)
+
+          # ステップ5: 古いキーを失効
+          old_key = self.current_key
+          self.current_key = new_key  # 失効処理には新しいキーを使用
+
+          if self.revoke_key(old_key):
+              logger.info("Old key revoked successfully")
+          else:
+              logger.warning("Failed to revoke old key")
+
+          logger.info("Key rotation completed")
+          return new_key
+
+  # 使用例
+  def update_environment(new_key):
+      """Update your environment with the new key"""
+      os.environ["PERPLEXITY_API_KEY"] = new_key
+      # ここでシークレット管理システムを更新
+      # update_aws_secrets_manager(new_key)
+      # update_kubernetes_secret(new_key)
+
+  # ローテーションを実行
+  rotator = PerplexityKeyRotator(os.environ["PERPLEXITY_API_KEY"])
+  new_key = rotator.rotate_key(update_callback=update_environment)
+  print(f"Rotation complete. New key: {new_key[:10]}...")
+  ```
+
+  ```typescript Typescript theme={null}
+  import fetch from 'node-fetch';
+
+  class PerplexityKeyRotator {
+    private baseUrl = 'https://api.perplexity.ai';
+    private currentKey: string;
+
+    constructor(currentKey: string) {
+      this.currentKey = currentKey;
+    }
+
+    async generateNewKey(name?: string): Promise<{
+      auth_token: string;
+      created_at_epoch_seconds: number;
+      token_name?: string;
+    }> {
+      const response = await fetch(`${this.baseUrl}/generate_auth_token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.currentKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(name ? { token_name: name } : {})
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to generate key: ${response.statusText}`);
+      }
+
+      return response.json();
+    }
+
+    async testKey(key: string): Promise<boolean> {
+      try {
+        const response = await fetch(`${this.baseUrl}/v1/agent`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${key}`,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            preset: 'low',
+            input: 'Test',
+            max_output_tokens: 1
+          })
+        });
+
+        return response.ok;
+      } catch {
+        return false;
+      }
+    }
+
+    async revokeKey(keyToRevoke: string): Promise<boolean> {
+      const response = await fetch(`${this.baseUrl}/revoke_auth_token`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${this.currentKey}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ auth_token: keyToRevoke })
+      });
+
+      return response.ok;
+    }
+
+    async rotateKey(updateCallback?: (newKey: string) => Promise<void>): Promise<string> {
+      console.log('Starting key rotation...');
+
+      // ステップ1: 新しいキーを生成
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+      const newKeyData = await this.generateNewKey(`Rotated-${timestamp}`);
+      const newKey = newKeyData.auth_token;
+      console.log(`New key generated: ${newKey.substring(0, 10)}...`);
+
+      // ステップ2: 新しいキーをテスト
+      if (!(await this.testKey(newKey))) {
+        throw new Error('New key validation failed');
+      }
+      console.log('New key validated successfully');
+
+      // ステップ3: アプリケーションを更新
+      if (updateCallback) {
+        await updateCallback(newKey);
+        console.log('Application updated with new key');
+      }
+
+      // ステップ4: 反映を待機
+      console.log('Waiting for propagation...');
+      await new Promise(resolve => setTimeout(resolve, 30000));
+
+      // ステップ5: 古いキーを失効させる
+      const oldKey = this.currentKey;
+      this.currentKey = newKey;
+
+      if (await this.revokeKey(oldKey)) {
+        console.log('Old key revoked successfully');
+      } else {
+        console.warn('Failed to revoke old key');
+      }
+
+      console.log('Key rotation completed');
+      return newKey;
+    }
+  }
+
+  // 使用例
+  async function updateEnvironment(newKey: string): Promise<void> {
+    process.env.PERPLEXITY_API_KEY = newKey;
+    // ここでシークレット管理システムを更新する
+    // await updateAwsSecretsManager(newKey);
+    // await updateKubernetesSecret(newKey);
+  }
+
+  // ローテーションを実行
+  const rotator = new PerplexityKeyRotator(process.env.PERPLEXITY_API_KEY!);
+  const newKey = await rotator.rotateKey(updateEnvironment);
+  console.log(`Rotation complete. New key: ${newKey.substring(0, 10)}...`);
+  ```
+</CodeGroup>
+
+<div id="best-practices">
+  ## ベストプラクティス
+</div>
+
+<CardGroup cols={2}>
+  <Card title="環境変数を使用する">
+    ソースコードにAPI keyをハードコードしないでください。環境変数、または安全なシークレット管理システムに保存します。
+
+    **良い例**: `os.environ["PERPLEXITY_API_KEY"]`
+
+    **悪い例**: `api_key = "pplx-1234567890abcdef"`
+  </Card>
+
+  <Card title="キーのローテーションを実施する">
+    API keyは定期的に (例: 90日ごと) ローテーションし、万一漏洩した場合の影響を最小限に抑えます。
+
+    ローテーション中のダウンタイムをゼロに抑えるため、自動ローテーション用のスクリプトを用意しましょう。
+  </Card>
+
+  <Card title="分かりやすい名前を付ける">
+    キーを生成する際は必ず`token_name`を設定してください。作成後はトークンの値全体を確認できなくなるため、名前がキーを識別する主な手段になります。
+
+    例: 「Production-Main」「Development-Testing」「CI/CD-Pipeline」
+  </Card>
+
+  <Card title="キーの利用状況を監視する">
+    アプリケーションでどのキーが使われているかを把握し、使用していないキーは速やかに失効させます。
+
+    有効なキーとその用途の一覧を管理しましょう。
+  </Card>
+</CardGroup>
+
+<div id="security-considerations">
+  ## セキュリティに関する考慮事項
+</div>
+
+<Warning>
+  **次の場所に API key を絶対に露出させないでください:**
+
+  * クライアントサイドの JavaScript コード
+  * モバイルアプリケーション
+  * 公開リポジトリ
+  * ログファイルやエラーメッセージ
+  * URL やクエリパラメータ
+</Warning>
+
+<div id="if-a-key-is-compromised">
+  ### キーが漏洩した場合
+</div>
+
+1. **直ちに新しいキーを生成する** — `/generate_auth_token` を使用します
+2. **すべてのアプリケーションを更新する** — 新しいキーを使用するように変更します
+3. **漏洩したキーを失効させる** — `/revoke_auth_token` を使用します
+4. **アクセスログを確認する** — 不正な利用がなかったかを特定します
+5. **追加のセキュリティ対策を実施する** — 利用可能な場合はIP許可リストなど
+
+<div id="troubleshooting">
+  ## トラブルシューティング
+</div>
+
+| 問題                         | 解決策                                   |
+| -------------------------- | ------------------------------------- |
+| ローテーション後に「認証に失敗しました」と表示される | 新しいキーがすべてのサービスインスタンスに反映されているか確認してください |
+| キーを失効できない                  | 適切な権限を持つ有効な API key を使用しているか確認してください  |
+| キーの生成に失敗する                 | アカウントの状態と API のティア上限を確認してください         |
+| 古いキーを使い続けているサービスがある        | デプロイパイプラインに適切なシークレットローテーションを実装してください  |
+
+<Info>
+  API key の管理についてさらにサポートが必要な場合は、API コンソールの [API Keys ページ](https://console.perplexity.ai/project/keys)にアクセスするか、サポートチームまでお問い合わせください。
+</Info>
