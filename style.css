@@ -110,32 +110,75 @@ a.select-none::after {
   white-space: nowrap;
 }
 
-/* Language switcher: Mintlify tucks this into the same fixed bottom-of-sidebar
-   list as Community/Blog/Changelog, where it reads as just another plain
-   link and is easy to miss. Move it right below the search bar instead - a
-   fixed, always-visible spot at the top of the sidebar - and give it a cyan
-   pill treatment so it reads as a distinct interactive control, not a link.
-   Scoped to #sidebar so the hidden mobile-duplicate and the unrelated
-   theme-preference menu button (also aria-haspopup="menu", elsewhere in the
-   page) aren't affected. */
-#sidebar button[aria-haspopup="menu"] {
+/* Keep the logo row pinned to the top of the sidebar while the nav tree
+   scrolls beneath it, matching prod. `position: sticky` conflicts here -
+   Mintlify's own nav group headers are also sticky within the same scroll
+   container and fight this for the same top:0 slot - so use `fixed` (like
+   the language switcher below) and reserve the space it and the switcher
+   occupy via padding on the scroll container instead, so nothing can ever
+   scroll underneath either. */
+#sidebar div:has(> a.select-none) {
   position: fixed;
-  top: 7.25rem;
+  top: 1.5rem;
   left: 1.75rem;
-  z-index: 40;
-  width: auto !important;
-  flex: none !important;
-  color: #35BDC8 !important;
-  background: rgba(53, 189, 200, 0.12);
-  border: 1px solid rgba(53, 189, 200, 0.4) !important;
-  border-radius: 9999px !important;
+  z-index: 30;
 }
-#sidebar button[aria-haspopup="menu"]:hover {
-  background: rgba(53, 189, 200, 0.2);
+#sidebar-content > div {
+  padding-top: 6.75rem !important;
+}
+/* Belt-and-suspenders: Mintlify's own nav group headers are independently
+   sticky within the scroll container and can still creep above the padding
+   reserved above, so paint an opaque block behind the whole reserved top
+   strip too - nothing scrolled can show through it regardless. */
+#sidebar::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 19rem;
+  height: 6.75rem;
+  background-color: #121516;
+  z-index: 25;
 }
 
-/* Push the nav tree down so it doesn't render underneath the relocated
-   language pill sitting just above it. */
-#sidebar .flex.flex-col.gap-4.mt-6 {
-  margin-bottom: 3rem;
+/* The language switcher replaces the search bar's visual slot (see below),
+   so hide the real search bar without collapsing its layout space -
+   `visibility: hidden` keeps the sidebar's later content at the same
+   position it already was. */
+#sidebar .group\/search {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+/* Language switcher: Mintlify tucks this into the same fixed bottom-of-sidebar
+   list as Community/Blog/Changelog, where it reads as just another plain
+   link and is easy to miss. Move it into the search bar's slot instead -
+   matching its size/shape - and give it a cyan treatment so it still reads
+   as a distinct control. `position: fixed` keeps it pinned to the top of the
+   sidebar during scroll, same as prod. Scoped to #sidebar so the hidden
+   mobile-duplicate and the unrelated theme-preference menu button (also
+   aria-haspopup="menu", elsewhere in the page) aren't affected. */
+#sidebar button[aria-haspopup="menu"] {
+  position: fixed;
+  top: 4.5rem;
+  left: 1.75rem;
+  z-index: 40;
+  width: 15.4375rem !important;
+  height: 2.25rem !important;
+  flex: none !important;
+  justify-content: space-between;
+  padding: 0 0.625rem 0 0.875rem !important;
+  color: #35BDC8 !important;
+  background: rgba(53, 189, 200, 0.1);
+  border: 1px solid rgba(53, 189, 200, 0.35) !important;
+  border-radius: 0.75rem !important;
+}
+#sidebar button[aria-haspopup="menu"]:hover {
+  background: rgba(53, 189, 200, 0.18);
+}
+/* The dropdown menu panel has its own solid background but a low enough
+   z-index that our repositioned trigger's stacking context (z-index: 40)
+   can let scrolled nav text show through it while open. */
+[role="menu"] {
+  z-index: 50 !important;
 }
